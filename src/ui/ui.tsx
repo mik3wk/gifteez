@@ -50,11 +50,13 @@ export function Button({
   onPress,
   tone = 'primary',
   disabled,
+  accessibilityLabel,
 }: {
   label: string;
   onPress: () => void;
   tone?: 'primary' | 'secondary' | 'danger';
   disabled?: boolean;
+  accessibilityLabel?: string;
 }) {
   const { colors } = useGifteez();
   const background = tone === 'primary' ? colors.accent : tone === 'danger' ? colors.danger : colors.surface;
@@ -62,6 +64,8 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled: Boolean(disabled) }}
       disabled={disabled}
       onPress={onPress}
       style={[styles.button, { backgroundColor: background, borderColor: colors.border, opacity: disabled ? 0.5 : 1 }]}>

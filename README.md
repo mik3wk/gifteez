@@ -49,7 +49,7 @@ React Native Firebase 27 pulls the Firebase Apple SDK through Swift Package Mana
 - Start, keep or edit the silly name, and skip email if you want. The group is created either way. A recovery code is shown once; it is also saved in the Keychain on that phone.
 - Add a person, then tap interest tags. Open the person to see on-device ideas. Save one, log a purchase with a price, and open Fairness.
 - Share the invite from the group screen. The message contains an `https://gifteez.app/...#k=...` link and a `gifteez://join/...#k=...` link. The key is the URL fragment and is not sent to Firestore.
-- Paste the `gifteez://` link on a second simulator with `xcrun simctl openurl booted 'gifteez://join/...'` or, on Android, `adb shell am start -W -a android.intent.action.VIEW -d 'gifteez://join/...'`.
+- Paste the `gifteez://` link on a second simulator with `xcrun simctl openurl booted 'gifteez://join/...'` or, on Android, `adb shell am start -W -a android.intent.action.VIEW -d 'gifteez://join/...'`. That opens a confirm screen (emoji, color, and the list label, or "Shared list"). The list is joined only after Join. Cancel leaves it. A link that arrives before the app is ready, or before onboarding, waits and then opens the same screen.
 - `https://gifteez.app` links need an Apple App Site Association file and an Android assetlinks.json on that domain. Until the domain is live, use the custom scheme.
 
 ## Deploy the backend
