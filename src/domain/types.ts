@@ -137,6 +137,8 @@ export type AppSnapshot = {
   feedback: FeedbackEntry[];
   ideas: IdeaCacheEntry[];
   entitlementPaid: boolean;
+  /** Owned lists deleted offline. Sync calls releaseOwnedGroup so the free slot frees. */
+  releasedGroupIds: string[];
   dirty: DirtyMap;
 };
 
@@ -175,6 +177,7 @@ export function emptySnapshot(now: number): AppSnapshot {
     feedback: [],
     ideas: [],
     entitlementPaid: false,
+    releasedGroupIds: [],
     dirty: {},
   };
 }

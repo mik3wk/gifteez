@@ -5,6 +5,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { canRefresh, claimSlot, emptyUsage, nextUsage, type Usage } from './caps';
 import { DEFAULT_GROUP_MAX_MEMBERS, groupHasRoom } from './members';
+import { decideOwnedCreate, normalizeOwnedGroupIds, ownerEntitledForMember, releaseOwnedId } from './lists';
 import { fingerprint } from './fingerprint';
 import { appleTransactionGrants, googlePurchaseGrants, verifyAppleTransaction, verifyGooglePurchase } from './iap';
 import { promptHash, requestIdeas, type IdeaPrompt } from './ideas';
@@ -70,16 +71,33 @@ export const generateGiftIdeas = onCall(callable, async request => {
 });
 
 export const claimPersonSlot = onCall(callable, async request => {
+  const uid = requireUid(request.auth?.uid);
   const device = requireString(request.data?.deviceId, 'deviceId');
   const action = request.data?.action === 'remove' ? 'remove' : 'add';
+  const groupId = typeof request.data?.groupId === 'string' ? request.data.groupId.trim() : '';
   const id = fingerprint(pepper.value(), device);
-  const ref = getFirestore().collection('aiUsage').doc(id);
+  const db = getFirestore();
+  let ownerPaid = false;
+  if (groupId) {
+    const group = await db.collection('groups').doc(groupId).get();
+    const memberIds = Array.isArray(group.data()?.memberIds) ? group.data()?.memberIds.map(String) : [];
+    ownerPaid = ownerEntitledForMember({
+      memberIds,
+      uid,
+      groupEntitled: group.data()?.entitled === true,
+    });
+  }
+  const ref = db.collection('aiUsage').doc(id);
   const snap = await ref.get();
   const active = Number(snap.data()?.activePeople ?? 0);
-  const paid = await isPaid(id);
-  const result = claimSlot(active, paid, action, numberParam(freePeople.value(), 5));
-  if (result.ok) {
+  // `ownerPaid` is the list owner's unlock, not this device's purchase.
+  // Adds on an unlocked owner's list do not consume the free-device counter.
+  const result = claimSlot(active, ownerPaid, action, numberParam(freePeople.value(), 5));
+  if (result.ok && !ownerPaid) {
     await ref.set({ activePeople: result.active }, { merge: true });
+  }
+  if (ownerPaid) {
+    return { ok: true, active };
   }
   return result;
 });
@@ -87,7 +105,11 @@ export const claimPersonSlot = onCall(callable, async request => {
 export const getEntitlement = onCall(callable, async request => {
   const device = requireString(request.data?.deviceId, 'deviceId');
   const id = fingerprint(pepper.value(), device);
-  return { paid: await isPaid(id) };
+  const paid = await isPaid(id);
+  if (paid && request.auth?.uid) {
+    await grantAccountUnlock(request.auth.uid);
+  }
+  return { paid };
 });
 
 export const verifyUnlock = onCall(callable, async request => {
@@ -137,11 +159,107 @@ export const verifyUnlock = onCall(callable, async request => {
     uid,
     updatedAt: Date.now(),
   });
-  const groups = await db.collection('groups').where('memberIds', 'array-contains', uid).get();
-  await Promise.all(groups.docs.map(group => group.ref.set({ entitled: true }, { merge: true })));
+  await grantAccountUnlock(uid);
   return { verified: true };
 });
 
+export const createOwnedGroup = onCall(callable, async request => {
+  const uid = requireUid(request.auth?.uid);
+  const groupId = requireGroupId(request.data?.groupId);
+  const ciphertext = requireString(request.data?.ciphertext, 'ciphertext');
+  const device = requireString(request.data?.deviceId, 'deviceId');
+  const updatedAt = Number(request.data?.updatedAt);
+  if (!Number.isFinite(updatedAt)) {
+    throw new HttpsError('invalid-argument', 'updatedAt');
+  }
+  const db = getFirestore();
+  const fp = fingerprint(pepper.value(), device);
+  const accountRef = db.collection('accounts').doc(uid);
+  const groupRef = db.collection('groups').doc(groupId);
+  const entRef = db.collection('entitlements').doc(fp);
+  let entitled = false;
+  let failure: 'one-list' | 'exists' | null = null;
+  await db.runTransaction(async transaction => {
+    failure = null;
+    const accountSnap = await transaction.get(accountRef);
+    const groupSnap = await transaction.get(groupRef);
+    const entSnap = await transaction.get(entRef);
+    const rawOwned = normalizeOwnedGroupIds(accountSnap.data()?.ownedGroupIds);
+    const extraIds = rawOwned.filter(id => id !== groupId);
+    const extraSnaps = await Promise.all(extraIds.map(id => transaction.get(db.collection('groups').doc(id))));
+    const liveOwned = extraIds.filter((id, index) => {
+      const snap = extraSnaps[index];
+      return snap?.exists === true && snap.data()?.ownerId === uid;
+    });
+    const decision = decideOwnedCreate({
+      entitled: accountSnap.data()?.entitled === true || entSnap.data()?.paid === true,
+      ownedGroupIds: liveOwned,
+      groupId,
+      groupExists: groupSnap.exists,
+      existingOwnerId: String(groupSnap.data()?.ownerId ?? ''),
+      uid,
+    });
+    if (!decision.ok) {
+      failure = decision.reason;
+      return;
+    }
+    entitled = decision.entitled;
+    if (!groupSnap.exists) {
+      transaction.set(groupRef, {
+        ownerId: uid,
+        memberIds: [uid],
+        peopleCount: 0,
+        entitled: decision.entitled,
+        updatedAt,
+        ciphertext,
+      });
+    } else if (decision.entitled && groupSnap.data()?.entitled !== true) {
+      transaction.set(groupRef, { entitled: true }, { merge: true });
+    }
+    transaction.set(accountRef, {
+      entitled: decision.entitled,
+      ownedGroupIds: decision.ownedGroupIds,
+      updatedAt: Date.now(),
+    }, { merge: true });
+  });
+  if (failure === 'one-list') {
+    throw new HttpsError('failed-precondition', 'one-list');
+  }
+  if (failure === 'exists') {
+    throw new HttpsError('already-exists', 'exists');
+  }
+  return { groupId, entitled };
+});
+
+export const releaseOwnedGroup = onCall({ enforceAppCheck: true }, async request => {
+  const uid = requireUid(request.auth?.uid);
+  const groupId = requireGroupId(request.data?.groupId);
+  const db = getFirestore();
+  const accountRef = db.collection('accounts').doc(uid);
+  const groupRef = db.collection('groups').doc(groupId);
+  await db.runTransaction(async transaction => {
+    const group = await transaction.get(groupRef);
+    const account = await transaction.get(accountRef);
+    if (group.exists) {
+      if (group.data()?.ownerId !== uid) {
+        throw new HttpsError('permission-denied', 'owner');
+      }
+      const rawMembers: unknown = group.data()?.memberIds;
+      const memberIds = Array.isArray(rawMembers) ? rawMembers.map((id: unknown) => String(id)) : [];
+      if (memberIds.some(id => id !== uid)) {
+        throw new HttpsError('failed-precondition', 'owner-stays');
+      }
+      transaction.delete(groupRef);
+    }
+    transaction.set(accountRef, {
+      ownedGroupIds: releaseOwnedId(normalizeOwnedGroupIds(account.data()?.ownedGroupIds), groupId),
+      updatedAt: Date.now(),
+    }, { merge: true });
+  });
+  return { released: true };
+});
+
+// Joining does not consume an owned-list slot and does not check the joiner's tier.
 export const joinGroup = onCall({ enforceAppCheck: true }, async request => {
   const uid = requireUid(request.auth?.uid);
   const inviteId = requireString(request.data?.inviteId, 'inviteId');
@@ -174,6 +292,14 @@ export const joinGroup = onCall({ enforceAppCheck: true }, async request => {
 async function isPaid(id: string): Promise<boolean> {
   const snap = await getFirestore().collection('entitlements').doc(id).get();
   return snap.data()?.paid === true;
+}
+
+/** Copy a device purchase onto the signed-in account and every list that account owns. */
+async function grantAccountUnlock(uid: string): Promise<void> {
+  const db = getFirestore();
+  await db.collection('accounts').doc(uid).set({ entitled: true, updatedAt: Date.now() }, { merge: true });
+  const groups = await db.collection('groups').where('ownerId', '==', uid).get();
+  await Promise.all(groups.docs.map(group => group.ref.set({ entitled: true }, { merge: true })));
 }
 
 async function assertPerson(uid: string, personId: string): Promise<void> {
@@ -209,6 +335,14 @@ function requireString(value: unknown, name: string): string {
     throw new HttpsError('invalid-argument', name);
   }
   return value.trim();
+}
+
+function requireGroupId(value: unknown): string {
+  const id = requireString(value, 'groupId');
+  if (id.includes('/') || id.length > 128) {
+    throw new HttpsError('invalid-argument', 'groupId');
+  }
+  return id;
 }
 
 function numberParam(value: string, fallback: number): number {

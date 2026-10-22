@@ -67,7 +67,7 @@ npm run deploy
 
 `npm run deploy` writes the native Firebase files from `.env`, then runs `firebase deploy` (Functions, Firestore rules and indexes, Storage rules). `firebase deploy --only functions` also works after `npm run prepare-config`.
 
-Functions secrets must exist before the first deploy of `generateGiftIdeas`, `claimPersonSlot`, `getEntitlement`, and `verifyUnlock`. `joinGroup` does not use those secrets. `FINGERPRINT_PEPPER` is a random string you choose; it salts the device-id hash that keys the AI cap and the paid entitlement. It is not an app `.env` value.
+Functions secrets must exist before the first deploy of `generateGiftIdeas`, `claimPersonSlot`, `getEntitlement`, `verifyUnlock`, and `createOwnedGroup`. `joinGroup` and `releaseOwnedGroup` do not use those secrets. `FINGERPRINT_PEPPER` is a random string you choose; it salts the device-id hash that keys the AI cap and the paid entitlement. It is not an app `.env` value.
 
 App Check is initialized in the app (debug provider in dev, App Attest / Play Integrity in release) and `enforceAppCheck` is on for every callable. In the Firebase console, turn App Check on for the app, then register the debug token the client prints and set `APP_CHECK_DEBUG_TOKEN` in `.env`. Rebuild after that. Until the token is registered, cloud calls fail and the on-device ideas still show.
 
@@ -79,7 +79,7 @@ Set a Google Cloud billing budget alert on the Firebase project before real traf
 
 ## Several groups
 
-A person can be in more than one list. Start another one from the group screen. Each list has an optional name. Leave the name blank and the label is the members' first names, such as `Mike, Sam & Jo`, with `+N` when the line would get long. An emoji and a color, chosen from the list id, show next to that label in the switcher, the screen headers, the share text, and the join preview.
+A person can be in more than one list. A free account can start one of them and can join any number that other people start. The one-time unlock starts more. "Start another list" on the group screen opens the unlock when that free slot is already used. Deleting the only list you started frees the slot. Each list has an optional name. Leave the name blank and the label is the members' first names, such as `Mike, Sam & Jo`, with `+N` when the line would get long. An emoji and a color, chosen from the list id, show next to that label in the switcher, the screen headers, the share text, and the join preview.
 
 The name is encrypted with the group key. Firestore does not store it in the clear. The invite document holds a ciphertext preview, and the key stays in the link fragment, so the join screen can show the name before you join.
 
@@ -104,7 +104,8 @@ Offline edits are written to the encrypted cache and merged on reconnect. Last w
 ## Limits that are intentional
 
 - A list can have one member so it is usable before anyone joins. The membership cap is 10 (`GROUP_MAX_MEMBERS`), enforced in the client, in `joinGroup`, and in the security rules. A full list says "This list already has 10 members, the most a list can have."
-- The free gift-recipient cap is 5 per group in the rules, and `claimPersonSlot` also counts active people for a device fingerprint. Paying removes that recipient cap. The paid gift-recipient list is intentionally uncapped for now. A modified client can still create another group. The rules cannot see the device id.
+- A free account can start one list. `createOwnedGroup` is the only way to create a group: the rules deny direct creates, and the function keeps `accounts/{uid}.ownedGroupIds` where clients cannot write. A second list is refused for a free account and allowed after the unlock. Joining with `joinGroup` does not use that slot and is not limited by the joiner's tier. Deleting the only list you started (`releaseOwnedGroup`) frees it. The purchase record stays at `entitlements/{fingerprint}`; `verifyUnlock` and `getEntitlement` copy it onto the account and onto lists that account owns.
+- The free gift-recipient cap is 5 on a list whose owner has not unlocked. The rules keep `peopleCount` at 5 unless that group's `entitled` flag is set, and only Functions set that flag, from the owner's account. `claimPersonSlot` follows the same owner flag, so a member's own purchase does not raise someone else's list, and adding people on an unlocked owner's list does not use up the free-device counter. The paid gift-recipient list is intentionally uncapped for now.
 - Reinstalling creates new person ids, so the per-person AI counters start over. The same device id and the same person ids keep their counts. The cap is not the anonymous uid.
 - The owner cannot leave while other members remain. The last member deletes the group. Another member can leave, and the owner can remove someone else.
 - Imported people (contacts, calendar, or pasted CSV/JSON) do not get ideas until their screen is opened.

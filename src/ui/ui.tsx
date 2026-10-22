@@ -10,7 +10,8 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { t } from '../i18n';
+import { getEnv } from '../config/env';
+import { formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 
 export function Screen({
@@ -134,6 +135,27 @@ export function Notice({ text, onClose }: { text: string; onClose: () => void })
 export function Card({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   const { colors } = useGifteez();
   return <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>{children}</View>;
+}
+
+export function UnlockSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { buy, restorePurchases, storeProduct, storeReady, colors } = useGifteez();
+  if (!visible) {
+    return null;
+  }
+  const price = storeProduct?.displayPrice || formatMoney(Math.round(getEnv().iapPriceUsd * 100));
+  return (
+    <View style={[styles.sheet, { backgroundColor: colors.background }]}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <Title>{t('settings.unlock')}</Title>
+        <Body>{t('groupScreen.oneList')}</Body>
+        <Body>{t('settings.unlockPrice', { price })}</Body>
+        {storeReady ? null : <Body>{t('settings.storeMissing')}</Body>}
+        <Button label={t('settings.unlock')} onPress={buy} />
+        <Button label={t('settings.restore')} tone="secondary" onPress={restorePurchases} />
+        <Button label={t('common.close')} tone="secondary" onPress={onClose} />
+      </ScrollView>
+    </View>
+  );
 }
 
 export function AccountSheet({

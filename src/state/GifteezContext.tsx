@@ -22,6 +22,7 @@ import {
   addPerson,
   applyGroupRemote,
   bannerDue,
+  canStartAnotherList,
   createGroup,
   defaultOccasionDate,
   exportList,
@@ -29,6 +30,7 @@ import {
   groupHasRoom,
   groupMarker,
   leaveActiveGroup,
+  listOwnerEntitled,
   logPurchase,
   memberIdsForGroup,
   memberNames,
@@ -47,6 +49,7 @@ import {
   upcomingOccasion,
   updatePerson,
   upsertIdeas,
+  withAccountUnlock,
   withProfile,
 } from '../domain/logic';
 import {
@@ -66,10 +69,8 @@ import {
   activeSkinParam,
   callFunction,
   confirmSmsCode,
-  createGroupDocument,
   createInvite,
   readInvite,
-  deleteGroupDocument,
   currentUid,
   downloadSkin,
   ensureAnonymousUser,
@@ -183,7 +184,12 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   }, []);
 
   const sync = useCallback(async (source?: AppSnapshot) => {
-    const current = source ?? snapshotRef.current;
+    let current = source ?? snapshotRef.current;
+    const flushed = await flushReleases(current, env);
+    if (flushed !== current) {
+      await commit(flushed);
+      current = snapshotRef.current;
+    }
     if (!current.group || !current.profile.uid) {
       return current;
     }
@@ -195,7 +201,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     const key = keyFromString(groupKey);
     let next = current;
     try {
-      await pushSnapshot(next, key);
+      await pushSnapshot(next, key, env);
       const cleared = { ...next.dirty };
       Object.keys(cleared).forEach(dirty => {
         delete cleared[dirty];
@@ -245,11 +251,16 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         setNotice(t('sync.otherDevice'));
       }
       await commit(next);
-    } catch {
+    } catch (caught) {
+      if (isOneListError(caught) && (snapshotRef.current.releasedGroupIds ?? []).length === 0) {
+        fail('oneList');
+        await commit(leaveActiveGroup(snapshotRef.current));
+        return snapshotRef.current;
+      }
       setNotice(t('sync.offline'));
     }
     return snapshotRef.current;
-  }, [commit]);
+  }, [commit, env, fail]);
 
   useEffect(() => {
     let cancelled = false;
@@ -301,7 +312,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         try {
           const entitlement = await callFunction<{ paid: boolean }>(env, 'getEntitlement', { deviceId: await deviceId() });
           if (entitlement.paid) {
-            await commit(withPaid(snapshotRef.current, true));
+            await commit(withAccountUnlock(snapshotRef.current, true));
           }
         } catch {
           // Entitlement stays local until the function is deployed.
@@ -334,7 +345,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       verifyPurchase(env, purchaseProof(purchase))
         .then(async paid => {
           if (paid) {
-            await commit(withPaid(snapshotRef.current, true));
+            await commit(withAccountUnlock(snapshotRef.current, true));
             await finishOwned(purchase);
           }
         })
@@ -400,8 +411,20 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     acknowledgeRecovery: () => setRecoveryCode(null),
     showBanner: bannerDue(snapshot.profile, Date.now(), env.bannerAfterDays),
     startGroup: async (displayName, groupName) => {
+      const flushed = await flushReleases(snapshotRef.current, env);
+      if (flushed !== snapshotRef.current) {
+        await commit(flushed);
+      }
       const uid = snapshotRef.current.profile.uid || (await ensureAnonymousUser());
-      const name = displayName.trim() || snapshotRef.current.profile.displayName || sillyName(uid);
+      const base = snapshotRef.current.profile.uid === uid
+        ? snapshotRef.current
+        : withProfile(snapshotRef.current, { uid });
+      if (!canStartAnotherList(base, uid)) {
+        fail('oneList');
+        return;
+      }
+      const previous = base;
+      const name = displayName.trim() || base.profile.displayName || sillyName(uid);
       const groupId = randomId();
       const groupKey = randomKey();
       const code = generateRecoveryCode();
@@ -409,7 +432,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       await saveSecret(groupKeyAccount(groupId), keyToString(groupKey));
       await saveSecret(recoveryAccount(groupId), code);
       let next = createGroup({
-        snapshot: withProfile(snapshotRef.current, { uid }),
+        snapshot: withProfile(base, { uid }),
         groupId,
         ownerId: uid,
         displayName: name,
@@ -420,18 +443,27 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       await commit(next);
       setRecoveryCode(code);
       try {
-        await createGroupDocument({
+        const created = await callFunction<{ groupId: string; entitled: boolean }>(env, 'createOwnedGroup', {
           groupId,
-          ownerId: uid,
           ciphertext: sealJson({ name: next.group?.name ?? '' }, groupKey),
           updatedAt: next.group?.updatedAt ?? Date.now(),
+          deviceId: await deviceId(),
         });
+        if (created.entitled) {
+          await commit(withAccountUnlock(snapshotRef.current, true));
+        }
         await writeSealed(groupId, 'members', sealMember(uid, name, groupKey, Date.now()));
         await publishPreview(snapshotRef.current, groupKey);
         await writeRecovery(uid, groupId, wrapKey(groupKey, code));
         next = { ...snapshotRef.current, dirty: {} };
         await commit(next);
-      } catch {
+      } catch (caught) {
+        if (isOneListError(caught) && (snapshotRef.current.releasedGroupIds ?? []).length === 0) {
+          setRecoveryCode(null);
+          await commit(previous);
+          fail('oneList');
+          return;
+        }
         setNotice(t('sync.offline'));
       }
     },
@@ -646,8 +678,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           const claim = await callFunction<{ ok: boolean }>(env, 'claimPersonSlot', {
             deviceId: await deviceId(),
             action: 'add',
+            groupId: snapshotRef.current.group?.id ?? '',
           });
-          if (!claim.ok && !snapshotRef.current.entitlementPaid) {
+          if (!claim.ok && !listOwnerEntitled(snapshotRef.current)) {
             fail('cap');
             return null;
           }
@@ -690,7 +723,11 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return;
       }
       await commit(result.snapshot);
-      callFunction(env, 'claimPersonSlot', { deviceId: await deviceId(), action: 'remove' }).catch(() => undefined);
+      callFunction(env, 'claimPersonSlot', {
+        deviceId: await deviceId(),
+        action: 'remove',
+        groupId: snapshotRef.current.group?.id ?? '',
+      }).catch(() => undefined);
       sync().catch(() => undefined);
     },
     addOccasion: async (personId, type, month, day, year) => {
@@ -901,16 +938,24 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         setError(t('groupScreen.ownerStays'));
         return;
       }
+      const groupId = current.group.id;
+      const ownerClosing = current.group.ownerId === uid && remaining.length === 0;
+      let released = true;
       try {
-        if (remaining.length === 0) {
-          await deleteGroupDocument(current.group.id);
+        if (ownerClosing) {
+          await callFunction(env, 'releaseOwnedGroup', { groupId });
         } else {
           await updateGroupDocument(current.group.id, { memberIds: remaining, updatedAt: Date.now() });
         }
       } catch {
+        released = false;
         setNotice(t('sync.offline'));
       }
-      await commit(leaveActiveGroup(current));
+      let next = leaveActiveGroup(current);
+      if (ownerClosing && !released) {
+        next = { ...next, releasedGroupIds: [...(current.releasedGroupIds ?? []), groupId] };
+      }
+      await commit(next);
       sync().catch(() => undefined);
     },
     removeGroupMember: async uid => {
@@ -960,7 +1005,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         for (const purchase of owned) {
           const paid = await verifyPurchase(env, purchaseProof(purchase));
           if (paid) {
-            await commit(withPaid(snapshotRef.current, true));
+            await commit(withAccountUnlock(snapshotRef.current, true));
             await finishOwned(purchase);
             return;
           }
@@ -1053,18 +1098,45 @@ async function loadSnapshot(): Promise<AppSnapshot> {
     if (parsed?.version !== 1 || !parsed.profile) {
       return emptySnapshot(Date.now());
     }
-    return { ...emptySnapshot(Date.now()), ...parsed, profile: { ...emptySnapshot(Date.now()).profile, ...parsed.profile } };
+    const base = emptySnapshot(Date.now());
+    return {
+      ...base,
+      ...parsed,
+      profile: { ...base.profile, ...parsed.profile },
+      releasedGroupIds: Array.isArray(parsed.releasedGroupIds) ? parsed.releasedGroupIds : [],
+    };
   } catch {
     return emptySnapshot(Date.now());
   }
 }
 
-function withPaid(snapshot: AppSnapshot, paid: boolean): AppSnapshot {
-  return {
-    ...snapshot,
-    entitlementPaid: paid,
-    group: snapshot.group ? { ...snapshot.group, entitled: snapshot.group.entitled || paid } : snapshot.group,
-  };
+async function flushReleases(snapshot: AppSnapshot, env: AppEnv): Promise<AppSnapshot> {
+  const pending = snapshot.releasedGroupIds ?? [];
+  if (pending.length === 0) {
+    return snapshot;
+  }
+  const left: string[] = [];
+  for (const groupId of pending) {
+    try {
+      await callFunction(env, 'releaseOwnedGroup', { groupId });
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : '';
+      const code = caught && typeof caught === 'object' && 'code' in caught ? String((caught as { code?: unknown }).code) : '';
+      if (message.includes('owner-stays') || code.includes('permission-denied')) {
+        continue;
+      }
+      left.push(groupId);
+    }
+  }
+  if (left.length === pending.length) {
+    return snapshot;
+  }
+  return { ...snapshot, releasedGroupIds: left };
+}
+
+function isOneListError(caught: unknown): boolean {
+  const message = caught instanceof Error ? caught.message : '';
+  return message.includes('one-list');
 }
 
 function sealMember(uid: string, displayName: string, key: Uint8Array, now: number): SealedDoc {
@@ -1076,7 +1148,7 @@ function sealMember(uid: string, displayName: string, key: Uint8Array, now: numb
   };
 }
 
-async function pushSnapshot(snapshot: AppSnapshot, key: Uint8Array): Promise<void> {
+async function pushSnapshot(snapshot: AppSnapshot, key: Uint8Array, env: AppEnv): Promise<void> {
   if (!snapshot.group) {
     return;
   }
@@ -1084,11 +1156,14 @@ async function pushSnapshot(snapshot: AppSnapshot, key: Uint8Array): Promise<voi
   if (snapshot.dirty['group:meta'] || snapshot.dirty['group:members']) {
     const existing = await readGroupDocument(groupId);
     if (!existing) {
-      await createGroupDocument({
+      if (snapshot.group.ownerId !== snapshot.profile.uid) {
+        return;
+      }
+      await callFunction(env, 'createOwnedGroup', {
         groupId,
-        ownerId: snapshot.group.ownerId,
         ciphertext: sealJson({ name: snapshot.group.name }, key),
         updatedAt: snapshot.group.updatedAt,
+        deviceId: await deviceId(),
       });
     }
     let currentCount = existing ? Number(existing.peopleCount ?? 0) : 0;

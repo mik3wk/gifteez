@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { getEnv } from '../config/env';
-import { fairnessRows, groupDisplayName, groupMarker } from '../domain/logic';
+import { accountUnlocked, canStartAnotherList, fairnessRows, groupDisplayName, groupMarker } from '../domain/logic';
 import { formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { EmptyArt } from '../ui/art';
 import { useGroupHeading } from '../ui/heading';
-import { AccountSheet, Body, Button, Card, Field, Screen, Title } from '../ui/ui';
+import { AccountSheet, Body, Button, Card, Field, Screen, Title, UnlockSheet } from '../ui/ui';
 
 export function FairnessScreen() {
   const { snapshot, colors } = useGifteez();
@@ -48,6 +48,8 @@ export function GroupScreen() {
   const [code, setCode] = useState<string | null>(null);
   const [upgrade, setUpgrade] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
+  const canStart = canStartAnotherList(snapshot, snapshot.profile.uid ?? '');
   useEffect(() => {
     setName(snapshot.group?.name ?? '');
   }, [snapshot.group?.id, snapshot.group?.name]);
@@ -68,7 +70,17 @@ export function GroupScreen() {
           </Pressable>
         );
       })}
-      <Button label={t('groupScreen.newList')} tone="secondary" onPress={() => setCreating(true)} />
+      <Button
+        label={t('groupScreen.newList')}
+        tone="secondary"
+        onPress={() => {
+          if (canStart) {
+            setCreating(true);
+          } else {
+            setUnlocking(true);
+          }
+        }}
+      />
       <Field label={t('groupScreen.groupName')} value={name} onChangeText={setName} />
       <Body>{t('groupScreen.nameHint', { name: heading.label })}</Body>
       <Button label={t('groupScreen.rename')} onPress={() => renameList(name)} />
@@ -104,6 +116,7 @@ export function GroupScreen() {
       />
       {code ? <Body>{code}</Body> : null}
       <Button label={t('groupScreen.leave')} tone="danger" onPress={leave} />
+      <UnlockSheet visible={unlocking} onClose={() => setUnlocking(false)} />
       <AccountSheet visible={upgrade} allowName={false} showCreate={false} onClose={() => setUpgrade(false)} />
       <AccountSheet
         visible={creating}
@@ -202,7 +215,7 @@ export function SettingsScreen() {
       />
       <Card>
         <Title>{t('settings.unlock')}</Title>
-        {snapshot.entitlementPaid || snapshot.group?.entitled ? <Body>{t('settings.unlocked')}</Body> : (
+        {accountUnlocked(snapshot) ? <Body>{t('settings.unlocked')}</Body> : (
           <>
             <Body>{t('settings.unlockPrice', { price: storeProduct?.displayPrice || messagePrice() })}</Body>
             {storeReady ? null : <Body>{t('settings.storeMissing')}</Body>}

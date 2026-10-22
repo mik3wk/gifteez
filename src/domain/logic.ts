@@ -162,11 +162,87 @@ export function activePeopleCount(snapshot: AppSnapshot): number {
   return snapshot.people.filter(person => !person.deleted).length;
 }
 
+/** True when the active list's owner is unlocked. A joiner's own purchase does not count. */
+export function listOwnerEntitled(snapshot: AppSnapshot): boolean {
+  const group = snapshot.group;
+  if (!group) {
+    return false;
+  }
+  if (group.entitled) {
+    return true;
+  }
+  return Boolean(snapshot.entitlementPaid && snapshot.profile.uid && group.ownerId === snapshot.profile.uid);
+}
+
+export function accountUnlocked(snapshot: AppSnapshot): boolean {
+  if (snapshot.entitlementPaid) {
+    return true;
+  }
+  const uid = snapshot.profile.uid;
+  if (!uid) {
+    return false;
+  }
+  if (snapshot.group?.ownerId === uid && snapshot.group.entitled) {
+    return true;
+  }
+  return Object.values(snapshot.archives ?? {}).some(archive => archive.group.ownerId === uid && archive.group.entitled);
+}
+
 export function canAddPerson(snapshot: AppSnapshot, freeLimit: number): boolean {
-  if (snapshot.entitlementPaid || snapshot.group?.entitled) {
+  if (listOwnerEntitled(snapshot)) {
     return true;
   }
   return activePeopleCount(snapshot) < freeLimit;
+}
+
+/** Free accounts start one list. Joined lists are not counted. */
+export const FREE_OWNED_LIST_LIMIT = 1;
+
+export function ownedGroupIds(snapshot: AppSnapshot, uid: string): string[] {
+  if (!uid) {
+    return [];
+  }
+  const ids = new Set<string>();
+  if (snapshot.group?.ownerId === uid) {
+    ids.add(snapshot.group.id);
+  }
+  for (const archive of Object.values(snapshot.archives ?? {})) {
+    if (archive.group.ownerId === uid) {
+      ids.add(archive.group.id);
+    }
+  }
+  for (const item of snapshot.roster ?? []) {
+    if (item.ownerId === uid) {
+      ids.add(item.id);
+    }
+  }
+  return [...ids];
+}
+
+export function canStartAnotherList(snapshot: AppSnapshot, uid: string): boolean {
+  if (snapshot.entitlementPaid) {
+    return true;
+  }
+  return ownedGroupIds(snapshot, uid).length < FREE_OWNED_LIST_LIMIT;
+}
+
+export function withAccountUnlock(snapshot: AppSnapshot, paid: boolean): AppSnapshot {
+  if (!paid) {
+    return { ...snapshot, entitlementPaid: false };
+  }
+  const uid = snapshot.profile.uid;
+  const stamp = (group: GroupMeta): GroupMeta =>
+    uid && group.ownerId === uid ? { ...group, entitled: true } : group;
+  const archives: AppSnapshot['archives'] = {};
+  for (const [id, archive] of Object.entries(snapshot.archives ?? {})) {
+    archives[id] = { ...archive, group: stamp(archive.group) };
+  }
+  return {
+    ...snapshot,
+    entitlementPaid: true,
+    group: snapshot.group ? stamp(snapshot.group) : snapshot.group,
+    archives,
+  };
 }
 
 /** Membership cap. Config `GROUP_MAX_MEMBERS` overrides this. Not the free gift-recipient limit. */
@@ -388,7 +464,7 @@ export function createGroup(input: {
     ownerId: input.ownerId,
     memberIds: [input.ownerId],
     peopleCount: 0,
-    entitled: false,
+    entitled: input.snapshot.entitlementPaid,
     updatedAt: input.now,
   };
   const member: Member = {
@@ -662,7 +738,7 @@ export function applyGroupRemote(
 ): { snapshot: AppSnapshot; updatedFromOtherDevice: boolean } {
   if (!local.group) {
     return {
-      snapshot: { ...local, group: remote, entitlementPaid: local.entitlementPaid || remote.entitled },
+      snapshot: { ...local, group: remote, entitlementPaid: local.entitlementPaid },
       updatedFromOtherDevice: false,
     };
   }
@@ -678,7 +754,7 @@ export function applyGroupRemote(
     snapshot: {
       ...local,
       group: remote,
-      entitlementPaid: local.entitlementPaid || remote.entitled,
+      entitlementPaid: local.entitlementPaid,
       dirty,
     },
     updatedFromOtherDevice: changed,

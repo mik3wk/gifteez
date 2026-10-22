@@ -2,7 +2,9 @@ import { emptySnapshot, type Occasion, type Person } from '../src/domain/types';
 import {
   bannerDue,
   birthdayNameFromTitle,
+  applyGroupRemote,
   canAddPerson,
+  canStartAnotherList,
   createGroup,
   fairnessRows,
   DEFAULT_GROUP_MAX_MEMBERS,
@@ -10,7 +12,10 @@ import {
   groupHasRoom,
   memberIdsForGroup,
   groupMarker,
+  leaveActiveGroup,
+  listOwnerEntitled,
   memberNames,
+  ownedGroupIds,
   mergeRemote,
   nextOccurrence,
   parseImport,
@@ -20,6 +25,7 @@ import {
   sortPeople,
   statusFor,
   switchGroup,
+  withAccountUnlock,
   yearSpentCents,
 } from '../src/domain/logic';
 import { suggestIdeas } from '../src/domain/ideas';
@@ -145,12 +151,31 @@ test('on-device ideas stay on device, follow tags, and skip thumbs down', () => 
   expect(blocked).not.toContain(first[0]);
 });
 
-test('free tier stops at five people', () => {
-  const snapshot = emptySnapshot(1);
+test('free tier stops at five people unless the list owner is unlocked', () => {
+  const snapshot = createGroup({
+    snapshot: emptySnapshot(1),
+    groupId: 'g',
+    ownerId: 'owner',
+    displayName: 'Mike',
+    groupName: '',
+    now: 1,
+  });
   snapshot.people = ['a', 'b', 'c', 'd', 'e'].map(id => person(id, id));
+  expect(listOwnerEntitled(snapshot)).toBe(false);
   expect(canAddPerson(snapshot, 5)).toBe(false);
-  snapshot.entitlementPaid = true;
-  expect(canAddPerson(snapshot, 5)).toBe(true);
+  const paidJoiner = {
+    ...snapshot,
+    entitlementPaid: true,
+    profile: { ...snapshot.profile, uid: 'joiner' },
+    group: snapshot.group && { ...snapshot.group, ownerId: 'owner', entitled: false },
+  };
+  expect(canAddPerson(paidJoiner, 5)).toBe(false);
+  expect(canAddPerson({ ...snapshot, entitlementPaid: true }, 5)).toBe(true);
+  expect(canAddPerson({
+    ...snapshot,
+    entitlementPaid: false,
+    group: snapshot.group && { ...snapshot.group, entitled: true },
+  }, 5)).toBe(true);
 });
 
 test('imports Santa-style CSV and Christmas Gift List JSON', () => {
@@ -268,6 +293,69 @@ test('a group has room for 9 members, not 10 or 11', () => {
   };
   expect(canAddPerson(withPeople, 5)).toBe(false);
   expect(canAddPerson({ ...withPeople, entitlementPaid: true }, 5)).toBe(true);
+  expect(canAddPerson({
+    ...withPeople,
+    entitlementPaid: true,
+    profile: { ...withPeople.profile, uid: 'joiner' },
+  }, 5)).toBe(false);
+});
+
+test('a free account starts one list, paying starts another, and joining does not count', () => {
+  const first = createGroup({
+    snapshot: emptySnapshot(1),
+    groupId: 'g1',
+    ownerId: 'me',
+    displayName: 'Mike',
+    groupName: '',
+    now: 1,
+  });
+  expect(canStartAnotherList(first, 'me')).toBe(false);
+  expect(ownedGroupIds(first, 'me')).toEqual(['g1']);
+  expect(canStartAnotherList({ ...first, entitlementPaid: true }, 'me')).toBe(true);
+  const left = leaveActiveGroup(first);
+  expect(ownedGroupIds(left, 'me')).toEqual([]);
+  expect(canStartAnotherList(left, 'me')).toBe(true);
+  const joined = createGroup({
+    snapshot: emptySnapshot(1),
+    groupId: 'theirs',
+    ownerId: 'friend',
+    displayName: 'Sam',
+    groupName: '',
+    now: 1,
+  });
+  joined.profile = { ...joined.profile, uid: 'me' };
+  expect(canStartAnotherList(joined, 'me')).toBe(true);
+  expect(ownedGroupIds(joined, 'me')).toEqual([]);
+  const remoteGroup = first.group;
+  if (!remoteGroup) {
+    throw new Error('missing group');
+  }
+  const remote = applyGroupRemote(first, {
+    ...remoteGroup,
+    entitled: true,
+    ownerId: 'friend',
+    updatedAt: 9,
+  });
+  expect(remote.snapshot.entitlementPaid).toBe(false);
+  expect(remote.snapshot.group?.entitled).toBe(true);
+  const unlocked = withAccountUnlock(first, true);
+  expect(unlocked.group?.entitled).toBe(true);
+  const second = createGroup({
+    snapshot: first,
+    groupId: 'g2',
+    ownerId: 'friend',
+    displayName: 'Sam',
+    groupName: 'Theirs',
+    now: 2,
+  });
+  second.profile = { ...second.profile, uid: 'me' };
+  if (second.group) {
+    second.group = { ...second.group, ownerId: 'friend', entitled: false };
+  }
+  const stamped = withAccountUnlock(second, true);
+  expect(stamped.group?.entitled).toBe(false);
+  expect(stamped.archives.g1.group.entitled).toBe(true);
+  expect(t('errors.oneList')).toBe('A free account can start one list. Unlock to start another.');
 });
 
 function person(id: string, name: string, budgetCents: number | null = null): Person {

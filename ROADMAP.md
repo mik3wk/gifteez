@@ -51,7 +51,8 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - **Cost:** anonymous auth sends no texts, so it has no SMS cost. Email magic link is the default upgrade path because texts are the main Firebase cost driver.
 - **App assets (decided with the build):** the builder generates every app icon (including the Android adaptive icon), the launch screen, empty-state art, bundled seasonal motifs, and the store graphics from SVG sources in `assets/src`. The rasters are committed. Michael does not swap in replacement art before a simulator run.
 - **Several groups (decided with the build):** one person can belong to more than one group. Each group has an optional name, set at creation and editable later in group settings. The name is user content and is stored only inside the group ciphertext, same as other user content. If no name is set, the label is the members' names joined (`Mike, Sam & Jo`), shortened with `+N` when it would run long. At 10 members that label stays short (`Mike, Sam & Jo +7`). A stable emoji and color, derived from the group id, mark the group in the switcher, headers, and invite preview. The invite preview ciphertext is on the invite document so the server still cannot read the name; the key stays in the link fragment.
-- **Group size (decided with the build):** a group holds up to 10 members. These are families buying gifts together, and they are unlikely to go past about 10. A list can still start with one person. The same group key in the invite-link fragment is shared with every member, up to that cap. The paid gift-recipient list is intentionally uncapped for now. The free tier still stops at 5 gift recipients, which is separate from this membership cap.
+- **Group size (decided with the build):** a group holds up to 10 members. These are families buying gifts together, and they are unlikely to go past about 10. A list can still start with one person. The same group key in the invite-link fragment is shared with every member, up to that cap. The paid gift-recipient list is intentionally uncapped for now. Membership is separate from the free-tier limit below.
+- **Monetization (one list on the free tier):** a free account can start one list and keep up to 5 gift recipients on it. They can join any number of lists other people start. Joining is never limited by the joiner's tier. The $9.99 one-time unlock is per account, not per list. The purchase stays on `entitlements/{fingerprint}` (the device id hashed with the pepper; only Functions can write it) and is copied onto `accounts/{uid}`, which only Functions can write. Unlocking lets that account start more lists and removes the recipient cap on every list they own. Recipient limits follow the list owner: a paid member does not raise the cap on someone else's free list, and a free member can add past 5 people on a list whose owner has unlocked. Deleting the only list you started frees that slot. This closes the hole where a free user could start multiple lists. The rules cannot count owned groups, so direct creates are denied and `createOwnedGroup` is the only writer.
 
 ## 1. Foundation
 - [x] React Native 0.88 TypeScript scaffold for iOS and Android (`~/Documents/Projects/Gifteez`)
@@ -143,13 +144,13 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [ ] Confirm OpenAI model pricing and set a monthly spend alert
 
 ## 10. Monetization
-- [x] Free tier: 5 people, 5 refreshes each
-- [x] $9.99 one-time in-app purchase removes the people cap and raises refreshes
+- [x] Free tier: one list you start, 5 gift recipients on it, 5 refreshes each. Joining lists other people start is not limited
+- [x] $9.99 one-time in-app purchase removes both limits (more lists you start, and the recipient cap on lists you own) and raises refreshes
 - [x] No AI subscription
 - [x] Set the paid refresh limit: 20 per person per month (free tier stays at 5 per person)
 - [ ] Monitor refresh usage for abuse and per-refresh API cost; adjust the paid cap if needed
-- [x] Restore purchases on reinstall or a new device
-- [x] Verify server-side that a user has paid before raising their limits
+- [x] Restore purchases on reinstall or a new device. The device fingerprint still records the purchase, and `getEntitlement` / `verifyUnlock` copy it onto the signed-in account
+- [x] Verify server-side that a user has paid before raising their limits. A free user cannot start a second list: `createOwnedGroup` checks `accounts/{uid}`, and the rules deny direct group creates. This closes the hole where a free user could start multiple lists. Recipient caps follow the list owner's entitlement
 
 ## 11. Localization
 - [x] Launch in US English only

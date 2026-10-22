@@ -20,7 +20,6 @@ import {
   collection,
   connectFirestoreEmulator,
   doc,
-  deleteDoc,
   getDoc,
   getDocs,
   getFirestore,
@@ -158,26 +157,6 @@ export async function confirmSmsCode(verificationId: string, code: string): Prom
   }
   await signInWithCredential(auth, credential);
   return 'signed-in';
-}
-
-export async function createGroupDocument(input: {
-  groupId: string;
-  ownerId: string;
-  ciphertext: string;
-  updatedAt: number;
-}): Promise<void> {
-  await setDoc(doc(getFirestore(), 'groups', input.groupId), {
-    ownerId: input.ownerId,
-    memberIds: [input.ownerId],
-    peopleCount: 0,
-    entitled: false,
-    updatedAt: input.updatedAt,
-    ciphertext: input.ciphertext,
-  });
-}
-
-export async function deleteGroupDocument(groupId: string): Promise<void> {
-  await deleteDoc(doc(getFirestore(), 'groups', groupId));
 }
 
 export async function updateGroupDocument(
