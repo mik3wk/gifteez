@@ -1,0 +1,3 @@
+# Gifteez Fastlane app identifiers (no secrets here)
+app_identifier(ENV["IOS_BUNDLE_ID"] || "com.gifteez")   # iOS bundle ID (set in Xcode to match)
+package_name("com.gifteez")                              # Android applicationId (android/app/build.gradle)

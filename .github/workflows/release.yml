@@ -1,0 +1,54 @@
+# Runs Fastlane beta lanes when a version tag (v*) is pushed: iOS -> TestFlight, Android -> Play internal.
+name: Release (beta)
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - uses: ruby/setup-ruby@v1
+        with: { bundler-cache: true }
+      - name: Decode App Store Connect key
+        run: echo "$ASC_KEY_B64" | base64 -d > "$RUNNER_TEMP/AuthKey.p8"
+        env: { ASC_KEY_B64: "${{ secrets.ASC_KEY_B64 }}" }
+      - run: bundle exec fastlane ios beta
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - run: npm ci
+      - uses: ruby/setup-ruby@v1
+        with: { bundler-cache: true }
+      - name: Decode Play key and upload keystore
+        run: |
+          echo "$PLAY_JSON_B64" | base64 -d > "$RUNNER_TEMP/play.json"
+          echo "$ANDROID_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+        env:
+          PLAY_JSON_B64: ${{ secrets.PLAY_JSON_B64 }}
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      - run: bundle exec fastlane android beta
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          PLAY_JSON_KEY_PATH: ${{ runner.temp }}/play.json
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/upload.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}

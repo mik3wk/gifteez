@@ -1,0 +1,110 @@
+# Gifteez release lanes
+#   iOS:     fastlane ios beta     -> TestFlight
+#            fastlane ios release  -> App Store Connect (submit for review)
+#   Android: fastlane android beta    -> Google Play internal testing track
+#            fastlane android release -> Google Play production (staged rollout)
+#
+# Version: single source is package.json "version" (bump with `npm version patch|minor|major`).
+# Build number: CI run number via BUILD_NUMBER (GitHub: github.run_number); timestamp fallback locally.
+# Release notes: fastlane/metadata/release_notes.txt (shared by both stores).
+#
+# Credentials (never in this repo):
+#   Local: ~/.gifteez-secrets/  (AuthKey_XXXX.p8, play.json, upload.jks)
+#   CI:    GitHub secrets ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_B64, MATCH_PASSWORD, MATCH_GIT_URL,
+#          PLAY_JSON_B64, ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+
+require "json"
+
+ROOT          = File.expand_path("..", __dir__)
+SECRETS_DIR   = ENV["GIFTEEZ_SECRETS_DIR"] || File.expand_path("~/.gifteez-secrets")
+VERSION       = JSON.parse(File.read(File.join(ROOT, "package.json")))["version"]
+BUILD         = (ENV["BUILD_NUMBER"] || Time.now.strftime("%y%m%d%H%M")).to_i
+RELEASE_NOTES = File.read(File.join(__dir__, "metadata", "release_notes.txt")).strip
+
+platform :ios do
+  XCODEPROJ = File.join(ROOT, "ios/Gifteez.xcodeproj")
+  WORKSPACE = File.join(ROOT, "ios/Gifteez.xcworkspace")
+
+  before_all do
+    # Same pod install step noted in ROADMAP.md Phase 1
+    sh("cd #{ROOT}/ios && bundle exec pod install")
+    app_store_connect_api_key(
+      key_id:       ENV["ASC_KEY_ID"],
+      issuer_id:    ENV["ASC_ISSUER_ID"],
+      key_filepath: ENV["ASC_KEY_PATH"] || File.join(SECRETS_DIR, "AuthKey.p8")
+    )
+  end
+
+  private_lane :build do
+    increment_version_number(version_number: VERSION, xcodeproj: XCODEPROJ)
+    increment_build_number(build_number: BUILD, xcodeproj: XCODEPROJ)
+    setup_ci if is_ci
+    match(type: "appstore", readonly: is_ci, git_url: ENV["MATCH_GIT_URL"])
+    build_app(workspace: WORKSPACE, scheme: "Gifteez", export_method: "app-store",
+              output_directory: File.join(ROOT, "build/ios"))
+  end
+
+  desc "Build and upload to TestFlight"
+  lane :beta do
+    build
+    upload_to_testflight(changelog: RELEASE_NOTES, skip_waiting_for_build_processing: true)
+  end
+
+  desc "Build, upload to App Store Connect, and submit for review"
+  lane :release do
+    build
+    deliver(
+      submit_for_review: true,
+      automatic_release: false,
+      force: true,
+      metadata_path: File.join(__dir__, "metadata/ios"),
+      release_notes: { "en-US" => RELEASE_NOTES },
+      skip_screenshots: true,
+      precheck_include_in_app_purchases: false
+    )
+  end
+end
+
+platform :android do
+  PLAY_JSON = ENV["PLAY_JSON_KEY_PATH"] || File.join(SECRETS_DIR, "play.json")
+
+  private_lane :build do
+    # Play changelog for this versionCode, copied from the shared release notes
+    File.write(File.join(__dir__, "metadata/android/en-US/changelogs/#{BUILD}.txt"), RELEASE_NOTES)
+    gradle(
+      project_dir: File.join(ROOT, "android"),
+      task: "bundle",
+      build_type: "Release",
+      properties: {
+        "versionName" => VERSION,
+        "versionCode" => BUILD,
+        "android.injected.signing.store.file"     => ENV["ANDROID_KEYSTORE_PATH"] || File.join(SECRETS_DIR, "upload.jks"),
+        "android.injected.signing.store.password" => ENV["ANDROID_KEYSTORE_PASSWORD"],
+        "android.injected.signing.key.alias"      => ENV["ANDROID_KEY_ALIAS"],
+        "android.injected.signing.key.password"   => ENV["ANDROID_KEY_PASSWORD"]
+      }
+    )
+  end
+
+  desc "Build and upload to the Google Play internal testing track"
+  lane :beta do
+    build
+    supply(track: "internal", json_key: PLAY_JSON,
+           metadata_path: File.join(__dir__, "metadata/android"),
+           skip_upload_metadata: true, skip_upload_images: true, skip_upload_screenshots: true)
+  end
+
+  desc "Build and upload to Google Play production with a 20% staged rollout"
+  lane :release do
+    build
+    supply(track: "production", rollout: "0.2", json_key: PLAY_JSON,
+           metadata_path: File.join(__dir__, "metadata/android"),
+           skip_upload_images: true, skip_upload_screenshots: true)
+  end
+
+  desc "Promote the latest internal build to production (no rebuild)"
+  lane :promote do
+    supply(track: "internal", track_promote_to: "production", rollout: "0.2", json_key: PLAY_JSON,
+           skip_upload_aab: true, skip_upload_metadata: true, skip_upload_images: true, skip_upload_screenshots: true)
+  end
+end

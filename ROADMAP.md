@@ -1,5 +1,7 @@
 # Gifteez Roadmap
 
+> **End state:** an agent can be told to build everything in Phases 1–13. When it's done, the only manual step before testing on a simulator is filling in the environment variables from `.env.example`. If testing looks good, Phase 15 covers store submission (TestFlight and the Google Play internal testing track) using the Fastlane lanes.
+
 Gifteez is a private, year-round gift tracker with gift ideas. It's one React Native codebase for iOS and Android, running on Firebase (Blaze plan).
 
 ## 0. Context and decisions (reference)
@@ -21,7 +23,7 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 ### Firebase cost model (Blaze)
 - The Spark plan won't work: it allows only 5 magic-link emails a day, and has no phone auth and no Cloud Functions.
 - Estimated Firebase cost: about $0/month at 100 users, about $3/month at 1,000 and about $65–80/month at 10,000.
-- Text messages for phone auth are the main cost driver, at about $0.01 per US SMS.
+- Text messages are the main cost driver, at about $0.01 per US SMS. They're only sent for the optional text-code upgrade. Anonymous auth and magic links send no texts, so the real SMS cost should come in below the earlier estimate.
 - Auth is free up to 50K monthly active users.
 - Firestore's free quota is 50K reads and 20K writes a day.
 - Cloud Functions include 2M free invocations a month.
@@ -32,9 +34,25 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - AI use will be capped rather than left open. Free users get on-device AI. Cloud AI is used only on explicit request, cached per person, with a counter enforced on the server.
 - **AI caps (decided Oct 22, 2026):** 5 free refreshes per person, and 20 refreshes per person per month for paying users. The paid cap is a starting point, monitored for abuse and per-refresh API cost.
 
+### Sign-in and data model (decided Oct 22, 2026)
+- **Default sign-in:** Firebase anonymous auth, created invisibly on first open. There is no sign-in wall.
+- **Source of truth:** the cloud (Firestore). Local storage is only an encrypted cache, not a separate data model.
+- **Privacy:** end-to-end encryption is the intended approach, so even the server can't read user data.
+- **Offline-first:** while offline, the app reads and writes the encrypted local copy. Changes merge to the cloud when the connection returns.
+- **Account linking:** the app prompts the user to upgrade from anonymous to a permanent sign-in only when recovery matters:
+  - starting a group
+  - exporting or sharing a list
+  - first opening the app on a second device
+
+  Email magic link is the default upgrade path and a text code is optional. Firebase links the anonymous account to the permanent one in place, so the UID and data stay the same.
+- **Lost phone:** the risk is accepted. After 30 days of use, show one subtle, dismissible banner suggesting the upgrade. It never blocks.
+- **Offline conflicts:** last write wins, with a small "updated on another device" toast.
+- **AI cap identity:** the refresh cap is not tied to the anonymous UID, because a reinstall would reset it. It's tied to a device ID plus a fingerprint hash stored on the server.
+- **Cost:** anonymous auth sends no texts, so it has no SMS cost. Email magic link is the default upgrade path because texts are the main Firebase cost driver.
+
 ## 1. Foundation
 - [x] React Native 0.88 TypeScript scaffold for iOS and Android (`~/Documents/Projects/Gifteez`)
-- [ ] Initialize git and push to the repo host
+- [x] Initialize git and push to GitHub ([mik3wk/gifteez](https://github.com/mik3wk/gifteez), branch `master`)
 - [ ] Run `bundle install && bundle exec pod install` in `ios/`; confirm the first iOS and Android builds
 - [ ] Choose a navigation library and set up the app shell
 - [ ] Create a Firebase project on the Blaze plan; register the iOS and Android apps
@@ -42,27 +60,34 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [ ] Set a billing budget alert in Google Cloud
 - [ ] Write Firestore security rules: only group members can read or write their group
 - [ ] Enable App Check (App Attest on iOS, Play Integrity on Android)
-- [ ] Build the local storage layer for on-device data: people, occasions, feedback log, idea cache
-- [ ] Decide what syncs to Firestore (group data) versus what stays only on the device
+- [ ] Make Firestore the source of truth for all user data
+- [ ] Build an encrypted local cache that mirrors Firestore, not a separate data model
+- [ ] Add end-to-end encryption: generate and store keys on the device, encrypt before upload, and make sure the server can't read user data
+- [ ] Design key sharing for group members under end-to-end encryption
+- [ ] Offline-first: read and write the encrypted local copy offline, and merge to the cloud when the connection returns
+- [ ] Resolve merge conflicts with last write wins, and show a small "updated on another device" toast
 
 ## 2. First open and onboarding
 - [ ] Build the first-open screen: one sentence explaining the app, plus "Start" and "Join" buttons
-- [ ] "Start" creates the invisible account, then a group, then goes to the people list
+- [ ] "Start" creates the invisible anonymous account and goes to the people list. Creating a group triggers the upgrade prompt.
 - [ ] "Join" accepts an invite link and joins that group
 - [ ] Reopening the app lands directly on the people list
 - [ ] No signup form anywhere
 - [ ] Don't generate recommendations at app open
 
 ## 3. Accounts (anonymous, invisible)
-- [ ] Create the anonymous account invisibly through phone sign-in, with no signup form
-- [ ] Keep users signed in long-term to minimize SMS sends (the main cost)
+- [ ] Create the Firebase anonymous account invisibly on first open, with no sign-in wall and no signup form
+- [ ] Prompt the upgrade to a permanent sign-in only when the user starts a group, exports or shares a list, or first opens the app on a second device
+- [ ] Make email magic link the default upgrade method, with a text code as an option
+- [ ] Link the anonymous account to the permanent one in place, keeping the same UID and data
+- [ ] After 30 days of use, show one subtle, dismissible banner suggesting the upgrade, never blocking
 - [ ] Generate a silly auto-name for each user
 - [ ] Allow overwriting the auto-name only at group creation
-- [ ] Recover the account after a reinstall or on a new device
-- [ ] Limit SMS to the launch regions (US first)
+- [ ] Recover the account after a reinstall or on a new device through the linked permanent sign-in. The lost-phone risk is accepted for anonymous-only users.
+- [ ] Limit text codes to the launch regions (US first)
 
 ## 4. Groups
-- [ ] Create a group of 2–5 people, with an optional name override at creation
+- [ ] Create a group of 2–5 people, with an optional name override at creation. This prompts the upgrade from anonymous to a permanent sign-in.
 - [ ] Invite through a shareable link that opens the app (or the store) and joins
 - [ ] Enforce the 2–5 member limit
 - [ ] Sync group records through Firestore
@@ -104,7 +129,8 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [ ] Protect the proxy with App Check
 - [ ] Call cloud AI only when the user explicitly asks
 - [ ] Cache cloud ideas per person; only fresh generations count toward the cap
-- [ ] Enforce a per-user, per-person refresh counter on the server (free: 5 per person; paid: 20 per person per month, resetting monthly)
+- [ ] Enforce a per-person refresh counter on the server (free: 5 per person; paid: 20 per person per month, resetting monthly)
+- [ ] Tie the refresh cap to a device ID plus a fingerprint hash stored on the server, not to the anonymous UID, so a reinstall doesn't reset it
 - [ ] Confirm OpenAI model pricing and set a monthly spend alert
 
 ## 10. Monetization
@@ -144,3 +170,31 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [ ] Run a USPTO trademark search on "Gifteez" before launch
 - [ ] Register a domain (check gifteez.com and gifteez.app)
 - [ ] Offer import from Santa's Bag and Christmas Gift List Tracker exports to win users who are switching
+
+## 14. Build complete: ready for the simulator (definition of done)
+- [ ] All Phases 1–13 build tasks are implemented by the agent, with no manual coding steps left
+- [ ] Every config value the app needs is read from `.env` (keys listed in `.env.example`); nothing is hardcoded
+- [ ] The Cloud Function code for the AI proxy is in the repo and deploys with one command (`firebase deploy --only functions`)
+- [ ] Firestore security rules and indexes are in the repo and deploy with one command
+- [ ] A README "Run it" section lists the only manual step: copy `.env.example` to `.env` and fill in the values (plus the OpenAI key set as a Functions secret)
+- [ ] `npm install`, then `cd ios && bundle install && bundle exec pod install`, then `npx react-native run-ios` boots on the iOS simulator
+- [ ] `npx react-native run-android` boots on the Android emulator
+- [ ] Smoke test on both simulators: first open, invisible sign-in, add a person, an occasion, on-device ideas, a purchase, budget, and a group invite link
+- [ ] Lint, type check and unit tests pass
+
+## 15. Store submission (after simulator testing looks good)
+Fastlane is already in the repo: `fastlane/Fastfile`, `fastlane/Appfile`, `fastlane/metadata/` and `.github/workflows/release.yml`.
+- [ ] Enroll in the Apple Developer Program and create a Google Play Console account
+- [ ] Create the app record in App Store Connect (bundle ID) and in Play Console (`com.gifteez`)
+- [ ] Create an App Store Connect API key (`.p8`) and save it to `~/.gifteez-secrets/AuthKey.p8`
+- [ ] Create a Google Play service account with Release Manager access, and save its JSON to `~/.gifteez-secrets/play.json`
+- [ ] Set up iOS signing with `fastlane match` (a private certs repo plus `MATCH_PASSWORD`)
+- [ ] Create the Android upload keystore at `~/.gifteez-secrets/upload.jks` and turn on Play App Signing
+- [ ] Add the GitHub secrets: `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_B64`, `MATCH_PASSWORD`, `MATCH_GIT_URL`, `PLAY_JSON_B64`, `ANDROID_KEYSTORE_B64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
+- [ ] Set the version in `package.json` (`npm version ...`) and write the release notes in `fastlane/metadata/release_notes.txt`
+- [ ] Upload the first Android build to the internal track by hand once in Play Console (Play requires it before API uploads work)
+- [ ] iOS beta: run `bundle exec fastlane ios beta`, or push a `v*` tag, to upload to TestFlight
+- [ ] Android beta: run `bundle exec fastlane android beta`, or push a `v*` tag, to upload to the Google Play internal testing track
+- [ ] Add internal testers in TestFlight and in the Play internal track; test on real devices
+- [ ] Fill in the store listing assets from Phase 13: screenshots, description, privacy label and Data safety
+- [ ] Production: `fastlane ios release` (submit for review), then `fastlane android release` (20% staged rollout) or `fastlane android promote`

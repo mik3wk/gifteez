@@ -76,3 +76,12 @@ yarn-error.log
 
 # local env
 .env
+
+# Fastlane / release credentials
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/test_output
+build/
+*.p8
+*.jks
+play.json
