@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; connect-src 'none'; img-src 'none'; frame-src 'none'">
+  <title>Join a Gifteez list</title>
+  <style>
+    body { margin: 0; background: #F6F1E7; color: #1F2A24; font-family: Georgia, "Iowan Old Style", Palatino, serif; }
+    main { max-width: 32rem; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+    h1 { font-size: 1.8rem; line-height: 1.2; margin: 0 0 0.75rem; }
+    p { line-height: 1.45; font-size: 1.05rem; }
+    label { display: block; margin: 1rem 0 0.4rem; color: #5E6A62; }
+    button { display: block; width: 100%; margin: 0.6rem 0; padding: 0.9rem 1rem; font: inherit; font-size: 1.05rem; border-radius: 12px; border: 1px solid #E2D8C8; }
+    button.primary { background: #1F6B4A; color: #F6F1E7; }
+    button.secondary { background: #FFFCF7; color: #1F2A24; }
+    input { width: 100%; box-sizing: border-box; padding: 0.75rem; font: inherit; border-radius: 12px; border: 1px solid #E2D8C8; background: #FFFCF7; color: #1F2A24; }
+    .note { color: #5E6A62; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Join a Gifteez list</h1>
+    <p>Open this invite in the Gifteez app. The part of the address after # stays on this device. This page does not send it to Gifteez or to anyone else.</p>
+    <button type="button" id="open-app" class="primary">Open in Gifteez</button>
+    <p class="note" id="status">If the app is installed, Open in Gifteez hands it this invite, including the key.</p>
+    <label for="invite">Invite link, including the key</label>
+    <input id="invite" readonly value="" autocomplete="off" spellcheck="false">
+    <button type="button" id="copy-ios" class="secondary">Copy invite and open the App Store</button>
+    <button type="button" id="copy-android" class="secondary">Copy invite and open Google Play</button>
+    <p class="note">If Gifteez is not installed yet, copy the invite first, then install. When the app opens, paste that invite on the first screen. It asks before it joins. This page does not open the store on its own, and it does not use the Play install referrer, because that would hand the key to Google.</p>
+    <p class="note">If the app opens from the web link and does not ask you to join, the key was left behind. Paste the copied invite instead.</p>
+  </main>
+  <script>
+    (function () {
+      var appStore = "__APP_STORE_URL__";
+      var playStore = "__PLAY_STORE_URL__";
+      var invite = document.getElementById("invite");
+      var status = document.getElementById("status");
+
+      function fullLink() {
+        return location.href;
+      }
+
+      function appLink() {
+        var path = location.pathname.replace(/^\//, "");
+        return "gifteez://" + path + location.search + location.hash;
+      }
+
+      invite.value = fullLink();
+
+      function openApp() {
+        status.textContent = "Trying the Gifteez app on this device.";
+        window.location.href = appLink();
+      }
+
+      function fallbackCopy(text) {
+        invite.value = text;
+        invite.focus();
+        invite.select();
+        try {
+          return document.execCommand("copy");
+        } catch (error) {
+          status.textContent = "Select the invite above and copy it. The store stays closed until the invite is copied.";
+          return false;
+        }
+      }
+
+      function copyAndOpen(store) {
+        var href = fullLink();
+        invite.value = href;
+        var go = function () {
+          window.location.href = store;
+        };
+        var stay = function () {
+          status.textContent = "Select the invite above and copy it. The store stays closed until the invite is copied.";
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(href).then(go, function () {
+            if (fallbackCopy(href)) {
+              go();
+            } else {
+              stay();
+            }
+          });
+          return;
+        }
+        if (fallbackCopy(href)) {
+          go();
+        } else {
+          stay();
+        }
+      }
+
+      document.getElementById("open-app").addEventListener("click", openApp);
+      document.getElementById("copy-ios").addEventListener("click", function () {
+        copyAndOpen(appStore);
+      });
+      document.getElementById("copy-android").addEventListener("click", function () {
+        copyAndOpen(playStore);
+      });
+
+      var ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      var android = /Android/.test(navigator.userAgent);
+      if (ios) {
+        document.getElementById("copy-android").hidden = true;
+      }
+      if (android) {
+        document.getElementById("copy-ios").hidden = true;
+      }
+    })();
+  </script>
+</body>
+</html>

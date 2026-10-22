@@ -1,0 +1,23 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAMID.com.gifteez",
+        "paths": [
+          "/join/*"
+        ]
+      },
+      {
+        "appIDs": [
+          "TEAMID.com.gifteez"
+        ],
+        "components": [
+          {
+            "/": "/join/*"
+          }
+        ]
+      }
+    ]
+  }
+}

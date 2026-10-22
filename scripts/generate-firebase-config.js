@@ -1,87 +1,18 @@
 #!/usr/bin/env node
 /**
- * Writes native Firebase config, .firebaserc, and nothing secret.
- * Missing .env falls back to .env.example so simulator builds still configure.
+ * Writes native Firebase config, .firebaserc, the invite-domain native files,
+ * and the Hosting join page. Nothing secret. Missing .env falls back to
+ * .env.example so simulator builds still configure.
  */
 const fs = require('fs');
 const path = require('path');
 
-const root = path.resolve(__dirname, '..');
-const envPath = fs.existsSync(path.join(root, '.env'))
-  ? path.join(root, '.env')
-  : path.join(root, '.env.example');
-
-const env = parseEnv(fs.readFileSync(envPath, 'utf8'));
-const projectId = env.FIREBASE_PROJECT_ID || 'your-project-id';
-const sender = env.FIREBASE_MESSAGING_SENDER_ID || '000000000000';
-const apiKey = env.FIREBASE_API_KEY || 'your-firebase-api-key';
-const bucket = env.FIREBASE_STORAGE_BUCKET || `${projectId}.appspot.com`;
-const androidAppId = env.FIREBASE_ANDROID_APP_ID || '1:000000000000:android:0000000000000000';
-const iosAppId = env.FIREBASE_IOS_APP_ID || '1:000000000000:ios:0000000000000000';
-const bundleId = env.APP_BUNDLE_ID || 'com.gifteez';
-
-const googleServices = {
-  project_info: {
-    project_number: sender,
-    project_id: projectId,
-    storage_bucket: bucket,
-  },
-  client: [
-    {
-      client_info: {
-        mobilesdk_app_id: androidAppId,
-        android_client_info: { package_name: bundleId },
-      },
-      oauth_client: [],
-      api_key: [{ current_key: apiKey }],
-      services: { appinvite_service: { other_platform_oauth_client: [] } },
-    },
-  ],
-  configuration_version: '1',
-};
-
-fs.writeFileSync(
-  path.join(root, 'android/app/google-services.json'),
-  `${JSON.stringify(googleServices, null, 2)}\n`,
-);
-
-const plist = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>API_KEY</key>
-  <string>${escapeXml(apiKey)}</string>
-  <key>GCM_SENDER_ID</key>
-  <string>${escapeXml(sender)}</string>
-  <key>PLIST_VERSION</key>
-  <string>1</string>
-  <key>BUNDLE_ID</key>
-  <string>${escapeXml(bundleId)}</string>
-  <key>PROJECT_ID</key>
-  <string>${escapeXml(projectId)}</string>
-  <key>STORAGE_BUCKET</key>
-  <string>${escapeXml(bucket)}</string>
-  <key>IS_ADS_ENABLED</key>
-  <false/>
-  <key>IS_ANALYTICS_ENABLED</key>
-  <false/>
-  <key>IS_APPINVITE_ENABLED</key>
-  <true/>
-  <key>IS_GCM_ENABLED</key>
-  <true/>
-  <key>IS_SIGNIN_ENABLED</key>
-  <true/>
-  <key>GOOGLE_APP_ID</key>
-  <string>${escapeXml(iosAppId)}</string>
-</dict>
-</plist>
-`;
-fs.writeFileSync(path.join(root, 'ios/Gifteez/GoogleService-Info.plist'), plist);
-fs.writeFileSync(
-  path.join(root, '.firebaserc'),
-  `${JSON.stringify({ projects: { default: projectId } }, null, 2)}\n`,
-);
-console.log(`Firebase config written from ${path.basename(envPath)} for project ${projectId}.`);
+const PLACEHOLDER_SHA256 = [
+  '00', '00', '00', '00', '00', '00', '00', '00',
+  '00', '00', '00', '00', '00', '00', '00', '00',
+  '00', '00', '00', '00', '00', '00', '00', '00',
+  '00', '00', '00', '00', '00', '00', '00', '00',
+].join(':');
 
 function parseEnv(text) {
   const values = {};
@@ -110,3 +41,213 @@ function escapeXml(value) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 }
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function inviteDomain(env) {
+  const raw = String(env.INVITE_LINK_DOMAIN || 'gifteez.app')
+    .trim()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '');
+  return /^[A-Za-z0-9.-]+$/.test(raw) ? raw : 'gifteez.app';
+}
+
+function bundleId(env) {
+  const raw = String(env.APP_BUNDLE_ID || 'com.gifteez').trim();
+  return /^[A-Za-z0-9.]+$/.test(raw) ? raw : 'com.gifteez';
+}
+
+function appleTeamId(env) {
+  const raw = String(env.APPLE_TEAM_ID || 'TEAMID').trim();
+  return /^[A-Za-z0-9]+$/.test(raw) ? raw : 'TEAMID';
+}
+
+function sha256Fingerprint(env) {
+  const raw = String(env.ANDROID_SHA256_CERT_FINGERPRINT || '').trim().toUpperCase();
+  return /^[0-9A-F]{2}(:[0-9A-F]{2}){31}$/.test(raw) ? raw : PLACEHOLDER_SHA256;
+}
+
+function httpsUrl(value, fallback) {
+  const raw = String(value || '').trim();
+  if (/^https:\/\/[^\s"'<>]+$/.test(raw)) {
+    return raw;
+  }
+  return fallback;
+}
+
+function storeUrls(env) {
+  const id = bundleId(env);
+  return {
+    appStore: httpsUrl(env.APP_STORE_URL, 'https://apps.apple.com/app/id0000000000'),
+    playStore: httpsUrl(env.PLAY_STORE_URL, `https://play.google.com/store/apps/details?id=${id}`),
+  };
+}
+
+function renderAasa(env) {
+  const appId = `${appleTeamId(env)}.${bundleId(env)}`;
+  return `${JSON.stringify({
+    applinks: {
+      apps: [],
+      details: [
+        { appID: appId, paths: ['/join/*'] },
+        { appIDs: [appId], components: [{ '/': '/join/*' }] },
+      ],
+    },
+  }, null, 2)}\n`;
+}
+
+function renderAssetLinks(env) {
+  return `${JSON.stringify([
+    {
+      relation: ['delegate_permission/common.handle_all_urls'],
+      target: {
+        namespace: 'android_app',
+        package_name: bundleId(env),
+        sha256_cert_fingerprints: [sha256Fingerprint(env)],
+      },
+    },
+  ], null, 2)}\n`;
+}
+
+function renderJoinPage(template, env) {
+  const urls = storeUrls(env);
+  return template
+    .replaceAll('__APP_STORE_URL__', escapeHtml(urls.appStore))
+    .replaceAll('__PLAY_STORE_URL__', escapeHtml(urls.playStore));
+}
+
+function rewriteAndroidHost(xml, domain) {
+  return xml.replace(
+    /(<data android:scheme="https" android:host=")[^"]*(" android:pathPrefix="\/join" \/>)/,
+    `$1${domain}$2`,
+  );
+}
+
+function rewriteEntitlements(xml, domain) {
+  return xml.replace(/<string>applinks:[^<]*<\/string>/, `<string>applinks:${domain}</string>`);
+}
+
+function writeFirebaseFiles(env, root) {
+  const projectId = env.FIREBASE_PROJECT_ID || 'your-project-id';
+  const sender = env.FIREBASE_MESSAGING_SENDER_ID || '000000000000';
+  const apiKey = env.FIREBASE_API_KEY || 'your-firebase-api-key';
+  const bucket = env.FIREBASE_STORAGE_BUCKET || `${projectId}.appspot.com`;
+  const androidAppId = env.FIREBASE_ANDROID_APP_ID || '1:000000000000:android:0000000000000000';
+  const iosAppId = env.FIREBASE_IOS_APP_ID || '1:000000000000:ios:0000000000000000';
+  const id = bundleId(env);
+
+  const googleServices = {
+    project_info: {
+      project_number: sender,
+      project_id: projectId,
+      storage_bucket: bucket,
+    },
+    client: [
+      {
+        client_info: {
+          mobilesdk_app_id: androidAppId,
+          android_client_info: { package_name: id },
+        },
+        oauth_client: [],
+        api_key: [{ current_key: apiKey }],
+        services: { appinvite_service: { other_platform_oauth_client: [] } },
+      },
+    ],
+    configuration_version: '1',
+  };
+
+  fs.writeFileSync(
+    path.join(root, 'android/app/google-services.json'),
+    `${JSON.stringify(googleServices, null, 2)}\n`,
+  );
+
+  const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>API_KEY</key>
+  <string>${escapeXml(apiKey)}</string>
+  <key>GCM_SENDER_ID</key>
+  <string>${escapeXml(sender)}</string>
+  <key>PLIST_VERSION</key>
+  <string>1</string>
+  <key>BUNDLE_ID</key>
+  <string>${escapeXml(id)}</string>
+  <key>PROJECT_ID</key>
+  <string>${escapeXml(projectId)}</string>
+  <key>STORAGE_BUCKET</key>
+  <string>${escapeXml(bucket)}</string>
+  <key>IS_ADS_ENABLED</key>
+  <false/>
+  <key>IS_ANALYTICS_ENABLED</key>
+  <false/>
+  <key>IS_APPINVITE_ENABLED</key>
+  <true/>
+  <key>IS_GCM_ENABLED</key>
+  <true/>
+  <key>IS_SIGNIN_ENABLED</key>
+  <true/>
+  <key>GOOGLE_APP_ID</key>
+  <string>${escapeXml(iosAppId)}</string>
+</dict>
+</plist>
+`;
+  fs.writeFileSync(path.join(root, 'ios/Gifteez/GoogleService-Info.plist'), plist);
+  fs.writeFileSync(
+    path.join(root, '.firebaserc'),
+    `${JSON.stringify({ projects: { default: projectId } }, null, 2)}\n`,
+  );
+}
+
+function writeInviteHosting(env, root) {
+  const domain = inviteDomain(env);
+  const template = fs.readFileSync(path.join(root, 'hosting/join/index.template.html'), 'utf8');
+  fs.mkdirSync(path.join(root, 'hosting/.well-known'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'hosting/join'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'hosting/join/index.html'), renderJoinPage(template, env));
+  fs.writeFileSync(path.join(root, 'hosting/.well-known/apple-app-site-association'), renderAasa(env));
+  fs.writeFileSync(path.join(root, 'hosting/.well-known/assetlinks.json'), renderAssetLinks(env));
+
+  const manifestPath = path.join(root, 'android/app/src/main/AndroidManifest.xml');
+  fs.writeFileSync(manifestPath, rewriteAndroidHost(fs.readFileSync(manifestPath, 'utf8'), domain));
+  const entitlementsPath = path.join(root, 'ios/Gifteez/Gifteez.entitlements');
+  fs.writeFileSync(entitlementsPath, rewriteEntitlements(fs.readFileSync(entitlementsPath, 'utf8'), domain));
+  return domain;
+}
+
+function main() {
+  const root = path.resolve(__dirname, '..');
+  const envPath = fs.existsSync(path.join(root, '.env'))
+    ? path.join(root, '.env')
+    : path.join(root, '.env.example');
+  const env = parseEnv(fs.readFileSync(envPath, 'utf8'));
+  writeFirebaseFiles(env, root);
+  const domain = writeInviteHosting(env, root);
+  console.log(`Firebase config written from ${path.basename(envPath)} for project ${env.FIREBASE_PROJECT_ID || 'your-project-id'}.`);
+  console.log(`Invite links use https://${domain}/join. Hosting files were written under hosting/.`);
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  PLACEHOLDER_SHA256,
+  parseEnv,
+  inviteDomain,
+  bundleId,
+  appleTeamId,
+  sha256Fingerprint,
+  storeUrls,
+  renderAasa,
+  renderAssetLinks,
+  renderJoinPage,
+  rewriteAndroidHost,
+  rewriteEntitlements,
+};
