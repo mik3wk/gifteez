@@ -39,11 +39,11 @@ npm run android
 
 `npm run ios` and `npm run android` generate `ios/Gifteez/GoogleService-Info.plist` and `android/app/google-services.json` from `.env` (or from `.env.example` if `.env` is missing). Those files are gitignored. Do not commit them after you put in a real project. Changing `.env` requires a native rebuild; restarting Metro is not enough.
 
-If the Firebase values are still the placeholders, the app opens on a screen that names the missing keys. It does not try to sign in.
+If the Firebase values are still the placeholders, the app opens on a screen that names the missing keys. It does not try to sign in. On iOS, `FirebaseApp.configure()` runs only when `GoogleService-Info.plist` is in the app and its values are not placeholders, so a missing plist does not crash before JavaScript. `npm run ios` writes that plist, then installs pods. The first pod install after this change links `FirebaseCore` into the app target. A Metro restart does not pick up a new plist or that native link.
 
 ### iOS pods
 
-React Native Firebase 27 pulls the Firebase Apple SDK through Swift Package Manager, and that requires `use_frameworks! :linkage => :dynamic` in `ios/Podfile`. That line is already there. `ios/Podfile.lock` in git is still the scaffold lock from before these native modules were added. `npm run pods` on a Mac refreshes it. The Gemfile already requires CocoaPods `>= 1.13` excluding `1.15.0` and `1.15.1`.
+React Native Firebase 27 pulls the Firebase Apple SDK through Swift Package Manager, and that requires `use_frameworks! :linkage => :dynamic` in `ios/Podfile`. That line is already there, and `post_integrate` asks the React Native Firebase hook to add the `FirebaseCore` product to the Gifteez target so `AppDelegate.swift` can import it. `ios/Podfile.lock` in git is still the scaffold lock from before these native modules were added. `npm run pods` on a Mac refreshes it and writes the package link into the Xcode project. The Gemfile already requires CocoaPods `>= 1.13` excluding `1.15.0` and `1.15.1`.
 
 ### What to tap tonight
 

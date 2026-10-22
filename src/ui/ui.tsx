@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useContext, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -9,10 +9,16 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { HeaderHeightContext } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getEnv } from '../config/env';
 import { formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
+
+/** A stack header already includes the status bar, so a second top inset doubles the gap. */
+export function screenTopInset(headerHeight: number | undefined, topInset: number): number {
+  return headerHeight ? 0 : topInset;
+}
 
 export function Screen({
   children,
@@ -23,8 +29,9 @@ export function Screen({
 }) {
   const { colors } = useGifteez();
   const insets = useSafeAreaInsets();
+  const headerHeight = useContext(HeaderHeightContext);
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+    <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: screenTopInset(headerHeight, insets.top) }]}>
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}
         keyboardShouldPersistTaps="handled">
@@ -35,9 +42,13 @@ export function Screen({
   );
 }
 
-export function Title({ children }: { children: string }) {
+export function Title({ children, accessibilityLabel }: { children: string; accessibilityLabel?: string }) {
   const { colors } = useGifteez();
-  return <Text style={[styles.title, { color: colors.text }]}>{children}</Text>;
+  return (
+    <Text accessibilityRole={accessibilityLabel ? 'header' : undefined} accessibilityLabel={accessibilityLabel} style={[styles.title, { color: colors.text }]}>
+      {children}
+    </Text>
+  );
 }
 
 export function Body({ children }: { children: string }) {
