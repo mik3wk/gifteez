@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function groupData(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId)).data;
+    }
+
+    function isMember(groupId) {
+      return signedIn() && request.auth.uid in groupData(groupId).memberIds;
+    }
+
+    function sameMembers(before, after) {
+      return before.hasAll(after) && after.hasAll(before);
+    }
+
+    function selfLeave(before, after) {
+      return before.hasAll(after)
+        && before.size() == after.size() + 1
+        && before.hasAny([request.auth.uid])
+        && !after.hasAny([request.auth.uid]);
+    }
+
+    function ownerRemoves(before, after) {
+      return request.auth.uid == resource.data.ownerId
+        && before.hasAll(after)
+        && before.size() == after.size() + 1;
+    }
+
+    match /groups/{groupId} {
+      allow get: if signedIn() && request.auth.uid in resource.data.memberIds;
+      allow list: if false;
+
+      allow create: if signedIn()
+        && request.auth.uid == request.resource.data.ownerId
+        && request.auth.uid in request.resource.data.memberIds
+        && request.resource.data.memberIds.size() == 1
+        && request.resource.data.entitled == false
+        && request.resource.data.peopleCount == 0
+        && request.resource.data.ciphertext is string;
+
+      allow update: if signedIn()
+        && request.auth.uid in resource.data.memberIds
+        && request.resource.data.entitled == resource.data.entitled
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.peopleCount is number
+        && request.resource.data.peopleCount >= 0
+        && (
+          resource.data.entitled == true
+          || request.resource.data.peopleCount <= 5
+        )
+        && (
+          request.resource.data.peopleCount == resource.data.peopleCount
+          || request.resource.data.peopleCount == resource.data.peopleCount + 1
+          || request.resource.data.peopleCount == resource.data.peopleCount - 1
+        )
+        && request.resource.data.memberIds.size() >= 1
+        && request.resource.data.memberIds.size() <= 5
+        && (
+          sameMembers(resource.data.memberIds, request.resource.data.memberIds)
+          || selfLeave(resource.data.memberIds, request.resource.data.memberIds)
+          || ownerRemoves(resource.data.memberIds, request.resource.data.memberIds)
+        );
+
+      allow delete: if signedIn() && request.auth.uid == resource.data.ownerId;
+
+      match /{collection}/{docId} {
+        allow read: if isMember(groupId);
+        allow create, update: if isMember(groupId)
+          && request.resource.data.updatedAt is number
+          && request.resource.data.ciphertext is string;
+        allow delete: if isMember(groupId);
+      }
+    }
+
+    match /invites/{inviteId} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.auth.uid == request.resource.data.createdBy
+        && request.resource.data.active == true
+        && request.auth.uid in groupData(request.resource.data.groupId).memberIds;
+      allow update, delete: if signedIn() && request.auth.uid == resource.data.createdBy;
+    }
+
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+      match /keys/{groupId} {
+        allow read, write: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
+    match /aiUsage/{fingerprint} {
+      allow read, write: if false;
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /aiCache/{fingerprint}/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /entitlements/{fingerprint} {
+      allow read, write: if false;
+    }
+  }
+}

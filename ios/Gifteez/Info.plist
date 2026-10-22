@@ -8,6 +8,17 @@
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>Gifteez</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.gifteez</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>gifteez</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -34,8 +45,12 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Gifteez can look for birthdays you already keep in your calendar. This stays optional.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Gifteez can look for birthdays you already keep in your calendar. This stays optional.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Gifteez can add people from your contacts. This stays optional, and imported people stay quiet until you open them.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

@@ -76,6 +76,17 @@ yarn-error.log
 
 # local env
 .env
+functions/.env
+functions/lib/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase/
+
+# Generated from .env (or .env.example) by scripts/generate-firebase-config.js.
+# Commit neither a real project file nor a stale copy.
+android/app/google-services.json
+ios/Gifteez/GoogleService-Info.plist
 
 # Fastlane / release credentials
 fastlane/report.xml

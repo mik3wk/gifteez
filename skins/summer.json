@@ -1,0 +1,15 @@
+{
+  "id": "summer",
+  "colors": {
+    "background": "#F7F4EC",
+    "surface": "#FFFFFF",
+    "text": "#2A2A24",
+    "muted": "#6A675C",
+    "accent": "#C47B2B",
+    "accentText": "#FFF8EC",
+    "border": "#E6DCC4",
+    "danger": "#9C3B2E",
+    "success": "#3E7C4A",
+    "banner": "#F8EBD2"
+  }
+}

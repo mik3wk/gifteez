@@ -1,97 +1,116 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Gifteez
 
-# Getting Started
+Gifteez is a private gift tracker. The first screen is one sentence plus Start and Join. There is no sign-up form. Firebase anonymous auth is created in the background, and Firestore is the source of truth. The phone keeps an encrypted cache so the list still works offline.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+## Run it
 
-## Step 1: Start Metro
+The only manual step before a simulator or emulator build is copying `.env.example` to `.env` and filling in the Firebase values. Cloud ideas also need the OpenAI key stored as a Functions secret, which is not required to open the app.
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
-
-To start the Metro dev server, run the following command from the root of your React Native project:
+1. Install the [React Native environment](https://reactnative.dev/docs/set-up-your-environment) for iOS and Android (Xcode, CocoaPods, Android Studio, a JDK). This repo targets Node 22.
+2. From the repo root:
 
 ```sh
-# Using npm
-npm start
-
-# OR using Yarn
-yarn start
+cp .env.example .env
 ```
 
-## Step 2: Build and run your app
+3. In the [Firebase console](https://console.firebase.google.com), create a project (Blaze, so Functions and phone auth are available). Register an iOS app and an Android app with the id `com.gifteez`. Copy these fields into `.env`:
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+   - `FIREBASE_API_KEY`
+   - `FIREBASE_AUTH_DOMAIN`
+   - `FIREBASE_PROJECT_ID`
+   - `FIREBASE_STORAGE_BUCKET`
+   - `FIREBASE_MESSAGING_SENDER_ID`
+   - `FIREBASE_IOS_APP_ID`
+   - `FIREBASE_ANDROID_APP_ID`
 
-### Android
+   Leave `OPENAI_API_KEY` as the placeholder `sk-your-openai-key-server-only`. `react-native-config` compiles every `.env` value into the app binary. The real key is set only as a Cloud Functions secret (below).
 
-```sh
-# Using npm
-npm run android
+4. In Firebase Authentication, enable Anonymous and Email link. Phone is optional and the app only sends US numbers (`+1` and 10 digits). The magic-link continue URL is `https://<FIREBASE_AUTH_DOMAIN>/email-link`, so you do not need `gifteez.app` authorized before email sign-in works.
 
-# OR using Yarn
-yarn android
-```
-
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+5. Install and run:
 
 ```sh
-bundle install
-```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
-```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
+npm install
+cd ios && bundle install && bundle exec pod install && cd ..
 npm run ios
-
-# OR using Yarn
-yarn ios
+npm run android
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+`npm run ios` and `npm run android` generate `ios/Gifteez/GoogleService-Info.plist` and `android/app/google-services.json` from `.env` (or from `.env.example` if `.env` is missing). Those files are gitignored. Do not commit them after you put in a real project. Changing `.env` requires a native rebuild; restarting Metro is not enough.
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+If the Firebase values are still the placeholders, the app opens on a screen that names the missing keys. It does not try to sign in.
 
-## Step 3: Modify your app
+### iOS pods
 
-Now that you have successfully run the app, let's make changes!
+React Native Firebase 27 pulls the Firebase Apple SDK through Swift Package Manager, and that requires `use_frameworks! :linkage => :dynamic` in `ios/Podfile`. That line is already there. `ios/Podfile.lock` in git is still the scaffold lock from before these native modules were added. `bundle exec pod install` on a Mac refreshes it. This environment has no Ruby or CocoaPods, so the lockfile was not regenerated here.
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+### What to tap tonight
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+- Start, keep or edit the silly name, and skip email if you want. The group is created either way. A recovery code is shown once; it is also saved in the Keychain on that phone.
+- Add a person, then tap interest tags. Open the person to see on-device ideas. Save one, log a purchase with a price, and open Fairness.
+- Share the invite from the group screen. The message contains an `https://gifteez.app/...#k=...` link and a `gifteez://join/...#k=...` link. The key is the URL fragment and is not sent to Firestore.
+- Paste the `gifteez://` link on a second simulator with `xcrun simctl openurl booted 'gifteez://join/...'` or, on Android, `adb shell am start -W -a android.intent.action.VIEW -d 'gifteez://join/...'`.
+- `https://gifteez.app` links need an Apple App Site Association file and an Android assetlinks.json on that domain. Until the domain is live, use the custom scheme.
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+## Deploy the backend
 
-## Congratulations! :tada:
+On-device ideas, the people list, purchases, and offline cache do not need this. Cloud ideas, the server people-slot check, joining a group from another phone, and purchase verification do.
 
-You've successfully run and modified your React Native App. :partying_face:
+```sh
+npm install -g firebase-tools
+firebase login
+cp functions/.env.example functions/.env
+firebase functions:secrets:set OPENAI_API_KEY
+firebase functions:secrets:set FINGERPRINT_PEPPER
+npm run deploy
+```
 
-### Now what?
+`npm run deploy` writes the native Firebase files from `.env`, then runs `firebase deploy` (Functions, Firestore rules and indexes, Storage rules). `firebase deploy --only functions` also works after `npm run prepare-config`.
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+Functions secrets must exist before the first deploy of `generateGiftIdeas`, `claimPersonSlot`, `getEntitlement`, and `verifyUnlock`. `joinGroup` does not use those secrets. `FINGERPRINT_PEPPER` is a random string you choose; it salts the device-id hash that keys the AI cap and the paid entitlement. It is not an app `.env` value.
 
-# Troubleshooting
+App Check is initialized in the app (debug provider in dev, App Attest / Play Integrity in release) and `enforceAppCheck` is on for every callable. In the Firebase console, turn App Check on for the app, then register the debug token the client prints and set `APP_CHECK_DEBUG_TOKEN` in `.env`. Rebuild after that. Until the token is registered, cloud calls fail and the on-device ideas still show.
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+Purchase verification reads optional Apple and Play credentials from `functions/.env` (`APPLE_IAP_*`, `GOOGLE_PLAY_SERVICE_ACCOUNT`). Leave them blank until the store products exist. The function then returns `{ verified: false, reason: "not_configured" }` and does not grant the unlock. The app should still launch when the store has no `gifteez_unlock` product. Completing a sandbox purchase on the iOS simulator needs a StoreKit configuration file in Xcode, which is not in this repo.
 
-# Learn More
+Upload `skins/spring.json` and `skins/summer.json` to Cloud Storage as `skins/spring.json` and `skins/summer.json`. Create a Remote Config parameter named `active_skin` (string, default `auto`). Fall and winter ship in the app. Spring and summer download when Remote Config selects them, and a failed download uses the base theme.
 
-To learn more about React Native, take a look at the following resources:
+Set a Google Cloud billing budget alert on the Firebase project before real traffic. Confirm the current OpenAI price for `OPENAI_MODEL` (default `gpt-4o-mini`) on OpenAI's pricing page and cap that spend too. A five-idea reply is a short request; the server cap (5 fresh generations per person on the free tier, 20 per person per UTC month when paid) is the abuse backstop. Only a refresh that misses the server cache counts.
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+## Encryption
+
+User content is encrypted on the device with AES-256-GCM (`@noble/ciphers`) before it is written to Firestore or to the local cache. The device cache key lives in the iOS Keychain or Android Keystore. A group data key also lives there.
+
+This is a working interim, not a full pairwise key agreement:
+
+- The group key travels in the invite link fragment (`#k=`). Firebase and the app's own servers do not receive that fragment.
+- A 10-word recovery code wraps the group key with HKDF-SHA256. The wrapped key is stored at `users/{uid}/keys/{groupId}` and in the Keychain, so the same phone can show the code again. A second device signs in with the same email (the anonymous account is linked in place, so the UID stays) and unwraps with the code, or it opens the invite link again.
+- Firestore stores ciphertext plus the fields the security rules need in plaintext: member ids, owner, people count, entitlement flag, and `updatedAt`. The server cannot read names, notes, prices, or ideas from those documents.
+- An explicit cloud-idea request sends the decrypted prompt (name, tags, occasion, budget, thumbs) to the Cloud Function, which calls OpenAI. That path is not covered by the group encryption. Prompts and keys are not written to logs.
+- There is no forward secrecy and no device-to-device ratchet. Anyone with the invite link can read the list. Treat the link like a password.
+
+Offline edits are written to the encrypted cache and merged on reconnect. Last write wins per record. If a remote record is newer than the local one, the app shows "Updated on another device". Thumbs feedback stays on the phone and is not synced. Idea text is synced.
+
+## Limits that are intentional
+
+- A list can have one member so it is usable before anyone joins. The cap is 5, enforced in the client, in `joinGroup`, and in the security rules.
+- The free people cap is 5 per group in the rules, and `claimPersonSlot` also counts active people for a device fingerprint. A modified client can still create another group. The rules cannot see the device id.
+- Reinstalling creates new person ids, so the per-person AI counters start over. The same device id and the same person ids keep their counts. The cap is not the anonymous uid.
+- The owner cannot leave while other members remain. The last member deletes the group. Another member can leave, and the owner can remove someone else.
+- Imported people (contacts, calendar, or pasted CSV/JSON) do not get ideas until their screen is opened.
+- On-device suggestions are a bundled catalog scored from the name, occasion, tags, and thumbs. They are not an on-device language model, and they do not call the network.
+
+## Strings and skins
+
+Every user-facing string is in `src/i18n/en-US.json`. Money and dates use `Intl` with the device locale. Layouts wrap instead of fixing a width to the English string. Skin files only change colors, so the layout stays the same. Winter is December 1 through January 15, spring March 20 through June 20, summer June 21 through August 31, fall September 1 through November 30, otherwise the base theme. `active_skin` can force an id or stay `auto`.
+
+## Checks
+
+```sh
+npm run typecheck
+npm test
+npm run lint
+npm --prefix functions test
+```
+
+Lint reports inline-style and bitwise warnings in the crypto helpers. It exits clean. `npm test` covers the crypto, invite links, sorting, budgets, import parser, caps, and the placeholder-config screen.

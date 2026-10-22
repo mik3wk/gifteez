@@ -1,0 +1,15 @@
+{
+  "id": "spring",
+  "colors": {
+    "background": "#F4F7F1",
+    "surface": "#FFFFFF",
+    "text": "#243028",
+    "muted": "#5E6B60",
+    "accent": "#3E7C4A",
+    "accentText": "#F4F7F1",
+    "border": "#D5E2D4",
+    "danger": "#9C3B2E",
+    "success": "#3E7C4A",
+    "banner": "#E5F0E4"
+  }
+}

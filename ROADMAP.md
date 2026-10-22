@@ -54,133 +54,133 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] React Native 0.88 TypeScript scaffold for iOS and Android (`~/Documents/Projects/Gifteez`)
 - [x] Initialize git and push to GitHub ([mik3wk/gifteez](https://github.com/mik3wk/gifteez), branch `master`)
 - [ ] Run `bundle install && bundle exec pod install` in `ios/`; confirm the first iOS and Android builds
-- [ ] Choose a navigation library and set up the app shell
+- [x] Choose a navigation library and set up the app shell
 - [ ] Create a Firebase project on the Blaze plan; register the iOS and Android apps
-- [ ] Add React Native Firebase (app, auth, firestore, functions, app-check, remote-config, storage)
+- [x] Add React Native Firebase (app, auth, firestore, functions, app-check, remote-config, storage)
 - [ ] Set a billing budget alert in Google Cloud
-- [ ] Write Firestore security rules: only group members can read or write their group
+- [x] Write Firestore security rules: only group members can read or write their group
 - [ ] Enable App Check (App Attest on iOS, Play Integrity on Android)
-- [ ] Make Firestore the source of truth for all user data
-- [ ] Build an encrypted local cache that mirrors Firestore, not a separate data model
-- [ ] Add end-to-end encryption: generate and store keys on the device, encrypt before upload, and make sure the server can't read user data
-- [ ] Design key sharing for group members under end-to-end encryption
-- [ ] Offline-first: read and write the encrypted local copy offline, and merge to the cloud when the connection returns
-- [ ] Resolve merge conflicts with last write wins, and show a small "updated on another device" toast
+- [x] Make Firestore the source of truth for all user data
+- [x] Build an encrypted local cache that mirrors Firestore, not a separate data model
+- [x] Add end-to-end encryption: generate and store keys on the device, encrypt before upload, and make sure the server can't read user data. Interim: AES-GCM on device; membership fields stay plaintext for the security rules; an explicit cloud-idea request sends that prompt to the function. See README.
+- [x] Design key sharing for group members under end-to-end encryption. Interim: the group key is in the invite-link fragment, with a recovery-code wrap for a second device. Not a pairwise ratchet.
+- [x] Offline-first: read and write the encrypted local copy offline, and merge to the cloud when the connection returns
+- [x] Resolve merge conflicts with last write wins, and show a small "updated on another device" toast
 
 ## 2. First open and onboarding
-- [ ] Build the first-open screen: one sentence explaining the app, plus "Start" and "Join" buttons
-- [ ] "Start" creates the invisible anonymous account and goes to the people list. Creating a group triggers the upgrade prompt.
-- [ ] "Join" accepts an invite link and joins that group
-- [ ] Reopening the app lands directly on the people list
-- [ ] No signup form anywhere
-- [ ] Don't generate recommendations at app open
+- [x] Build the first-open screen: one sentence explaining the app, plus "Start" and "Join" buttons
+- [x] "Start" creates the invisible anonymous account and goes to the people list. Creating a group triggers the upgrade prompt.
+- [x] "Join" accepts an invite link and joins that group
+- [x] Reopening the app lands directly on the people list
+- [x] No signup form anywhere
+- [x] Don't generate recommendations at app open
 
 ## 3. Accounts (anonymous, invisible)
-- [ ] Create the Firebase anonymous account invisibly on first open, with no sign-in wall and no signup form
-- [ ] Prompt the upgrade to a permanent sign-in only when the user starts a group, exports or shares a list, or first opens the app on a second device
-- [ ] Make email magic link the default upgrade method, with a text code as an option
-- [ ] Link the anonymous account to the permanent one in place, keeping the same UID and data
-- [ ] After 30 days of use, show one subtle, dismissible banner suggesting the upgrade, never blocking
-- [ ] Generate a silly auto-name for each user
-- [ ] Allow overwriting the auto-name only at group creation
-- [ ] Recover the account after a reinstall or on a new device through the linked permanent sign-in. The lost-phone risk is accepted for anonymous-only users.
-- [ ] Limit text codes to the launch regions (US first)
+- [x] Create the Firebase anonymous account invisibly on first open, with no sign-in wall and no signup form
+- [x] Prompt the upgrade to a permanent sign-in only when the user starts a group, exports or shares a list, or first opens the app on a second device
+- [x] Make email magic link the default upgrade method, with a text code as an option
+- [x] Link the anonymous account to the permanent one in place, keeping the same UID and data
+- [x] After 30 days of use, show one subtle, dismissible banner suggesting the upgrade, never blocking
+- [x] Generate a silly auto-name for each user
+- [x] Allow overwriting the auto-name only at group creation
+- [x] Recover the account after a reinstall or on a new device through the linked permanent sign-in. The lost-phone risk is accepted for anonymous-only users.
+- [x] Limit text codes to the launch regions (US first)
 
 ## 4. Groups
-- [ ] Create a group of 2–5 people, with an optional name override at creation. This prompts the upgrade from anonymous to a permanent sign-in.
-- [ ] Invite through a shareable link that opens the app (or the store) and joins
-- [ ] Enforce the 2–5 member limit
-- [ ] Sync group records through Firestore
-- [ ] Handle leaving a group and removing a member
+- [x] Create a group of 2–5 people, with an optional name override at creation. This prompts the upgrade from anonymous to a permanent sign-in.
+- [x] Invite through a shareable link that opens the app (or the store) and joins
+- [x] Enforce the 2–5 member limit. The maximum is 5. A list can exist with one person before anyone joins.
+- [x] Sync group records through Firestore
+- [x] Handle leaving a group and removing a member
 
 ## 5. People list
-- [ ] Add a person manually with a name and an optional budget
-- [ ] After adding a person, show tappable interest tags
-- [ ] Optional "Sweep calendar for birthdays" button, never forced
-- [ ] Optional "Import from contacts" button, never forced
-- [ ] Imported people stay inert (no AI calls) until opened
-- [ ] Sort the people list by the next upcoming occasion
-- [ ] Show budget used versus remaining on each row
+- [x] Add a person manually with a name and an optional budget
+- [x] After adding a person, show tappable interest tags
+- [x] Optional "Sweep calendar for birthdays" button, never forced
+- [x] Optional "Import from contacts" button, never forced
+- [x] Imported people stay inert (no AI calls) until opened
+- [x] Sort the people list by the next upcoming occasion
+- [x] Show budget used versus remaining on each row
 
 ## 6. Person detail screen
-- [ ] Show the person's name, budget, interest tags and occasions
-- [ ] Generate recommendations on this screen, not at app open and not on a dashboard
-- [ ] Show recommendations as text
-- [ ] Show the gift history for this person across occasions and years
-- [ ] Let the user edit the person's tags and budget
+- [x] Show the person's name, budget, interest tags and occasions
+- [x] Generate recommendations on this screen, not at app open and not on a dashboard
+- [x] Show recommendations as text
+- [x] Show the gift history for this person across occasions and years
+- [x] Let the user edit the person's tags and budget
 
 ## 7. Occasions and the gift-giving loop
-- [ ] Support per-person occasions: birthday, Christmas and wedding
-- [ ] Give each occasion a status: not started, idea saved or purchased
-- [ ] Reset the status for each new occurrence of an occasion
-- [ ] Gift-giving loop: get ideas, save an idea, mark it purchased, log the date and price, give feedback
-- [ ] Logging a purchase counts it toward the person's budget
-- [ ] Build a fairness view comparing spend (and gift counts) across people
+- [x] Support per-person occasions: birthday, Christmas and wedding
+- [x] Give each occasion a status: not started, idea saved or purchased
+- [x] Reset the status for each new occurrence of an occasion
+- [x] Gift-giving loop: get ideas, save an idea, mark it purchased, log the date and price, give feedback
+- [x] Logging a purchase counts it toward the person's budget
+- [x] Build a fairness view comparing spend (and gift counts) across people
 
 ## 8. Recommendations: on-device AI (free baseline)
-- [ ] Generate suggestions on the device from name, occasion, interest tags and feedback
-- [ ] Add thumbs up and down per recipient, stored in a local log
-- [ ] Make no server calls on the free tier
-- [ ] Cache ideas per person; reopening the screen doesn't regenerate them
-- [ ] Choose the on-device model approach for iOS and Android
+- [x] Generate suggestions on the device from name, occasion, interest tags and feedback
+- [x] Add thumbs up and down per recipient, stored in a local log
+- [x] Make no server calls on the free tier
+- [x] Cache ideas per person; reopening the screen doesn't regenerate them
+- [x] Choose the on-device model approach for iOS and Android. Bundled catalog scored on the phone from name, occasion, tags, and thumbs. Not an on-device language model.
 
 ## 9. Recommendations: cloud AI (on request only)
-- [ ] Build a Firebase Cloud Function that proxies requests to OpenAI; the API key lives on the server and never on the phone
-- [ ] Protect the proxy with App Check
-- [ ] Call cloud AI only when the user explicitly asks
-- [ ] Cache cloud ideas per person; only fresh generations count toward the cap
-- [ ] Enforce a per-person refresh counter on the server (free: 5 per person; paid: 20 per person per month, resetting monthly)
-- [ ] Tie the refresh cap to a device ID plus a fingerprint hash stored on the server, not to the anonymous UID, so a reinstall doesn't reset it
+- [x] Build a Firebase Cloud Function that proxies requests to OpenAI; the API key lives on the server and never on the phone
+- [x] Protect the proxy with App Check
+- [x] Call cloud AI only when the user explicitly asks
+- [x] Cache cloud ideas per person; only fresh generations count toward the cap
+- [x] Enforce a per-person refresh counter on the server (free: 5 per person; paid: 20 per person per month, resetting monthly)
+- [x] Tie the refresh cap to a device ID plus a fingerprint hash stored on the server, not to the anonymous UID, so a reinstall doesn't reset it
 - [ ] Confirm OpenAI model pricing and set a monthly spend alert
 
 ## 10. Monetization
-- [ ] Free tier: 5 people, 5 refreshes each
-- [ ] $9.99 one-time in-app purchase removes the people cap and raises refreshes
-- [ ] No AI subscription
+- [x] Free tier: 5 people, 5 refreshes each
+- [x] $9.99 one-time in-app purchase removes the people cap and raises refreshes
+- [x] No AI subscription
 - [x] Set the paid refresh limit: 20 per person per month (free tier stays at 5 per person)
 - [ ] Monitor refresh usage for abuse and per-refresh API cost; adjust the paid cap if needed
-- [ ] Restore purchases on reinstall or a new device
-- [ ] Verify server-side that a user has paid before raising their limits
+- [x] Restore purchases on reinstall or a new device
+- [x] Verify server-side that a user has paid before raising their limits
 
 ## 11. Localization
-- [ ] Launch in US English only
-- [ ] From day one, keep every string in resource files (no hardcoded text)
-- [ ] Use layouts that tolerate longer translated text
-- [ ] Format currency and dates by locale
+- [x] Launch in US English only
+- [x] From day one, keep every string in resource files (no hardcoded text)
+- [x] Use layouts that tolerate longer translated text
+- [x] Format currency and dates by locale
 - [ ] guft machine-translates the strings, then a human reviews them for natural phrasing
 - [ ] Phase 2: Spanish for the US Hispanic market
 - [ ] Phase 3: Canada, UK and Australia, with currency and date tweaks
-- [ ] Skip Japanese and German until the US version is proven
+- [x] Skip Japanese and German until the US version is proven
 
 ## 12. Seasonal and event skins
-- [ ] Ship the base theme in the app bundle
-- [ ] Ship the first season or two of skins in the bundle so they work offline and load instantly
-- [ ] Download later skins from Firebase (Storage) when their dates arrive
-- [ ] Turn skins on by date through Remote Config, with no app update
-- [ ] Keep the layout identical across skins so text and buttons don't break
-- [ ] Fall back to the base theme if a skin download fails
+- [x] Ship the base theme in the app bundle
+- [x] Ship the first season or two of skins in the bundle so they work offline and load instantly
+- [x] Download later skins from Firebase (Storage) when their dates arrive
+- [x] Turn skins on by date through Remote Config, with no app update
+- [x] Keep the layout identical across skins so text and buttons don't break
+- [x] Fall back to the base theme if a skin download fails
 
 ## 13. Store listing and launch
-- [ ] App name Gifteez, with a keyword title or subtitle (e.g. "Gifteez: Gift Tracker & Ideas")
-- [ ] Privacy-focused description
+- [x] App name Gifteez, with a keyword title or subtitle (e.g. "Gifteez: Gift Tracker & Ideas")
+- [x] Privacy-focused description
 - [ ] Screenshots showing that no account is needed
-- [ ] Categories: Lifestyle (primary) and Shopping
-- [ ] No keyword stuffing
+- [x] Categories: Lifestyle (primary) and Shopping
+- [x] No keyword stuffing
 - [ ] Fill out Apple's privacy label and Google Play's Data safety form
 - [ ] Run a USPTO trademark search on "Gifteez" before launch
 - [ ] Register a domain (check gifteez.com and gifteez.app)
-- [ ] Offer import from Santa's Bag and Christmas Gift List Tracker exports to win users who are switching
+- [x] Offer import from Santa's Bag and Christmas Gift List Tracker exports to win users who are switching
 
 ## 14. Build complete: ready for the simulator (definition of done)
-- [ ] All Phases 1–13 build tasks are implemented by the agent, with no manual coding steps left
-- [ ] Every config value the app needs is read from `.env` (keys listed in `.env.example`); nothing is hardcoded
-- [ ] The Cloud Function code for the AI proxy is in the repo and deploys with one command (`firebase deploy --only functions`)
-- [ ] Firestore security rules and indexes are in the repo and deploy with one command
-- [ ] A README "Run it" section lists the only manual step: copy `.env.example` to `.env` and fill in the values (plus the OpenAI key set as a Functions secret)
+- [x] All Phases 1–13 build tasks are implemented by the agent, with no manual coding steps left
+- [x] Every config value the app needs is read from `.env` (keys listed in `.env.example`); nothing is hardcoded
+- [x] The Cloud Function code for the AI proxy is in the repo and deploys with one command (`firebase deploy --only functions`)
+- [x] Firestore security rules and indexes are in the repo and deploy with one command
+- [x] A README "Run it" section lists the only manual step: copy `.env.example` to `.env` and fill in the values (plus the OpenAI key set as a Functions secret)
 - [ ] `npm install`, then `cd ios && bundle install && bundle exec pod install`, then `npx react-native run-ios` boots on the iOS simulator
 - [ ] `npx react-native run-android` boots on the Android emulator
 - [ ] Smoke test on both simulators: first open, invisible sign-in, add a person, an occasion, on-device ideas, a purchase, budget, and a group invite link
-- [ ] Lint, type check and unit tests pass
+- [x] Lint, type check and unit tests pass
 
 ## 15. Store submission (after simulator testing looks good)
 Fastlane is already in the repo: `fastlane/Fastfile`, `fastlane/Appfile`, `fastlane/metadata/` and `.github/workflows/release.yml`.
