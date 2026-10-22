@@ -57,7 +57,7 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 ## 1. Foundation
 - [x] React Native 0.88 TypeScript scaffold for iOS and Android (`~/Documents/Projects/Gifteez`)
 - [x] Initialize git and push to GitHub ([mik3wk/gifteez](https://github.com/mik3wk/gifteez), branch `master`)
-- [ ] Run `bundle install && bundle exec pod install` in `ios/`; confirm the first iOS and Android builds
+- [ ] Run `npm run pods` (Podfile forces `RCT_NEW_ARCH_ENABLED=1` before podspecs load), then confirm the first iOS and Android builds
 - [x] Choose a navigation library and set up the app shell
 - [ ] Create a Firebase project on the Blaze plan; register the iOS and Android apps
 - [x] Add React Native Firebase (app, auth, firestore, functions, app-check, remote-config, storage)
@@ -188,7 +188,7 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] The Cloud Function code for the AI proxy is in the repo and deploys with one command (`firebase deploy --only functions`)
 - [x] Firestore security rules and indexes are in the repo and deploy with one command
 - [x] A README "Run it" section lists the only manual step: copy `.env.example` to `.env` and fill in the values (plus the OpenAI key set as a Functions secret)
-- [ ] `npm install`, then `cd ios && bundle install && bundle exec pod install`, then `npx react-native run-ios` boots on the iOS simulator
+- [ ] `npm install`, then `npm run ios` (it runs `npm run pods`, then `react-native run-ios`) boots on the iOS simulator
 - [ ] `npx react-native run-android` boots on the Android emulator
 - [ ] Smoke test on both simulators: first open, invisible sign-in, add a person, an occasion, on-device ideas, a purchase, budget, and a group invite link
 - [x] Lint, type check and unit tests pass
