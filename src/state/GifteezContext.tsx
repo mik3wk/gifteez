@@ -16,6 +16,7 @@ import {
   wrapKey,
 } from '../crypto/crypto';
 import { ideaCacheId, suggestIdeas } from '../domain/ideas';
+import { performJoin } from '../domain/joinFlow';
 import {
   addFeedback,
   addOccasion,
@@ -27,12 +28,10 @@ import {
   defaultOccasionDate,
   exportList,
   groupDisplayName,
-  groupHasRoom,
   groupMarker,
   leaveActiveGroup,
   listOwnerEntitled,
   logPurchase,
-  memberIdsForGroup,
   memberNames,
   parkActive,
   mergeRemote,
@@ -88,7 +87,7 @@ import {
 } from '../platform/firebase';
 import { importContacts, sweepBirthdays } from '../platform/importers';
 import { buyUnlock, connectStore, finishOwned, listenToPurchases, loadOwned, purchaseProof, type StoreProduct } from '../platform/iap';
-import { loadSecret, saveSecret } from '../platform/secure';
+import { deleteSecret, loadSecret, saveSecret } from '../platform/secure';
 import { colorsFor, parseSkin, resolveSkin, type SkinId, type ThemeColors } from '../theme/skins';
 
 const COLLECTIONS = ['people', 'occasions', 'states', 'gifts', 'ideas', 'members'] as const;
@@ -554,69 +553,42 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
     },
     joinFromLink: async url => {
-      const parsed = parseLink(url);
-      if (!parsed || parsed.kind !== 'invite') {
-        setError(t('join.invalid'));
-        return false;
-      }
-      try {
-        keyFromString(parsed.groupKey);
-      } catch {
-        setError(t('join.invalid'));
-        return false;
-      }
-      await saveSecret(groupKeyAccount(parsed.groupId), parsed.groupKey);
-      const uid = snapshotRef.current.profile.uid || (await ensureAnonymousUser());
-      const cap = env.groupMaxMembers;
-      const knownIds = memberIdsForGroup(snapshotRef.current, parsed.groupId);
-      if (knownIds && !knownIds.includes(uid) && !groupHasRoom(knownIds.length, cap)) {
-        fail('full', { count: cap });
-        return false;
-      }
-      try {
-        await callFunction(env, 'joinGroup', { inviteId: parsed.inviteId });
-      } catch (caught) {
-        const code = caught instanceof Error && 'code' in caught ? String((caught as { code?: string }).code) : '';
-        const message = caught instanceof Error ? caught.message : '';
-        if (code.includes('resource-exhausted') || message === 'full') {
-          fail('full', { count: cap });
-          return false;
-        }
-        setNotice(t('sync.offline'));
-      }
-      const name = snapshotRef.current.profile.displayName || sillyName(uid);
-      const parked = parkActive(withProfile(snapshotRef.current, {
-        uid,
-        displayName: name,
-        nameLocked: snapshotRef.current.profile.nameLocked,
-      }));
-      await commit({
-        ...parked,
-        profile: {
-          ...parked.profile,
-          inviteId: parsed.inviteId,
-          onboarded: true,
-          groupId: parsed.groupId,
-        },
-        group: {
-          id: parsed.groupId,
-          name: '',
-          ownerId: '',
-          memberIds: [uid],
-          peopleCount: 0,
-          entitled: false,
-          updatedAt: 0,
-        },
-        members: [{ id: uid, uid, displayName: name, updatedAt: Date.now() }],
-        people: [],
-        occasions: [],
-        states: [],
-        gifts: [],
-        ideas: [],
-        dirty: {},
+      const outcome = await performJoin({
+        url,
+        snapshot: snapshotRef.current,
+        cap: env.groupMaxMembers,
+        ensureUid: ensureAnonymousUser,
+        joinGroup: inviteId => callFunction(env, 'joinGroup', { inviteId }),
+        saveKey: (groupId, groupKey) => saveSecret(groupKeyAccount(groupId), groupKey),
+        deleteKey: groupId => deleteSecret(groupKeyAccount(groupId)),
       });
+      if (!outcome.ok) {
+        if (outcome.failure === 'invalid-link') {
+          setError(t('join.invalid'));
+        } else if (outcome.failure === 'full') {
+          fail('full', { count: env.groupMaxMembers });
+        } else if (outcome.failure === 'invalid') {
+          setError(t('join.failedInvalid'));
+        } else if (outcome.failure === 'offline') {
+          setError(t('join.failedOffline'));
+        } else {
+          setError(t('join.failedUnknown'));
+        }
+        return false;
+      }
       try {
-        await writeSealed(parsed.groupId, 'members', sealMember(uid, name, keyFromString(parsed.groupKey), Date.now()));
+        await commit(outcome.snapshot);
+      } catch {
+        await deleteSecret(groupKeyAccount(outcome.groupId));
+        setError(t('join.failedUnknown'));
+        return false;
+      }
+      try {
+        await writeSealed(
+          outcome.groupId,
+          'members',
+          sealMember(outcome.uid, outcome.displayName, keyFromString(outcome.groupKey), Date.now()),
+        );
       } catch {
         setNotice(t('sync.offline'));
       }

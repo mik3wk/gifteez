@@ -18,3 +18,7 @@ export async function loadSecret(account: string): Promise<string | null> {
   }
   return result.password;
 }
+
+export async function deleteSecret(account: string): Promise<void> {
+  await Keychain.resetGenericPassword({ service: `${SERVICE}.${account}` });
+}

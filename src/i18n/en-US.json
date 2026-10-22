@@ -136,6 +136,9 @@
     "placeholder": "Invite link",
     "join": "Join",
     "invalid": "That link is missing the list, the invite, or the key.",
+    "failedInvalid": "That invite is invalid or has expired.",
+    "failedOffline": "You are offline, so the list was not joined. Try again when you are connected.",
+    "failedUnknown": "The list could not be joined. Try again.",
     "recovery": "Recovery code from your other phone",
     "restore": "Restore with code",
     "needAccount": "Sign in with the email you saved, then enter the recovery code."
