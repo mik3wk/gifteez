@@ -169,6 +169,21 @@ export function canAddPerson(snapshot: AppSnapshot, freeLimit: number): boolean 
   return activePeopleCount(snapshot) < freeLimit;
 }
 
+/** Membership cap. Config `GROUP_MAX_MEMBERS` overrides this. Not the free gift-recipient limit. */
+export const DEFAULT_GROUP_MAX_MEMBERS = 10;
+
+export function groupHasRoom(memberCount: number, cap: number): boolean {
+  return memberCount < cap;
+}
+
+export function memberIdsForGroup(snapshot: AppSnapshot, groupId: string): string[] | null {
+  if (snapshot.group?.id === groupId) {
+    return snapshot.group.memberIds;
+  }
+  const archived = snapshot.archives[groupId];
+  return archived ? archived.group.memberIds : null;
+}
+
 export type Mutation<T> =
   | { ok: true; snapshot: AppSnapshot; value: T }
   | { ok: false; error: string };

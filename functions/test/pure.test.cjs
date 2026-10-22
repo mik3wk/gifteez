@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { canRefresh, claimSlot, emptyUsage, nextUsage } = require('../lib/caps');
+const { DEFAULT_GROUP_MAX_MEMBERS, groupHasRoom } = require('../lib/members');
 const { fingerprint } = require('../lib/fingerprint');
 const { parseIdeas } = require('../lib/ideas');
 const { appleTransactionGrants, googlePurchaseGrants } = require('../lib/iap');
@@ -59,4 +62,19 @@ test('people slots stop at the free limit', () => {
   assert.deepEqual(claimSlot(5, false, 'add', 5), { ok: false, active: 5 });
   assert.deepEqual(claimSlot(5, true, 'add', 5).ok, true);
   assert.deepEqual(claimSlot(1, false, 'remove', 5).active, 0);
+});
+
+test('a group accepts a 9th member and refuses the 10th and 11th', () => {
+  assert.equal(DEFAULT_GROUP_MAX_MEMBERS, 10);
+  assert.equal(groupHasRoom(9, DEFAULT_GROUP_MAX_MEMBERS), true);
+  assert.equal(groupHasRoom(10, DEFAULT_GROUP_MAX_MEMBERS), false);
+  assert.equal(groupHasRoom(11, DEFAULT_GROUP_MAX_MEMBERS), false);
+  const root = path.join(__dirname, '..', '..');
+  const rules = fs.readFileSync(path.join(root, 'firestore.rules'), 'utf8');
+  assert.match(rules, /request\.resource\.data\.memberIds\.size\(\) <= 10/);
+  assert.match(rules, /request\.resource\.data\.peopleCount <= 5/);
+  assert.match(fs.readFileSync(path.join(root, '.env.example'), 'utf8'), /GROUP_MAX_MEMBERS=10/);
+  const fnEnv = fs.readFileSync(path.join(root, 'functions', '.env.example'), 'utf8');
+  assert.match(fnEnv, /GROUP_MAX_MEMBERS=10/);
+  assert.match(fnEnv, /FREE_TIER_MAX_PEOPLE=5/);
 });

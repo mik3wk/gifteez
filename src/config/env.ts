@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { DEFAULT_GROUP_MAX_MEMBERS } from '../domain/logic';
 
 export type AppEnv = {
   firebaseApiKey: string;
@@ -112,7 +113,7 @@ export function getEnv(): AppEnv {
     freeRefreshesPerPerson: numberValue(config, 'AI_FREE_REFRESHES_PER_PERSON', 5),
     paidRefreshesPerPersonPerMonth: numberValue(config, 'AI_PAID_REFRESHES_PER_PERSON_PER_MONTH', 20),
     freeTierMaxPeople: numberValue(config, 'FREE_TIER_MAX_PEOPLE', 5),
-    groupMaxMembers: numberValue(config, 'GROUP_MAX_MEMBERS', 5),
+    groupMaxMembers: numberValue(config, 'GROUP_MAX_MEMBERS', DEFAULT_GROUP_MAX_MEMBERS),
     bannerAfterDays: numberValue(config, 'ACCOUNT_BANNER_AFTER_DAYS', 30),
     useEmulators: text(config, 'USE_FIREBASE_EMULATORS', 'false') === 'true',
     emulatorHost: text(config, 'FIREBASE_EMULATOR_HOST', 'localhost'),

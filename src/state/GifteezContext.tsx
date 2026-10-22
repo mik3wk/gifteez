@@ -26,9 +26,11 @@ import {
   defaultOccasionDate,
   exportList,
   groupDisplayName,
+  groupHasRoom,
   groupMarker,
   leaveActiveGroup,
   logPurchase,
+  memberIdsForGroup,
   memberNames,
   parkActive,
   mergeRemote,
@@ -174,9 +176,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     await writeCacheBlob(sealJson(next, key));
   }, []);
 
-  const fail = useCallback((code: string) => {
+  const fail = useCallback((code: string, vars?: Record<string, string | number>) => {
     const key = `errors.${code}`;
-    const message = t(key);
+    const message = t(key, vars);
     setError(message === key ? t('errors.generic') : message);
   }, []);
 
@@ -533,12 +535,19 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       await saveSecret(groupKeyAccount(parsed.groupId), parsed.groupKey);
       const uid = snapshotRef.current.profile.uid || (await ensureAnonymousUser());
+      const cap = env.groupMaxMembers;
+      const knownIds = memberIdsForGroup(snapshotRef.current, parsed.groupId);
+      if (knownIds && !knownIds.includes(uid) && !groupHasRoom(knownIds.length, cap)) {
+        fail('full', { count: cap });
+        return false;
+      }
       try {
         await callFunction(env, 'joinGroup', { inviteId: parsed.inviteId });
       } catch (caught) {
         const code = caught instanceof Error && 'code' in caught ? String((caught as { code?: string }).code) : '';
-        if (code.includes('resource-exhausted')) {
-          fail('full');
+        const message = caught instanceof Error ? caught.message : '';
+        if (code.includes('resource-exhausted') || message === 'full') {
+          fail('full', { count: cap });
           return false;
         }
         setNotice(t('sync.offline'));

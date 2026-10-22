@@ -50,7 +50,8 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - **AI cap identity:** the refresh cap is not tied to the anonymous UID, because a reinstall would reset it. It's tied to a device ID plus a fingerprint hash stored on the server.
 - **Cost:** anonymous auth sends no texts, so it has no SMS cost. Email magic link is the default upgrade path because texts are the main Firebase cost driver.
 - **App assets (decided with the build):** the builder generates every app icon (including the Android adaptive icon), the launch screen, empty-state art, bundled seasonal motifs, and the store graphics from SVG sources in `assets/src`. The rasters are committed. Michael does not swap in replacement art before a simulator run.
-- **Several groups (decided with the build):** one person can belong to more than one group. Each group has an optional name, set at creation and editable later in group settings. The name is user content and is stored only inside the group ciphertext, same as other user content. If no name is set, the label is the members' names joined (`Mike, Sam & Jo`), shortened with `+N` when it would run long. A stable emoji and color, derived from the group id, mark the group in the switcher, headers, and invite preview. The invite preview ciphertext is on the invite document so the server still cannot read the name; the key stays in the link fragment.
+- **Several groups (decided with the build):** one person can belong to more than one group. Each group has an optional name, set at creation and editable later in group settings. The name is user content and is stored only inside the group ciphertext, same as other user content. If no name is set, the label is the members' names joined (`Mike, Sam & Jo`), shortened with `+N` when it would run long. At 10 members that label stays short (`Mike, Sam & Jo +7`). A stable emoji and color, derived from the group id, mark the group in the switcher, headers, and invite preview. The invite preview ciphertext is on the invite document so the server still cannot read the name; the key stays in the link fragment.
+- **Group size (decided with the build):** a group holds up to 10 members. These are families buying gifts together, and they are unlikely to go past about 10. A list can still start with one person. The same group key in the invite-link fragment is shared with every member, up to that cap. The paid gift-recipient list is intentionally uncapped for now. The free tier still stops at 5 gift recipients, which is separate from this membership cap.
 
 ## 1. Foundation
 - [x] React Native 0.88 TypeScript scaffold for iOS and Android (`~/Documents/Projects/Gifteez`)
@@ -65,7 +66,7 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] Make Firestore the source of truth for all user data
 - [x] Build an encrypted local cache that mirrors Firestore, not a separate data model
 - [x] Add end-to-end encryption: generate and store keys on the device, encrypt before upload, and make sure the server can't read user data. Interim: AES-GCM on device; membership fields stay plaintext for the security rules; an explicit cloud-idea request sends that prompt to the function. See README.
-- [x] Design key sharing for group members under end-to-end encryption. Interim: the group key is in the invite-link fragment, with a recovery-code wrap for a second device. Not a pairwise ratchet.
+- [x] Design key sharing for group members under end-to-end encryption. Interim: the group key is in the invite-link fragment, with a recovery-code wrap for a second device. The same key is shared with every member, up to 10. Not a pairwise ratchet.
 - [x] Offline-first: read and write the encrypted local copy offline, and merge to the cloud when the connection returns
 - [x] Resolve merge conflicts with last write wins, and show a small "updated on another device" toast
 - [x] Generate the app icon at every iOS size (iPhone and iPad) and the Android adaptive icon, plus the launch screen, from the SVG sources
@@ -90,9 +91,9 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] Limit text codes to the launch regions (US first)
 
 ## 4. Groups
-- [x] Create a group of 2–5 people, with an optional name override at creation. This prompts the upgrade from anonymous to a permanent sign-in.
+- [x] Create a group of up to 10 members, with an optional name override at creation. This prompts the upgrade from anonymous to a permanent sign-in.
 - [x] Invite through a shareable link that opens the app (or the store) and joins
-- [x] Enforce the 2–5 member limit. The maximum is 5. A list can exist with one person before anyone joins.
+- [x] Enforce the member limit of 10. A list can exist with one person before anyone joins. The paid gift-recipient list is intentionally uncapped for now.
 - [x] Sync group records through Firestore
 - [x] Handle leaving a group and removing a member
 - [x] Let a person belong to several groups, with a switcher

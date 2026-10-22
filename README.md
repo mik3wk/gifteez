@@ -93,7 +93,7 @@ User content is encrypted on the device with AES-256-GCM (`@noble/ciphers`) befo
 
 This is a working interim, not a full pairwise key agreement:
 
-- The group key travels in the invite link fragment (`#k=`). Firebase and the app's own servers do not receive that fragment.
+- The group key travels in the invite link fragment (`#k=`). Firebase and the app's own servers do not receive that fragment. The same key is shared with every member, up to 10.
 - A 10-word recovery code wraps the group key with HKDF-SHA256. The wrapped key is stored at `users/{uid}/keys/{groupId}` and in the Keychain, so the same phone can show the code again. A second device signs in with the same email (the anonymous account is linked in place, so the UID stays) and unwraps with the code, or it opens the invite link again.
 - Firestore stores ciphertext plus the fields the security rules need in plaintext: member ids, owner, people count, entitlement flag, and `updatedAt`. The server cannot read names, notes, prices, or ideas from those documents.
 - An explicit cloud-idea request sends the decrypted prompt (name, tags, occasion, budget, thumbs) to the Cloud Function, which calls OpenAI. That path is not covered by the group encryption. Prompts and keys are not written to logs.
@@ -103,8 +103,8 @@ Offline edits are written to the encrypted cache and merged on reconnect. Last w
 
 ## Limits that are intentional
 
-- A list can have one member so it is usable before anyone joins. The cap is 5, enforced in the client, in `joinGroup`, and in the security rules.
-- The free people cap is 5 per group in the rules, and `claimPersonSlot` also counts active people for a device fingerprint. A modified client can still create another group. The rules cannot see the device id.
+- A list can have one member so it is usable before anyone joins. The membership cap is 10 (`GROUP_MAX_MEMBERS`), enforced in the client, in `joinGroup`, and in the security rules. A full list says "This list already has 10 members, the most a list can have."
+- The free gift-recipient cap is 5 per group in the rules, and `claimPersonSlot` also counts active people for a device fingerprint. Paying removes that recipient cap. The paid gift-recipient list is intentionally uncapped for now. A modified client can still create another group. The rules cannot see the device id.
 - Reinstalling creates new person ids, so the per-person AI counters start over. The same device id and the same person ids keep their counts. The cap is not the anonymous uid.
 - The owner cannot leave while other members remain. The last member deletes the group. Another member can leave, and the owner can remove someone else.
 - Imported people (contacts, calendar, or pasted CSV/JSON) do not get ideas until their screen is opened.

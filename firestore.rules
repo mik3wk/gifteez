@@ -58,7 +58,8 @@ service cloud.firestore {
           || request.resource.data.peopleCount == resource.data.peopleCount - 1
         )
         && request.resource.data.memberIds.size() >= 1
-        && request.resource.data.memberIds.size() <= 5
+        // GROUP_MAX_MEMBERS. Free gift recipients stay at peopleCount <= 5 unless entitled.
+        && request.resource.data.memberIds.size() <= 10
         && (
           sameMembers(resource.data.memberIds, request.resource.data.memberIds)
           || selfLeave(resource.data.memberIds, request.resource.data.memberIds)

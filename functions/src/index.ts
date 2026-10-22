@@ -4,6 +4,7 @@ import { setGlobalOptions } from 'firebase-functions/v2';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { canRefresh, claimSlot, emptyUsage, nextUsage, type Usage } from './caps';
+import { DEFAULT_GROUP_MAX_MEMBERS, groupHasRoom } from './members';
 import { fingerprint } from './fingerprint';
 import { appleTransactionGrants, googlePurchaseGrants, verifyAppleTransaction, verifyGooglePurchase } from './iap';
 import { promptHash, requestIdeas, type IdeaPrompt } from './ideas';
@@ -17,7 +18,7 @@ const model = defineString('OPENAI_MODEL', { default: 'gpt-4o-mini' });
 const freeRefreshes = defineString('AI_FREE_REFRESHES_PER_PERSON', { default: '5' });
 const paidRefreshes = defineString('AI_PAID_REFRESHES_PER_PERSON_PER_MONTH', { default: '20' });
 const freePeople = defineString('FREE_TIER_MAX_PEOPLE', { default: '5' });
-const groupMax = defineString('GROUP_MAX_MEMBERS', { default: '5' });
+const groupMax = defineString('GROUP_MAX_MEMBERS', { default: String(DEFAULT_GROUP_MAX_MEMBERS) });
 const unlockProduct = defineString('IAP_UNLOCK_PRODUCT_ID', { default: 'gifteez_unlock' });
 const appleKey = defineString('APPLE_IAP_PRIVATE_KEY', { default: '' });
 const appleKeyId = defineString('APPLE_IAP_KEY_ID', { default: '' });
@@ -151,7 +152,7 @@ export const joinGroup = onCall({ enforceAppCheck: true }, async request => {
   }
   const groupId = String(invite.data()?.groupId ?? '');
   const ref = db.collection('groups').doc(groupId);
-  const max = numberParam(groupMax.value(), 5);
+  const max = numberParam(groupMax.value(), DEFAULT_GROUP_MAX_MEMBERS);
   await db.runTransaction(async transaction => {
     const group = await transaction.get(ref);
     if (!group.exists) {
@@ -161,7 +162,7 @@ export const joinGroup = onCall({ enforceAppCheck: true }, async request => {
     if (memberIds.includes(uid)) {
       return;
     }
-    if (memberIds.length >= max) {
+    if (!groupHasRoom(memberIds.length, max)) {
       throw new HttpsError('resource-exhausted', 'full');
     }
     memberIds.push(uid);

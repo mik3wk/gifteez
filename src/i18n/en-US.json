@@ -111,7 +111,7 @@
     "you": "You",
     "owner": "Owner",
     "invite": "Share invite link",
-    "inviteHint": "The link includes the key after the #. Anyone with the link can read the list. Groups hold up to {count} people.",
+    "inviteHint": "The link includes the key after the #. Anyone with the link can read the list. Groups hold up to {count} members.",
     "leave": "Leave group",
     "remove": "Remove",
     "recovery": "Show recovery code",
@@ -123,7 +123,7 @@
     "switchTo": "Switch",
     "newList": "Start another list",
     "shareText": "{marker} {name}\n{links}",
-    "full": "This group is full.",
+    "full": "This list already has {count} members, the most a list can have.",
     "ownerStays": "Hand the list to someone else before you leave. You started it.",
     "emptyCode": "There is no recovery code on this phone."
   },
@@ -178,7 +178,7 @@
     "functions": "Cloud ideas are unavailable right now.",
     "capReached": "The cloud idea cap for this person is used up.",
     "notConfigured": "The server is not set up to confirm purchases yet.",
-    "full": "That group already has the maximum number of people.",
+    "full": "This list already has {count} members, the most a list can have.",
     "invalid": "Check the fields and try again."
   },
   "common": {

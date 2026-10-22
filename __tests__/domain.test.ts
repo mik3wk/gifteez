@@ -5,7 +5,10 @@ import {
   canAddPerson,
   createGroup,
   fairnessRows,
+  DEFAULT_GROUP_MAX_MEMBERS,
   groupDisplayName,
+  groupHasRoom,
+  memberIdsForGroup,
   groupMarker,
   memberNames,
   mergeRemote,
@@ -205,6 +208,9 @@ test('names groups from members, and switching keeps the other list', () => {
   expect(groupDisplayName('', ['Mike', 'Sam', 'Jo', 'Ada'])).toBe('Mike, Sam & Jo +1');
   expect(groupDisplayName('Family', ['Mike', 'Sam'])).toBe('Family');
   expect(groupDisplayName('', [])).toBe('Gifteez');
+  const ten = ['Mike', 'Sam', 'Jo', 'Ada', 'Bea', 'Cal', 'Dee', 'Eli', 'Fay', 'Gio'];
+  expect(groupDisplayName('', ten)).toBe('Mike, Sam & Jo +7');
+  expect(groupDisplayName('', ten).length).toBeLessThanOrEqual(28);
   expect(groupMarker('same').emoji).toBe(groupMarker('same').emoji);
   const first = createGroup({
     snapshot: emptySnapshot(1),
@@ -232,6 +238,36 @@ test('names groups from members, and switching keeps the other list', () => {
   expect(groupDisplayName(back?.group?.name ?? '', memberNames(back?.members ?? []))).toBe('Mike');
   expect(second.group?.name.includes('Holidays')).toBe(true);
   expect(JSON.stringify(second.group).includes('Holidays')).toBe(true);
+});
+
+test('a group has room for 9 members, not 10 or 11', () => {
+  expect(DEFAULT_GROUP_MAX_MEMBERS).toBe(10);
+  expect(groupHasRoom(9, DEFAULT_GROUP_MAX_MEMBERS)).toBe(true);
+  expect(groupHasRoom(10, DEFAULT_GROUP_MAX_MEMBERS)).toBe(false);
+  expect(groupHasRoom(11, DEFAULT_GROUP_MAX_MEMBERS)).toBe(false);
+  expect(t('errors.full', { count: DEFAULT_GROUP_MAX_MEMBERS })).toBe(
+    'This list already has 10 members, the most a list can have.',
+  );
+  const snapshot = createGroup({
+    snapshot: emptySnapshot(1),
+    groupId: 'g',
+    ownerId: 'owner',
+    displayName: 'Mike',
+    groupName: '',
+    now: 1,
+  });
+  snapshot.group = snapshot.group && {
+    ...snapshot.group,
+    memberIds: Array.from({ length: 10 }, (_, index) => `m${index}`),
+  };
+  expect(memberIdsForGroup(snapshot, 'g')).toHaveLength(10);
+  expect(groupHasRoom(memberIdsForGroup(snapshot, 'g')?.length ?? 0, DEFAULT_GROUP_MAX_MEMBERS)).toBe(false);
+  const withPeople = {
+    ...snapshot,
+    people: Array.from({ length: 5 }, (_, index) => person(`p${index}`, `Person ${index}`)),
+  };
+  expect(canAddPerson(withPeople, 5)).toBe(false);
+  expect(canAddPerson({ ...withPeople, entitlementPaid: true }, 5)).toBe(true);
 });
 
 function person(id: string, name: string, budgetCents: number | null = null): Person {
