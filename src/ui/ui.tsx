@@ -80,18 +80,21 @@ export function Field({
   onChangeText,
   placeholder,
   keyboardType,
+  accessibilityLabel,
 }: {
   label: string;
   value: string;
   onChangeText: (value: string) => void;
   placeholder?: string;
   keyboardType?: 'default' | 'email-address' | 'phone-pad' | 'number-pad' | 'decimal-pad';
+  accessibilityLabel?: string;
 }) {
   const { colors } = useGifteez();
   return (
     <View style={styles.field}>
       <Text style={[styles.label, { color: colors.muted }]}>{label}</Text>
       <TextInput
+        accessibilityLabel={accessibilityLabel ?? label}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}

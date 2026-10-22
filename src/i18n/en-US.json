@@ -9,7 +9,11 @@
   "firstOpen": {
     "sentence": "Gifteez helps you remember gifts for the people you love, and keep the spending fair.",
     "start": "Start",
-    "join": "Join"
+    "join": "Join",
+    "pasteInvite": "Paste an invite",
+    "pasteHint": "If you copied an invite before installing, paste it here. Gifteez does not read the clipboard on its own.",
+    "pasteContinue": "Continue with invite",
+    "pasteContinueLabel": "Continue with the pasted invite"
   },
   "groupCreate": {
     "title": "Name yourself",

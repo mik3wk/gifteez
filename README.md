@@ -50,7 +50,7 @@ React Native Firebase 27 pulls the Firebase Apple SDK through Swift Package Mana
 - Add a person, then tap interest tags. Open the person to see on-device ideas. Save one, log a purchase with a price, and open Fairness.
 - Share the invite from the group screen. The message contains an `https://gifteez.app/...#k=...` link and a `gifteez://join/...#k=...` link. The key is the URL fragment and is not sent to Firestore.
 - Paste the `gifteez://` link on a second simulator with `xcrun simctl openurl booted 'gifteez://join/...'` or, on Android, `adb shell am start -W -a android.intent.action.VIEW -d 'gifteez://join/...'`. That opens a confirm screen (emoji, color, and the list label, or "Shared list"). The list is joined only after Join. Cancel leaves it. A link that arrives before the app is ready, or before onboarding, waits and then opens the same screen.
-- `https://gifteez.app` links need an Apple App Site Association file and an Android assetlinks.json on that domain. Until the domain is live, use the custom scheme.
+- `https://gifteez.app` links open the app only after the join site is deployed and the domain points at Firebase Hosting. Until then, use the custom scheme. See "Invite link site" below.
 
 ## Deploy the backend
 
@@ -65,7 +65,7 @@ firebase functions:secrets:set FINGERPRINT_PEPPER
 npm run deploy
 ```
 
-`npm run deploy` writes the native Firebase files from `.env`, then runs `firebase deploy` (Functions, Firestore rules and indexes, Storage rules). `firebase deploy --only functions` also works after `npm run prepare-config`.
+`npm run deploy` writes the native Firebase files and the Hosting join page from `.env`, then runs `firebase deploy` (Functions, Firestore rules and indexes, Storage rules, and Hosting). `firebase deploy --only functions` and `firebase deploy --only hosting` also work after `npm run prepare-config`. Hosting is the join site in the next section. Deploy it only after the domain steps there, or the default Hosting URL will publish the page before `gifteez.app` points at it.
 
 Functions secrets must exist before the first deploy of `generateGiftIdeas`, `claimPersonSlot`, `getEntitlement`, `verifyUnlock`, and `createOwnedGroup`. `joinGroup` and `releaseOwnedGroup` do not use those secrets. `FINGERPRINT_PEPPER` is a random string you choose; it salts the device-id hash that keys the AI cap and the paid entitlement. It is not an app `.env` value.
 
@@ -76,6 +76,40 @@ Purchase verification reads optional Apple and Play credentials from `functions/
 Upload `skins/spring.json` and `skins/summer.json` to Cloud Storage as `skins/spring.json` and `skins/summer.json`. Create a Remote Config parameter named `active_skin` (string, default `auto`). Fall and winter ship in the app. Spring and summer download when Remote Config selects them, and a failed download uses the base theme.
 
 Set a Google Cloud billing budget alert on the Firebase project before real traffic. Confirm the current OpenAI price for `OPENAI_MODEL` (default `gpt-4o-mini`) on OpenAI's pricing page and cap that spend too. A five-idea reply is a short request; the server cap (5 fresh generations per person on the free tier, 20 per person per UTC month when paid) is the abuse backstop. Only a refresh that misses the server cache counts.
+
+## Invite link site
+
+Share text already includes `https://<INVITE_LINK_DOMAIN>/join/<group>?i=<invite>#k=<key>`. The key is the fragment after `#`. This repo hosts the page that URL opens when the app is not installed.
+
+`hosting/` is the Firebase Hosting public directory. `npm run prepare-config` (also run by `npm run deploy`, `npm run ios`, and `npm run android`) fills it from `.env` or `.env.example`:
+
+- `hosting/join/index.html` from `hosting/join/index.template.html`
+- `hosting/.well-known/apple-app-site-association`
+- `hosting/.well-known/assetlinks.json`
+
+It also writes `INVITE_LINK_DOMAIN` into the Android `https` intent filter (`android/app/src/main/AndroidManifest.xml`, path `/join`) and the iOS associated domain (`ios/Gifteez/Gifteez.entitlements`, `applinks:<domain>`). The custom scheme stays `gifteez://join`. Changing the domain needs a native rebuild.
+
+The join page has no analytics and no third-party scripts. Its content security policy blocks network calls from the page. The script reads `location.hash` only to build a `gifteez://` link and to copy `location.href`. The fragment is not sent to Firebase Hosting: browsers omit it from the request. Do not add a beacon, a rewrite that appends the fragment to a query string, or the Play Install Referrer. The referrer is stored by Google, so it cannot carry the key.
+
+**Open in Gifteez** tries the custom scheme, which includes the key. The page does not jump to the store by itself. **Copy invite and open the App Store** or **Google Play** copies the full address, including `#k=`, and only then opens the store. The store URLs are `APP_STORE_URL` and `PLAY_STORE_URL`.
+
+After install, the first screen has "Paste an invite". Focusing that field is what shows the iOS paste control. Gifteez does not read the clipboard on its own. Pasting opens the same confirm screen as a tapped link. Join still runs only from that screen. Android does not use Play Install Referrer.
+
+Universal links can open the app from the `https` URL and drop the fragment. When that happens the app does not see the key and does not join. The copied invite is the path that still has the key. The custom scheme keeps the key when the app is already installed.
+
+### What you do before `https://gifteez.app` works
+
+These cannot be done from the repo:
+
+1. In Apple Developer, note the 10-character Team ID. Put it in `.env` as `APPLE_TEAM_ID`. Leave it as `TEAMID` and the association file is a placeholder. Turn on the Associated Domains capability for `com.gifteez`. Signing fails until that capability is on the App ID and the Team ID is real. The entitlement is already `applinks:gifteez.app`.
+2. Create the App Store listing and set `APP_STORE_URL` to `https://apps.apple.com/app/id<numeric id>`. The committed placeholder is `https://apps.apple.com/app/id0000000000`.
+3. Create the Play listing for `com.gifteez`. Set `PLAY_STORE_URL` if it is not the default `https://play.google.com/store/apps/details?id=com.gifteez`.
+4. Copy the SHA-256 of the Play app-signing certificate (Play Console, App integrity, App signing). Put it in `ANDROID_SHA256_CERT_FINGERPRINT` as 32 colon-separated hex bytes. The committed value is all zeros and will not verify. `keytool -list -v -keystore <release-keystore>` prints the same field for a keystore you hold.
+5. `npm run prepare-config` then `firebase deploy --only hosting`. `firebase.json` serves `/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json` as `application/json` with no redirect. The ignore list does not skip dotfiles, so `.well-known` is uploaded. `/join/**` rewrites to the static page and does not redirect.
+6. In Firebase Hosting, add the custom domain from `INVITE_LINK_DOMAIN` (default `gifteez.app`). At the DNS host, add the records the console shows (usually an `A` record to Firebase and a `TXT` record for ownership). Wait until the console says the domain is connected. Apple and Android fetch the well-known files from that domain, not from `*.web.app`.
+7. Rebuild the iOS and Android apps after the domain, Team ID, and fingerprint are final so the entitlement and the intent filter match the live host.
+
+Check `https://gifteez.app/.well-known/apple-app-site-association` returns JSON with `Content-Type: application/json` and no redirect, and `https://gifteez.app/.well-known/assetlinks.json` lists `com.gifteez` and the real fingerprint. Open `https://gifteez.app/join/example?i=example#k=secret` and confirm the address bar still ends in `#k=secret` and the network log has no request that contains `secret`.
 
 ## Several groups
 
