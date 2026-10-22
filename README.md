@@ -31,10 +31,11 @@ cp .env.example .env
 
 ```sh
 npm install
-cd ios && bundle install && bundle exec pod install && cd ..
 npm run ios
 npm run android
 ```
+
+`npm run ios` runs `npm run pods`, then `react-native run-ios`. `npm run pods` is `bundle install`, then `RCT_NEW_ARCH_ENABLED=1 bundle exec pod install` in `ios/`. Run `npm run pods` by itself when you only want to refresh pods. Automatic CocoaPods installation from the CLI is off (`react-native.config.js`), because CLI 20 has no `--no-install` flag and otherwise runs `pod install` with `RCT_NEW_ARCH_ENABLED=0` whenever `ios/Pods/Pods.xcodeproj` is missing. The Podfile also sets that variable to `1` before any podspec loads, so `cd ios && bundle exec pod install` still works if the shell variable is unset or `0`.
 
 `npm run ios` and `npm run android` generate `ios/Gifteez/GoogleService-Info.plist` and `android/app/google-services.json` from `.env` (or from `.env.example` if `.env` is missing). Those files are gitignored. Do not commit them after you put in a real project. Changing `.env` requires a native rebuild; restarting Metro is not enough.
 
@@ -42,7 +43,7 @@ If the Firebase values are still the placeholders, the app opens on a screen tha
 
 ### iOS pods
 
-React Native Firebase 27 pulls the Firebase Apple SDK through Swift Package Manager, and that requires `use_frameworks! :linkage => :dynamic` in `ios/Podfile`. That line is already there. `ios/Podfile.lock` in git is still the scaffold lock from before these native modules were added. `bundle exec pod install` on a Mac refreshes it. This environment has no Ruby or CocoaPods, so the lockfile was not regenerated here.
+React Native Firebase 27 pulls the Firebase Apple SDK through Swift Package Manager, and that requires `use_frameworks! :linkage => :dynamic` in `ios/Podfile`. That line is already there. `ios/Podfile.lock` in git is still the scaffold lock from before these native modules were added. `npm run pods` on a Mac refreshes it. The Gemfile already requires CocoaPods `>= 1.13` excluding `1.15.0` and `1.15.1`.
 
 ### What to tap tonight
 
