@@ -1,3 +1,4 @@
+import { performJoin } from '../src/domain/joinFlow';
 import { emptySnapshot, type Occasion, type Person } from '../src/domain/types';
 import {
   bannerDue,
@@ -30,7 +31,7 @@ import {
 } from '../src/domain/logic';
 import { suggestIdeas } from '../src/domain/ideas';
 import { colorsFor, parseSkin, skinForDate } from '../src/theme/skins';
-import { buildInviteUrl, openJson, parseLink, randomKey, sealJson, unwrapKey, wrapKey } from '../src/crypto/crypto';
+import { buildInviteUrl, keyToString, openJson, parseLink, randomKey, sealJson, unwrapKey, wrapKey } from '../src/crypto/crypto';
 import { formatDate, formatMoney, t } from '../src/i18n';
 import { canRefresh, claimSlot, emptyUsage, nextUsage } from '../functions/src/caps';
 
@@ -357,6 +358,107 @@ test('a free account starts one list, paying starts another, and joining does no
   expect(stamped.archives.g1.group.entitled).toBe(true);
   expect(t('errors.oneList')).toBe('A free account can start one list. Unlock to start another.');
 });
+
+test('a failed join does not save the key or add the group', async () => {
+  const cases: Array<{ thrown: unknown; failure: 'full' | 'invalid' | 'offline' }> = [
+    { thrown: codedError('full', 'functions/resource-exhausted'), failure: 'full' },
+    { thrown: codedError('invite', 'functions/not-found'), failure: 'invalid' },
+    { thrown: new Error('Network request failed'), failure: 'offline' },
+  ];
+  for (const item of cases) {
+    const { url } = inviteUrl();
+    const snapshot = emptySnapshot(1);
+    const saveKey = jest.fn(async () => undefined);
+    const deleteKey = jest.fn(async () => undefined);
+    const joinGroup = jest.fn(async () => {
+      throw item.thrown;
+    });
+    const result = await performJoin({
+      url,
+      snapshot,
+      cap: 10,
+      ensureUid: async () => 'joiner',
+      joinGroup,
+      saveKey,
+      deleteKey,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.failure).toBe(item.failure);
+      expect(result.snapshot).toBe(snapshot);
+    }
+    expect(joinGroup).toHaveBeenCalledTimes(1);
+    expect(saveKey).not.toHaveBeenCalled();
+    expect(deleteKey).not.toHaveBeenCalled();
+    expect(snapshot.group).toBeNull();
+    expect(snapshot.members).toEqual([]);
+  }
+  expect(t('join.failedInvalid')).toBe('That invite is invalid or has expired.');
+  expect(t('join.failedOffline')).toContain('Try again');
+  expect(t('errors.full', { count: 10 })).toContain('10 members');
+});
+
+test('a successful join saves the key only after the server confirms', async () => {
+  const { url, groupKey } = inviteUrl();
+  const snapshot = emptySnapshot(1);
+  const saveKey = jest.fn(async () => undefined);
+  const deleteKey = jest.fn(async () => undefined);
+  const joinGroup = jest.fn(async () => undefined);
+  const result = await performJoin({
+    url,
+    snapshot,
+    cap: 10,
+    ensureUid: async () => 'joiner',
+    joinGroup,
+    saveKey,
+    deleteKey,
+  });
+  expect(joinGroup).toHaveBeenCalledWith('invite-1');
+  expect(saveKey).toHaveBeenCalledTimes(1);
+  expect(saveKey).toHaveBeenCalledWith('group-1', groupKey);
+  expect(deleteKey).not.toHaveBeenCalled();
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.snapshot.group?.id).toBe('group-1');
+    expect(result.snapshot.profile.onboarded).toBe(true);
+    expect(result.snapshot.profile.groupId).toBe('group-1');
+    expect(result.snapshot.members.map(member => member.uid)).toEqual(['joiner']);
+  }
+  expect(snapshot.group).toBeNull();
+});
+
+test('a key saved during a failed join attempt is deleted', async () => {
+  const { url } = inviteUrl();
+  const snapshot = emptySnapshot(1);
+  const deleteKey = jest.fn(async () => undefined);
+  const result = await performJoin({
+    url,
+    snapshot,
+    cap: 10,
+    ensureUid: async () => 'joiner',
+    joinGroup: async () => undefined,
+    saveKey: async () => {
+      throw new Error('keychain');
+    },
+    deleteKey,
+  });
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.failure).toBe('unknown');
+    expect(result.snapshot).toBe(snapshot);
+  }
+  expect(deleteKey).toHaveBeenCalledWith('group-1');
+  expect(snapshot.group).toBeNull();
+});
+
+function codedError(message: string, code: string): Error {
+  return Object.assign(new Error(message), { code });
+}
+
+function inviteUrl(): { url: string; groupKey: string } {
+  const groupKey = keyToString(randomKey());
+  return { groupKey, url: `gifteez://join/group-1?i=invite-1#k=${groupKey}` };
+}
 
 function person(id: string, name: string, budgetCents: number | null = null): Person {
   return {
