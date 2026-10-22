@@ -1,3 +1,11 @@
+# The React Native CLI sets RCT_NEW_ARCH_ENABLED=0 when ios/Pods/Pods.xcodeproj
+# is missing (a fresh checkout: getArchitecture fails closed, and installPods
+# passes that as the env). RNFBApp.podspec raises when the value is '0'.
+# react-native-config enables Fabric only when the value is already '1' at
+# podspec load. use_native_modules! loads those podspecs before use_react_native!
+# sets the flag, so set it before this file requires anything else.
+ENV['RCT_NEW_ARCH_ENABLED'] = '1'
+
 # Resolve react_native_pods.rb with node to allow for hoisting
 require Pod::Executable.execute_command('node', ['-p',
   'require.resolve(
