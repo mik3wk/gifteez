@@ -82,8 +82,13 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.auth.uid == request.resource.data.createdBy
         && request.resource.data.active == true
+        && request.resource.data.ciphertext is string
         && request.auth.uid in groupData(request.resource.data.groupId).memberIds;
-      allow update, delete: if signedIn() && request.auth.uid == resource.data.createdBy;
+      allow update: if signedIn()
+        && request.auth.uid == resource.data.createdBy
+        && request.resource.data.ciphertext is string
+        && request.resource.data.groupId == resource.data.groupId;
+      allow delete: if signedIn() && request.auth.uid == resource.data.createdBy;
     }
 
     match /users/{uid} {

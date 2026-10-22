@@ -24,8 +24,8 @@ export function FirstOpenScreen() {
         allowName={!snapshot.profile.nameLocked}
         showCreate
         onClose={() => setOpen(false)}
-        onCreate={async name => {
-          await startGroup(name);
+        onCreate={async (name, groupName) => {
+          await startGroup(name, groupName);
           setOpen(false);
         }}
       />

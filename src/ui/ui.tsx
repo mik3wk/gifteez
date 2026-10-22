@@ -146,11 +146,12 @@ export function AccountSheet({
   visible: boolean;
   allowName: boolean;
   showCreate: boolean;
-  onCreate?: (name: string) => void;
+  onCreate?: (name: string, groupName: string) => void;
   onClose: () => void;
 }) {
   const { snapshot, sendEmail, finishEmail, sendPhone, confirmPhone, colors } = useGifteez();
   const [name, setName] = useState(snapshot.profile.displayName);
+  const [groupName, setGroupName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
@@ -165,7 +166,13 @@ export function AccountSheet({
         <Title>{showCreate ? t('groupCreate.title') : t('settings.account')}</Title>
         <Body>{showCreate ? t('groupCreate.body') : t('settings.anonymous')}</Body>
         {allowName ? <Field label={t('groupCreate.name')} value={name} onChangeText={setName} /> : null}
-        {showCreate && onCreate ? <Button label={t('groupCreate.create')} onPress={() => onCreate(name)} /> : null}
+        {showCreate ? (
+          <>
+            <Field label={t('groupCreate.listName')} value={groupName} onChangeText={setGroupName} />
+            <Body>{t('groupCreate.listNameHint')}</Body>
+          </>
+        ) : null}
+        {showCreate && onCreate ? <Button label={t('groupCreate.create')} onPress={() => onCreate(name, groupName)} /> : null}
         <Title>{t('groupCreate.secureTitle')}</Title>
         <Body>{t('groupCreate.secureBody')}</Body>
         <Field label={t('groupCreate.email')} value={email} onChangeText={setEmail} keyboardType="email-address" />

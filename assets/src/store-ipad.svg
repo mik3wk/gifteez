@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1366">
+  <rect width="1024" height="1366" fill="#F6F1E7"/>
+  <text x="64" y="140" font-family="Inter, Noto Sans, sans-serif" font-size="48" font-weight="700" fill="#1F2A24">Mike, Sam &amp; Jo</text>
+  <text x="64" y="200" font-family="Inter, Noto Sans, sans-serif" font-size="24" fill="#5E6A62">People, sorted by the next occasion.</text>
+  <rect x="64" y="250" width="896" height="180" rx="24" fill="#FFFCF7" stroke="#E2D8C8"/>
+  <text x="100" y="330" font-family="Inter, Noto Sans, sans-serif" font-size="36" font-weight="700" fill="#1F2A24">Ada</text>
+  <text x="100" y="380" font-family="Inter, Noto Sans, sans-serif" font-size="24" fill="#5E6A62">Birthday - Oct 25 - $40 of $100</text>
+  <rect x="64" y="460" width="896" height="180" rx="24" fill="#FFFCF7" stroke="#E2D8C8"/>
+  <text x="100" y="540" font-family="Inter, Noto Sans, sans-serif" font-size="36" font-weight="700" fill="#1F2A24">Bea</text>
+  <text x="100" y="590" font-family="Inter, Noto Sans, sans-serif" font-size="24" fill="#5E6A62">Christmas - Dec 25 - $10 of $80</text>
+  <rect x="64" y="1180" width="896" height="88" rx="20" fill="#1F6B4A"/>
+  <text x="512" y="1234" text-anchor="middle" font-family="Inter, Noto Sans, sans-serif" font-size="28" font-weight="600" fill="#F6F1E7">Add a person</text>
+</svg>

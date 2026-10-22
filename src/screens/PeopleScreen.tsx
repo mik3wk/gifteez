@@ -7,19 +7,23 @@ import { statusFor, upcomingOccasion } from '../domain/logic';
 import { sortPeople } from '../domain/logic';
 import { formatDate, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
+import { EmptyArt, SkinBanner } from '../ui/art';
+import { useGroupHeading } from '../ui/heading';
 import { AccountSheet, Banner, Body, Button, Card, Screen, Title } from '../ui/ui';
 import { yearSpentCents } from '../domain/logic';
 
 export function PeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, showBanner, dismissBanner, colors } = useGifteez();
+  const { snapshot, showBanner, dismissBanner, colors, skinId } = useGifteez();
+  const heading = useGroupHeading();
   const [upgrade, setUpgrade] = useState(false);
   const people = sortPeople(snapshot.people, snapshot.occasions, new Date());
   const year = new Date().getFullYear();
   return (
     <Screen
       footer={<Button label={t('people.add')} onPress={() => navigation.navigate('AddPerson')} />}>
-      <Title>{t('people.title')}</Title>
+      <SkinBanner skinId={skinId} />
+      <Title>{`${heading.emoji} ${heading.label}`}</Title>
       <View style={styles.actions}>
         <Button label={t('people.fairness')} tone="secondary" onPress={() => navigation.navigate('Fairness')} />
         <Button label={t('people.group')} tone="secondary" onPress={() => navigation.navigate('Group')} />
@@ -33,7 +37,12 @@ export function PeopleScreen() {
           onDismiss={dismissBanner}
         />
       ) : null}
-      {people.length === 0 ? <Body>{t('people.empty')}</Body> : null}
+      {people.length === 0 ? (
+        <>
+          <EmptyArt kind="people" />
+          <Body>{t('people.empty')}</Body>
+        </>
+      ) : null}
       {people.map(person => {
         const next = upcomingOccasion(person.id, snapshot.occasions, new Date());
         const spent = yearSpentCents(person.id, snapshot.gifts, year);

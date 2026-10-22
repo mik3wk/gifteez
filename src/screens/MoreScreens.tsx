@@ -1,20 +1,28 @@
-import React, { useState } from 'react';
-import { Share, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { getEnv } from '../config/env';
-import { fairnessRows } from '../domain/logic';
+import { fairnessRows, groupDisplayName, groupMarker } from '../domain/logic';
 import { formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
+import { EmptyArt } from '../ui/art';
+import { useGroupHeading } from '../ui/heading';
 import { AccountSheet, Body, Button, Card, Field, Screen, Title } from '../ui/ui';
 
 export function FairnessScreen() {
   const { snapshot, colors } = useGifteez();
+  useGroupHeading();
   const rows = fairnessRows(snapshot, new Date());
   const max = Math.max(1, ...rows.map(row => row.yearSpentCents));
   return (
     <Screen>
       <Title>{t('fairness.title')}</Title>
       <Body>{t('fairness.intro')}</Body>
-      {rows.length === 0 ? <Body>{t('fairness.empty')}</Body> : null}
+      {rows.length === 0 ? (
+        <>
+          <EmptyArt kind="fairness" />
+          <Body>{t('fairness.empty')}</Body>
+        </>
+      ) : null}
       {rows.map(row => (
         <Card key={row.personId}>
           <Text style={[styles.name, { color: colors.text }]}>{row.name}</Text>
@@ -34,14 +42,35 @@ export function FairnessScreen() {
 }
 
 export function GroupScreen() {
-  const { snapshot, shareInvite, leave, removeGroupMember, renameList, showRecovery, colors } = useGifteez();
+  const { snapshot, shareInvite, leave, removeGroupMember, renameList, showRecovery, switchGroup, startGroup, colors } = useGifteez();
+  const heading = useGroupHeading();
   const [name, setName] = useState(snapshot.group?.name ?? '');
   const [code, setCode] = useState<string | null>(null);
   const [upgrade, setUpgrade] = useState(false);
+  const [creating, setCreating] = useState(false);
+  useEffect(() => {
+    setName(snapshot.group?.name ?? '');
+  }, [snapshot.group?.id, snapshot.group?.name]);
   return (
     <Screen>
-      <Title>{t('groupScreen.title')}</Title>
+      <Title>{`${heading.emoji} ${heading.label}`}</Title>
+      <Title>{t('groupScreen.lists')}</Title>
+      {snapshot.roster.map(item => {
+        const marker = groupMarker(item.id);
+        const label = groupDisplayName(item.name, item.memberNames);
+        const active = item.id === snapshot.group?.id;
+        return (
+          <Pressable key={item.id} onPress={() => switchGroup(item.id)}>
+            <Card>
+              <Text style={[styles.name, { color: marker.color }]}>{`${marker.emoji} ${label}`}</Text>
+              <Text style={{ color: colors.muted }}>{active ? t('groupScreen.current') : t('groupScreen.switchTo')}</Text>
+            </Card>
+          </Pressable>
+        );
+      })}
+      <Button label={t('groupScreen.newList')} tone="secondary" onPress={() => setCreating(true)} />
       <Field label={t('groupScreen.groupName')} value={name} onChangeText={setName} />
+      <Body>{t('groupScreen.nameHint', { name: heading.label })}</Body>
       <Button label={t('groupScreen.rename')} onPress={() => renameList(name)} />
       <Body>{t('groupScreen.inviteHint', { count: getEnv().groupMaxMembers })}</Body>
       <Button
@@ -76,20 +105,51 @@ export function GroupScreen() {
       {code ? <Body>{code}</Body> : null}
       <Button label={t('groupScreen.leave')} tone="danger" onPress={leave} />
       <AccountSheet visible={upgrade} allowName={false} showCreate={false} onClose={() => setUpgrade(false)} />
+      <AccountSheet
+        visible={creating}
+        allowName={!snapshot.profile.nameLocked}
+        showCreate
+        onClose={() => setCreating(false)}
+        onCreate={async (personName, groupName) => {
+          await startGroup(personName, groupName);
+          setCreating(false);
+        }}
+      />
     </Screen>
   );
 }
 
 export function JoinScreen() {
-  const { joinFromLink, restoreWithCode, sendEmail, finishEmail } = useGifteez();
+  const { joinFromLink, restoreWithCode, sendEmail, finishEmail, previewInvite } = useGifteez();
   const [link, setLink] = useState('');
   const [code, setCode] = useState('');
   const [email, setEmail] = useState('');
   const [emailLink, setEmailLink] = useState('');
+  const [preview, setPreview] = useState<{ label: string; emoji: string; color: string } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    previewInvite(link).then(next => {
+      if (!cancelled) {
+        setPreview(next);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setPreview(null);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [link, previewInvite]);
   return (
     <Screen>
       <Title>{t('join.title')}</Title>
       <Body>{t('join.body')}</Body>
+      {preview ? (
+        <Text style={[styles.name, { color: preview.color }]}>
+          {t('join.preview', { name: `${preview.emoji} ${preview.label}` })}
+        </Text>
+      ) : null}
       <Field label={t('join.placeholder')} value={link} onChangeText={setLink} />
       <Button label={t('join.join')} onPress={() => joinFromLink(link)} />
       <Title>{t('groupCreate.secondDevice')}</Title>

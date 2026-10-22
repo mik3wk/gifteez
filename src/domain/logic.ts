@@ -4,7 +4,9 @@ import {
   type AppSnapshot,
   type FeedbackEntry,
   type GiftRecord,
+  type GroupArchive,
   type GroupMeta,
+  type GroupSummary,
   type Member,
   type Occasion,
   type OccasionState,
@@ -183,17 +185,191 @@ export function withProfile(snapshot: AppSnapshot, patch: Partial<AppSnapshot['p
   return { ...snapshot, profile: { ...snapshot.profile, ...patch } };
 }
 
+const GROUP_EMOJIS = ['🎁', '🎀', '🌟', '🎄', '🍂', '🎂', '💐', '🧸'];
+const GROUP_COLORS = ['#1F6B4A', '#C4622D', '#1E4D6B', '#8E4A8A', '#9C3B2E', '#2F6F62', '#A37B2C', '#3E5C8A'];
+
+export function groupMarker(groupId: string): { emoji: string; color: string } {
+  const index = hashToUint(groupId || 'gifteez') % GROUP_EMOJIS.length;
+  return { emoji: GROUP_EMOJIS[index], color: GROUP_COLORS[index] };
+}
+
+export function memberNames(members: Member[]): string[] {
+  return members
+    .filter(member => !member.deleted && member.displayName.trim())
+    .map(member => member.displayName.trim());
+}
+
+export function groupDisplayName(name: string, names: string[], max = 28): string {
+  const custom = name.trim();
+  if (custom) {
+    return clipLabel(custom, max);
+  }
+  const first = names.map(entry => entry.split(/\s+/)[0] ?? '').filter(Boolean);
+  if (first.length === 0) {
+    return 'Gifteez';
+  }
+  return joinMemberNames(first, max);
+}
+
+function clipLabel(value: string, max: number): string {
+  if (value.length <= max) {
+    return value;
+  }
+  return `${value.slice(0, Math.max(1, max - 1)).trimEnd()}…`;
+}
+
+function joinMemberNames(names: string[], max: number): string {
+  const cap = Math.min(3, names.length);
+  for (let count = cap; count > 1; count -= 1) {
+    const text = formatMemberNames(names.slice(0, count), names.length - count);
+    if (text.length <= max) {
+      return text;
+    }
+  }
+  const extra = names.length - 1;
+  const head = clipLabel(names[0], extra > 0 ? max - 3 : max);
+  return extra > 0 ? `${head} +${extra}` : head;
+}
+
+function formatMemberNames(shown: string[], extra: number): string {
+  const body = shown.length === 1
+    ? shown[0]
+    : shown.length === 2
+      ? `${shown[0]} & ${shown[1]}`
+      : `${shown.slice(0, -1).join(', ')} & ${shown[shown.length - 1]}`;
+  return extra > 0 ? `${body} +${extra}` : body;
+}
+
+export function captureArchive(snapshot: AppSnapshot): GroupArchive | null {
+  if (!snapshot.group) {
+    return null;
+  }
+  return {
+    group: { ...snapshot.group, memberIds: [...snapshot.group.memberIds] },
+    members: snapshot.members.map(item => ({ ...item })),
+    people: snapshot.people.map(item => ({ ...item })),
+    occasions: snapshot.occasions.map(item => ({ ...item })),
+    states: snapshot.states.map(item => ({ ...item })),
+    gifts: snapshot.gifts.map(item => ({ ...item })),
+    ideas: snapshot.ideas.map(item => ({ ...item })),
+    dirty: { ...snapshot.dirty },
+    inviteId: snapshot.profile.inviteId,
+  };
+}
+
+function summaryOf(snapshot: AppSnapshot): GroupSummary | null {
+  if (!snapshot.group) {
+    return null;
+  }
+  return {
+    id: snapshot.group.id,
+    name: snapshot.group.name,
+    ownerId: snapshot.group.ownerId,
+    memberIds: [...snapshot.group.memberIds],
+    memberNames: memberNames(snapshot.members),
+    updatedAt: snapshot.group.updatedAt,
+  };
+}
+
+function upsertSummary(roster: GroupSummary[], summary: GroupSummary) {
+  const index = roster.findIndex(item => item.id === summary.id);
+  if (index < 0) {
+    return [...roster, summary];
+  }
+  const next = roster.slice();
+  next[index] = summary;
+  return next;
+}
+
+export function parkActive(snapshot: AppSnapshot): AppSnapshot {
+  const archive = captureArchive(snapshot);
+  const summary = summaryOf(snapshot);
+  if (!archive || !summary) {
+    return snapshot;
+  }
+  return {
+    ...snapshot,
+    roster: upsertSummary(snapshot.roster ?? [], summary),
+    archives: { ...(snapshot.archives ?? {}), [summary.id]: archive },
+  };
+}
+
+export function switchGroup(snapshot: AppSnapshot, groupId: string): AppSnapshot | null {
+  if (snapshot.group?.id === groupId) {
+    return snapshot;
+  }
+  const parked = parkActive(snapshot);
+  const archive = parked.archives[groupId];
+  if (!archive) {
+    return null;
+  }
+  return {
+    ...parked,
+    group: archive.group,
+    members: archive.members,
+    people: archive.people,
+    occasions: archive.occasions,
+    states: archive.states,
+    gifts: archive.gifts,
+    ideas: archive.ideas,
+    dirty: archive.dirty,
+    profile: {
+      ...parked.profile,
+      groupId: archive.group.id,
+      inviteId: archive.inviteId,
+      onboarded: true,
+    },
+  };
+}
+
+export function leaveActiveGroup(snapshot: AppSnapshot): AppSnapshot {
+  if (!snapshot.group) {
+    return snapshot;
+  }
+  const leaving = snapshot.group.id;
+  const parked = parkActive(snapshot);
+  const archives = { ...parked.archives };
+  delete archives[leaving];
+  const roster = parked.roster.filter(item => item.id !== leaving);
+  const cleared: AppSnapshot = {
+    ...parked,
+    archives,
+    roster,
+    group: null,
+    members: [],
+    people: [],
+    occasions: [],
+    states: [],
+    gifts: [],
+    ideas: [],
+    dirty: {},
+    profile: {
+      ...parked.profile,
+      groupId: null,
+      inviteId: null,
+      onboarded: false,
+    },
+  };
+  const nextId = roster[0]?.id;
+  if (!nextId || !archives[nextId]) {
+    return cleared;
+  }
+  return switchGroup(cleared, nextId) ?? cleared;
+}
+
 export function createGroup(input: {
   snapshot: AppSnapshot;
   groupId: string;
   ownerId: string;
   displayName: string;
   groupName: string;
+  inviteId?: string | null;
   now: number;
 }): AppSnapshot {
+  const parked = parkActive(input.snapshot);
   const group: GroupMeta = {
     id: input.groupId,
-    name: input.groupName,
+    name: input.groupName.trim(),
     ownerId: input.ownerId,
     memberIds: [input.ownerId],
     peopleCount: 0,
@@ -207,19 +383,24 @@ export function createGroup(input: {
     updatedAt: input.now,
   };
   return {
-    ...input.snapshot,
+    ...parked,
     profile: {
-      ...input.snapshot.profile,
+      ...parked.profile,
       uid: input.ownerId,
       displayName: input.displayName,
       nameLocked: true,
       onboarded: true,
       groupId: input.groupId,
+      inviteId: input.inviteId ?? null,
     },
     group,
     members: [member],
+    people: [],
+    occasions: [],
+    states: [],
+    gifts: [],
+    ideas: [],
     dirty: {
-      ...input.snapshot.dirty,
       'group:meta': true,
       [dirtyKey('members', input.ownerId)]: true,
     },
@@ -792,7 +973,7 @@ export function phoneAllowed(phone: string, regions: string[]): boolean {
 }
 
 export function exportList(snapshot: AppSnapshot, today: Date, formatMoney: (cents: number) => string): string {
-  const lines = [snapshot.group?.name || 'Gifteez'];
+  const lines = [groupDisplayName(snapshot.group?.name ?? '', memberNames(snapshot.members))];
   sortPeople(snapshot.people, snapshot.occasions, today).forEach(person => {
     const next = upcomingOccasion(person.id, snapshot.occasions, today);
     const spent = yearSpentCents(person.id, snapshot.gifts, today.getFullYear());

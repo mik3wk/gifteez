@@ -25,7 +25,12 @@ import {
   createGroup,
   defaultOccasionDate,
   exportList,
+  groupDisplayName,
+  groupMarker,
+  leaveActiveGroup,
   logPurchase,
+  memberNames,
+  parkActive,
   mergeRemote,
   normalizeUsPhone,
   occurrenceYear,
@@ -35,6 +40,7 @@ import {
   removeMember,
   renameGroup,
   saveIdea,
+  switchGroup as switchGroupSnapshot,
   sillyName,
   upcomingOccasion,
   updatePerson,
@@ -60,6 +66,7 @@ import {
   confirmSmsCode,
   createGroupDocument,
   createInvite,
+  readInvite,
   deleteGroupDocument,
   currentUid,
   downloadSkin,
@@ -98,7 +105,9 @@ type GifteezApi = {
   clearNotice: () => void;
   clearError: () => void;
   acknowledgeRecovery: () => void;
-  startGroup: (displayName: string) => Promise<void>;
+  startGroup: (displayName: string, groupName: string) => Promise<void>;
+  switchGroup: (groupId: string) => Promise<void>;
+  previewInvite: (url: string) => Promise<{ label: string; emoji: string; color: string } | null>;
   sendEmail: (email: string) => Promise<void>;
   finishEmail: (link: string) => Promise<void>;
   sendPhone: (phone: string) => Promise<void>;
@@ -158,8 +167,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   downloadedRef.current = downloaded;
 
   const commit = useCallback(async (next: AppSnapshot) => {
-    snapshotRef.current = next;
-    setSnapshot(next);
+    const stored = parkActive(next);
+    snapshotRef.current = stored;
+    setSnapshot(stored);
     const key = await ensureDeviceKey();
     await writeCacheBlob(sealJson(next, key));
   }, []);
@@ -175,7 +185,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     if (!current.group || !current.profile.uid) {
       return current;
     }
-    const groupKey = await loadSecret('group-key');
+    const groupKey = await loadGroupKeyString(current.group.id);
     if (!groupKey) {
       return current;
     }
@@ -387,21 +397,22 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     clearError: () => setError(null),
     acknowledgeRecovery: () => setRecoveryCode(null),
     showBanner: bannerDue(snapshot.profile, Date.now(), env.bannerAfterDays),
-    startGroup: async displayName => {
+    startGroup: async (displayName, groupName) => {
       const uid = snapshotRef.current.profile.uid || (await ensureAnonymousUser());
       const name = displayName.trim() || snapshotRef.current.profile.displayName || sillyName(uid);
       const groupId = randomId();
       const groupKey = randomKey();
       const code = generateRecoveryCode();
       const inviteId = randomId();
-      await saveSecret('group-key', keyToString(groupKey));
-      await saveSecret('recovery-code', code);
+      await saveSecret(groupKeyAccount(groupId), keyToString(groupKey));
+      await saveSecret(recoveryAccount(groupId), code);
       let next = createGroup({
-        snapshot: withProfile(snapshotRef.current, { inviteId, uid }),
+        snapshot: withProfile(snapshotRef.current, { uid }),
         groupId,
         ownerId: uid,
         displayName: name,
-        groupName: `${name}'s list`,
+        groupName,
+        inviteId,
         now: Date.now(),
       });
       await commit(next);
@@ -410,16 +421,45 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         await createGroupDocument({
           groupId,
           ownerId: uid,
-          ciphertext: sealJson({ name: next.group?.name }, groupKey),
+          ciphertext: sealJson({ name: next.group?.name ?? '' }, groupKey),
           updatedAt: next.group?.updatedAt ?? Date.now(),
         });
         await writeSealed(groupId, 'members', sealMember(uid, name, groupKey, Date.now()));
-        await createInvite(groupId, inviteId, uid);
+        await publishPreview(snapshotRef.current, groupKey);
         await writeRecovery(uid, groupId, wrapKey(groupKey, code));
         next = { ...snapshotRef.current, dirty: {} };
         await commit(next);
       } catch {
         setNotice(t('sync.offline'));
+      }
+    },
+    switchGroup: async groupId => {
+      const next = switchGroupSnapshot(snapshotRef.current, groupId);
+      if (!next) {
+        return;
+      }
+      await commit(next);
+      sync().catch(() => undefined);
+    },
+    previewInvite: async url => {
+      const parsed = parseLink(url);
+      if (!parsed || parsed.kind !== 'invite') {
+        return null;
+      }
+      const marker = groupMarker(parsed.groupId);
+      try {
+        keyFromString(parsed.groupKey);
+        const invite = await readInvite(parsed.inviteId);
+        if (!invite?.ciphertext) {
+          return { ...marker, label: t('join.previewPending') };
+        }
+        const opened = openJson<{ name?: string; memberNames?: string[] }>(invite.ciphertext, keyFromString(parsed.groupKey));
+        return {
+          ...marker,
+          label: groupDisplayName(opened.name ?? '', opened.memberNames ?? []),
+        };
+      } catch {
+        return { ...marker, label: t('join.previewPending') };
       }
     },
     sendEmail: async email => {
@@ -491,7 +531,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         setError(t('join.invalid'));
         return false;
       }
-      await saveSecret('group-key', parsed.groupKey);
+      await saveSecret(groupKeyAccount(parsed.groupId), parsed.groupKey);
       const uid = snapshotRef.current.profile.uid || (await ensureAnonymousUser());
       try {
         await callFunction(env, 'joinGroup', { inviteId: parsed.inviteId });
@@ -504,25 +544,34 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         setNotice(t('sync.offline'));
       }
       const name = snapshotRef.current.profile.displayName || sillyName(uid);
-      const next = withProfile(snapshotRef.current, {
+      const parked = parkActive(withProfile(snapshotRef.current, {
         uid,
-        inviteId: parsed.inviteId,
-        onboarded: true,
-        groupId: parsed.groupId,
         displayName: name,
         nameLocked: snapshotRef.current.profile.nameLocked,
-      });
+      }));
       await commit({
-        ...next,
+        ...parked,
+        profile: {
+          ...parked.profile,
+          inviteId: parsed.inviteId,
+          onboarded: true,
+          groupId: parsed.groupId,
+        },
         group: {
           id: parsed.groupId,
-          name: 'Shared list',
+          name: '',
           ownerId: '',
           memberIds: [uid],
           peopleCount: 0,
           entitled: false,
           updatedAt: 0,
         },
+        members: [{ id: uid, uid, displayName: name, updatedAt: Date.now() }],
+        people: [],
+        occasions: [],
+        states: [],
+        gifts: [],
+        ideas: [],
         dirty: {},
       });
       try {
@@ -544,19 +593,27 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         for (const wrap of wraps) {
           try {
             const key = unwrapKey(wrap, code);
-            await saveSecret('group-key', keyToString(key));
-            const next = withProfile(snapshotRef.current, { uid, groupId: wrap.groupId, onboarded: true, upgraded: true });
+            await saveSecret(groupKeyAccount(wrap.groupId), keyToString(key));
+            const parked = parkActive(withProfile(snapshotRef.current, { uid, onboarded: true, upgraded: true }));
             await commit({
-              ...next,
+              ...parked,
+              profile: { ...parked.profile, groupId: wrap.groupId, inviteId: null },
               group: {
                 id: wrap.groupId,
-                name: 'Shared list',
+                name: '',
                 ownerId: uid,
                 memberIds: [uid],
                 peopleCount: 0,
                 entitled: false,
-                updatedAt: Date.now(),
+                updatedAt: 0,
               },
+              members: [],
+              people: [],
+              occasions: [],
+              states: [],
+              gifts: [],
+              ideas: [],
+              dirty: {},
             });
             await sync(snapshotRef.current);
             return;
@@ -805,12 +862,14 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         inviteId = randomId();
         await commit(withProfile(current, { inviteId }));
       }
+      const groupKey = (await loadGroupKeyString(current.group.id)) ?? '';
       try {
-        await createInvite(current.group.id, inviteId, current.profile.uid);
+        if (groupKey) {
+          await publishPreview(snapshotRef.current, keyFromString(groupKey));
+        }
       } catch {
         setNotice(t('sync.offline'));
       }
-      const groupKey = (await loadSecret('group-key')) ?? '';
       const httpsLink = buildInviteUrl({
         domain: env.inviteDomain,
         groupId: current.group.id,
@@ -818,7 +877,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         groupKey,
       });
       const appLink = buildAppInviteUrl({ groupId: current.group.id, inviteId, groupKey });
-      return `${httpsLink}\n${appLink}`;
+      const label = groupDisplayName(current.group.name, memberNames(snapshotRef.current.members));
+      const marker = groupMarker(current.group.id);
+      return t('groupScreen.shareText', { marker: marker.emoji, name: label, links: `${httpsLink}\n${appLink}` });
     },
     leave: async () => {
       const current = snapshotRef.current;
@@ -840,18 +901,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       } catch {
         setNotice(t('sync.offline'));
       }
-      const profile = current.profile;
-      await commit({
-        ...emptySnapshot(Date.now()),
-        profile: {
-          ...emptySnapshot(Date.now()).profile,
-          uid,
-          displayName: profile.displayName,
-          nameLocked: profile.nameLocked,
-          createdAt: profile.createdAt,
-          upgraded: profile.upgraded,
-        },
-      });
+      await commit(leaveActiveGroup(current));
+      sync().catch(() => undefined);
     },
     removeGroupMember: async uid => {
       const result = removeMember(snapshotRef.current, uid, Date.now());
@@ -864,9 +915,21 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     },
     renameList: async name => {
       await commit(renameGroup(snapshotRef.current, name.trim(), Date.now()));
+      const secret = snapshotRef.current.group
+        ? await loadGroupKeyString(snapshotRef.current.group.id)
+        : null;
+      if (secret) {
+        publishPreview(snapshotRef.current, keyFromString(secret)).catch(() => undefined);
+      }
       sync().catch(() => undefined);
     },
-    showRecovery: async () => loadSecret('recovery-code'),
+    showRecovery: async () => {
+      const id = snapshotRef.current.group?.id;
+      if (!id) {
+        return null;
+      }
+      return loadSecret(recoveryAccount(id));
+    },
     exportText: () => exportList(snapshotRef.current, new Date(), formatMoney),
     dismissBanner: async () => {
       await commit(withProfile(snapshotRef.current, { upgradeBannerDismissed: true }));
@@ -925,6 +988,39 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   }), [addImported, cloudRemaining, colors, commit, env, error, fail, notice, ready, recoveryCode, skinId, snapshot, storeProduct, storeReady, sync]);
 
   return <GifteezContext.Provider value={api}>{children}</GifteezContext.Provider>;
+}
+
+function groupKeyAccount(groupId: string): string {
+  return `group-key:${groupId}`;
+}
+
+function recoveryAccount(groupId: string): string {
+  return `recovery-code:${groupId}`;
+}
+
+async function loadGroupKeyString(groupId: string): Promise<string | null> {
+  const saved = await loadSecret(groupKeyAccount(groupId));
+  if (saved) {
+    return saved;
+  }
+  const legacy = await loadSecret('group-key');
+  if (!legacy) {
+    return null;
+  }
+  await saveSecret(groupKeyAccount(groupId), legacy);
+  return legacy;
+}
+
+async function publishPreview(snapshot: AppSnapshot, key: Uint8Array): Promise<void> {
+  if (!snapshot.group || !snapshot.profile.inviteId || !snapshot.profile.uid) {
+    return;
+  }
+  await createInvite(
+    snapshot.group.id,
+    snapshot.profile.inviteId,
+    snapshot.profile.uid,
+    sealJson({ name: snapshot.group.name, memberNames: memberNames(snapshot.members) }, key),
+  );
 }
 
 async function ensureDeviceKey(): Promise<Uint8Array> {

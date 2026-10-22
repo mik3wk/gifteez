@@ -78,6 +78,15 @@ export type GroupMeta = {
   updatedAt: number;
 };
 
+export type GroupSummary = {
+  id: string;
+  name: string;
+  ownerId: string;
+  memberIds: string[];
+  memberNames: string[];
+  updatedAt: number;
+};
+
 export type Member = {
   id: string;
   uid: string;
@@ -102,9 +111,23 @@ export type Profile = {
 
 export type DirtyMap = Record<string, true>;
 
+export type GroupArchive = {
+  group: GroupMeta;
+  members: Member[];
+  people: Person[];
+  occasions: Occasion[];
+  states: OccasionState[];
+  gifts: GiftRecord[];
+  ideas: IdeaCacheEntry[];
+  dirty: DirtyMap;
+  inviteId: string | null;
+};
+
 export type AppSnapshot = {
   version: 1;
   profile: Profile;
+  roster: GroupSummary[];
+  archives: Record<string, GroupArchive>;
   group: GroupMeta | null;
   members: Member[];
   people: Person[];
@@ -141,6 +164,8 @@ export function emptySnapshot(now: number): AppSnapshot {
       pendingVerificationId: null,
       inviteId: null,
     },
+    roster: [],
+    archives: {},
     group: null,
     members: [],
     people: [],

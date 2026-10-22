@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 500">
+  <rect width="1024" height="500" fill="#1F6B4A"/>
+  <rect x="72" y="150" width="200" height="150" rx="20" fill="#F6F1E7"/>
+  <rect x="56" y="100" width="232" height="70" rx="16" fill="#FFFCF7"/>
+  <rect x="156" y="90" width="32" height="220" fill="#C4622D"/>
+  <rect x="56" y="168" width="232" height="28" fill="#C4622D"/>
+  <text x="360" y="200" font-family="Inter, Noto Sans, sans-serif" font-size="64" font-weight="700" fill="#F6F1E7">Gifteez</text>
+  <text x="360" y="270" font-family="Inter, Noto Sans, sans-serif" font-size="28" fill="#E7F0EA">Gift tracker and ideas.</text>
+  <text x="360" y="320" font-family="Inter, Noto Sans, sans-serif" font-size="28" fill="#E7F0EA">Private. Fair. No account form.</text>
+</svg>

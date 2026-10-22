@@ -3,7 +3,11 @@ import {
   bannerDue,
   birthdayNameFromTitle,
   canAddPerson,
+  createGroup,
   fairnessRows,
+  groupDisplayName,
+  groupMarker,
+  memberNames,
   mergeRemote,
   nextOccurrence,
   parseImport,
@@ -12,6 +16,7 @@ import {
   sillyName,
   sortPeople,
   statusFor,
+  switchGroup,
   yearSpentCents,
 } from '../src/domain/logic';
 import { suggestIdeas } from '../src/domain/ideas';
@@ -193,6 +198,40 @@ test('server caps are per person and per device, not per anonymous uid', () => {
   expect(canRefresh({ usage, paid: false, now, limits, refresh: true, cacheHit: false }).ok).toBe(false);
   expect(canRefresh({ usage, paid: false, now, limits, refresh: false, cacheHit: true }).counted).toBe(false);
   expect(claimSlot(5, false, 'add', 5).ok).toBe(false);
+});
+
+test('names groups from members, and switching keeps the other list', () => {
+  expect(groupDisplayName('', ['Mike', 'Sam', 'Jo'])).toBe('Mike, Sam & Jo');
+  expect(groupDisplayName('', ['Mike', 'Sam', 'Jo', 'Ada'])).toBe('Mike, Sam & Jo +1');
+  expect(groupDisplayName('Family', ['Mike', 'Sam'])).toBe('Family');
+  expect(groupDisplayName('', [])).toBe('Gifteez');
+  expect(groupMarker('same').emoji).toBe(groupMarker('same').emoji);
+  const first = createGroup({
+    snapshot: emptySnapshot(1),
+    groupId: 'g1',
+    ownerId: 'u',
+    displayName: 'Mike',
+    groupName: '',
+    now: 1,
+  });
+  first.people = [person('p', 'Ada')];
+  const second = createGroup({
+    snapshot: first,
+    groupId: 'g2',
+    ownerId: 'u',
+    displayName: 'Mike',
+    groupName: 'Holidays',
+    now: 2,
+  });
+  expect(second.group?.name).toBe('Holidays');
+  expect(second.people).toHaveLength(0);
+  expect(second.archives.g1.people.map(item => item.name)).toEqual(['Ada']);
+  const back = switchGroup(second, 'g1');
+  expect(back?.group?.id).toBe('g1');
+  expect(back?.people.map(item => item.name)).toEqual(['Ada']);
+  expect(groupDisplayName(back?.group?.name ?? '', memberNames(back?.members ?? []))).toBe('Mike');
+  expect(second.group?.name.includes('Holidays')).toBe(true);
+  expect(JSON.stringify(second.group).includes('Holidays')).toBe(true);
 });
 
 function person(id: string, name: string, budgetCents: number | null = null): Person {

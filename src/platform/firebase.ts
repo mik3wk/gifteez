@@ -217,13 +217,26 @@ export async function readSealed(groupId: string, collectionName: string): Promi
   });
 }
 
-export async function createInvite(groupId: string, inviteId: string, uid: string): Promise<void> {
+export async function createInvite(groupId: string, inviteId: string, uid: string, ciphertext: string): Promise<void> {
   await setDoc(doc(getFirestore(), 'invites', inviteId), {
     groupId,
     createdBy: uid,
     createdAt: Date.now(),
     active: true,
+    ciphertext,
   });
+}
+
+export async function readInvite(inviteId: string): Promise<{ groupId: string; ciphertext: string } | null> {
+  const snap = await getDoc(doc(getFirestore(), 'invites', inviteId));
+  if (!snap.exists()) {
+    return null;
+  }
+  const data = snap.data() as { groupId?: unknown; ciphertext?: unknown };
+  return {
+    groupId: typeof data.groupId === 'string' ? data.groupId : '',
+    ciphertext: typeof data.ciphertext === 'string' ? data.ciphertext : '',
+  };
 }
 
 export async function writeRecovery(uid: string, groupId: string, payload: Record<string, string>): Promise<void> {

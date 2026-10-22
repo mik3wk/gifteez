@@ -49,6 +49,8 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - **Offline conflicts:** last write wins, with a small "updated on another device" toast.
 - **AI cap identity:** the refresh cap is not tied to the anonymous UID, because a reinstall would reset it. It's tied to a device ID plus a fingerprint hash stored on the server.
 - **Cost:** anonymous auth sends no texts, so it has no SMS cost. Email magic link is the default upgrade path because texts are the main Firebase cost driver.
+- **App assets (decided with the build):** the builder generates every app icon (including the Android adaptive icon), the launch screen, empty-state art, bundled seasonal motifs, and the store graphics from SVG sources in `assets/src`. The rasters are committed. Michael does not swap in replacement art before a simulator run.
+- **Several groups (decided with the build):** one person can belong to more than one group. Each group has an optional name, set at creation and editable later in group settings. The name is user content and is stored only inside the group ciphertext, same as other user content. If no name is set, the label is the members' names joined (`Mike, Sam & Jo`), shortened with `+N` when it would run long. A stable emoji and color, derived from the group id, mark the group in the switcher, headers, and invite preview. The invite preview ciphertext is on the invite document so the server still cannot read the name; the key stays in the link fragment.
 
 ## 1. Foundation
 - [x] React Native 0.88 TypeScript scaffold for iOS and Android (`~/Documents/Projects/Gifteez`)
@@ -66,6 +68,7 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] Design key sharing for group members under end-to-end encryption. Interim: the group key is in the invite-link fragment, with a recovery-code wrap for a second device. Not a pairwise ratchet.
 - [x] Offline-first: read and write the encrypted local copy offline, and merge to the cloud when the connection returns
 - [x] Resolve merge conflicts with last write wins, and show a small "updated on another device" toast
+- [x] Generate the app icon at every iOS size (iPhone and iPad) and the Android adaptive icon, plus the launch screen, from the SVG sources
 
 ## 2. First open and onboarding
 - [x] Build the first-open screen: one sentence explaining the app, plus "Start" and "Join" buttons
@@ -92,6 +95,10 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] Enforce the 2–5 member limit. The maximum is 5. A list can exist with one person before anyone joins.
 - [x] Sync group records through Firestore
 - [x] Handle leaving a group and removing a member
+- [x] Let a person belong to several groups, with a switcher
+- [x] Optional group name at creation and in group settings; blank name displays the members' names (`Mike, Sam & Jo`, truncated with `+N`)
+- [x] Show that label, with a stable emoji and color marker, on the switcher, invite preview, share text, and screen headers
+- [x] Keep the group name inside the encrypted payload (and the encrypted invite preview), not in plaintext Firestore fields
 
 ## 5. People list
 - [x] Add a person manually with a name and an optional budget
@@ -101,6 +108,7 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] Imported people stay inert (no AI calls) until opened
 - [x] Sort the people list by the next upcoming occasion
 - [x] Show budget used versus remaining on each row
+- [x] Empty-state art for the people list and the fairness view, generated from SVG
 
 ## 6. Person detail screen
 - [x] Show the person's name, budget, interest tags and occasions
@@ -159,11 +167,12 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] Turn skins on by date through Remote Config, with no app update
 - [x] Keep the layout identical across skins so text and buttons don't break
 - [x] Fall back to the base theme if a skin download fails
+- [x] Bundle seasonal motif art for base, fall, winter, spring, and summer (same slot on every skin; colors for spring and summer can still download)
 
 ## 13. Store listing and launch
 - [x] App name Gifteez, with a keyword title or subtitle (e.g. "Gifteez: Gift Tracker & Ideas")
 - [x] Privacy-focused description
-- [ ] Screenshots showing that no account is needed
+- [x] Screenshots showing that no account is needed, plus the Play feature graphic, generated from SVG into `assets/store` (composed frames of the product UI; a later simulator capture can replace them if review asks, and Michael does not have to draw them)
 - [x] Categories: Lifestyle (primary) and Shopping
 - [x] No keyword stuffing
 - [ ] Fill out Apple's privacy label and Google Play's Data safety form

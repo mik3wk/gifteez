@@ -50,6 +50,16 @@ Third parties that receive data only when the user asks for cloud ideas: OpenAI,
 
 Purpose labels: App functionality. Not analytics advertising, not third-party advertising.
 
+Generated graphics, from the same SVG pipeline as the app icon, are in `assets/store`:
+
+- `iphone-people-6.7.png`, `iphone-person-6.7.png`, `iphone-fairness-6.7.png` (1290×2796)
+- the same three at 6.5-inch (`*-6.5.png`, 1284×2778)
+- `android-people.png`, `android-person.png`, `android-fairness.png` (1080×1920)
+- `feature-graphic.png` (1024×500)
+- `ipad-people.png` (2048×2732)
+
+These are composed frames of the product UI. A later capture from the simulator can replace them if review asks.
+
 ## What the screenshots should show
 
 1. First open: one sentence, Start, and Join. No account form.

@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "prepare-config": "node scripts/generate-firebase-config.js",
+    "assets": "node scripts/rasterize-assets.js",
     "android": "npm run prepare-config && react-native run-android",
     "ios": "npm run prepare-config && react-native run-ios",
     "lint": "eslint .",
@@ -58,6 +59,7 @@
     "jest": "^29.6.3",
     "prettier": "2.8.8",
     "react-test-renderer": "19.3.0",
+    "sharp": "^0.35.5",
     "typescript": "^6.0.3"
   },
   "engines": {

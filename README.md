@@ -77,6 +77,16 @@ Upload `skins/spring.json` and `skins/summer.json` to Cloud Storage as `skins/sp
 
 Set a Google Cloud billing budget alert on the Firebase project before real traffic. Confirm the current OpenAI price for `OPENAI_MODEL` (default `gpt-4o-mini`) on OpenAI's pricing page and cap that spend too. A five-idea reply is a short request; the server cap (5 fresh generations per person on the free tier, 20 per person per UTC month when paid) is the abuse backstop. Only a refresh that misses the server cache counts.
 
+## Several groups
+
+A person can be in more than one list. Start another one from the group screen. Each list has an optional name. Leave the name blank and the label is the members' first names, such as `Mike, Sam & Jo`, with `+N` when the line would get long. An emoji and a color, chosen from the list id, show next to that label in the switcher, the screen headers, the share text, and the join preview.
+
+The name is encrypted with the group key. Firestore does not store it in the clear. The invite document holds a ciphertext preview, and the key stays in the link fragment, so the join screen can show the name before you join.
+
+## Assets
+
+Icons, the launch screen, empty-state art, seasonal motifs, and the store graphics are generated from `assets/src/*.svg`. `npm run assets` writes the PNGs (iOS app icon set, Android adaptive icon, splash, `src/assets`, and `assets/store`). Both the SVGs and the PNGs are committed. You do not replace them before a simulator run. The store frames are composed pictures of the UI, not captures from a booted simulator.
+
 ## Encryption
 
 User content is encrypted on the device with AES-256-GCM (`@noble/ciphers`) before it is written to Firestore or to the local cache. The device cache key lives in the iOS Keychain or Android Keystore. A group data key also lives there.
