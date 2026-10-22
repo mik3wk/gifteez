@@ -12,7 +12,7 @@ module.exports = {
   ],
   overrides: [
     {
-      files: ['scripts/**/*.js', 'jest.config.js', 'babel.config.js', 'metro.config.js'],
+      files: ['scripts/**/*.js', 'jest.config.js', 'babel.config.js', 'metro.config.js', 'react-native.config.js'],
       env: { node: true },
     },
   ],
