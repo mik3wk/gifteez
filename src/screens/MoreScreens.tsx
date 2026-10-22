@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { joinConfirmModel, type JoinPreview } from '../app/incomingLink';
+import type { RootStack } from '../app/navigation';
 import { getEnv } from '../config/env';
 import { accountUnlocked, canStartAnotherList, fairnessRows, groupDisplayName, groupMarker } from '../domain/logic';
 import { formatMoney, t } from '../i18n';
@@ -127,6 +132,87 @@ export function GroupScreen() {
           await startGroup(personName, groupName);
           setCreating(false);
         }}
+      />
+    </Screen>
+  );
+}
+
+export function JoinConfirmScreen() {
+  const route = useRoute<RouteProp<RootStack, 'JoinConfirm'>>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
+  const { previewInvite, joinFromLink } = useGifteez();
+  const [preview, setPreview] = useState<JoinPreview | null>(null);
+  const [joining, setJoining] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    previewInvite(route.params.url)
+      .then(next => {
+        if (!cancelled) {
+          setPreview(next);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPreview(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [previewInvite, route.params.url]);
+  return (
+    <JoinConfirmView
+      model={joinConfirmModel(preview)}
+      joining={joining}
+      onJoin={() => {
+        if (joining) {
+          return;
+        }
+        setJoining(true);
+        joinFromLink(route.params.url)
+          .catch(() => undefined)
+          .finally(() => setJoining(false));
+      }}
+      onCancel={() => {
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        }
+      }}
+    />
+  );
+}
+
+export function JoinConfirmView({
+  model,
+  joining,
+  onJoin,
+  onCancel,
+}: {
+  model: ReturnType<typeof joinConfirmModel>;
+  joining?: boolean;
+  onJoin: () => void;
+  onCancel: () => void;
+}) {
+  const heading = model.emoji ? `${model.emoji} ${model.question}` : model.question;
+  return (
+    <Screen>
+      <Text
+        accessibilityRole="header"
+        accessibilityLabel={model.question}
+        style={[styles.name, model.color ? { color: model.color } : null]}>
+        {heading}
+      </Text>
+      <Button
+        label={t('join.confirmJoin')}
+        accessibilityLabel={model.joinLabel}
+        disabled={joining}
+        onPress={onJoin}
+      />
+      <Button
+        label={t('join.confirmCancel')}
+        accessibilityLabel={model.cancelLabel}
+        tone="secondary"
+        onPress={onCancel}
       />
     </Screen>
   );
