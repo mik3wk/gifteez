@@ -6,6 +6,15 @@
     "missing": "Missing or placeholder: {keys}",
     "safe": "The app is running. Nothing was sent to a server."
   },
+  "startup": {
+    "title": "Gifteez could not start",
+    "config": "Firebase is not configured on this phone. Fill in .env and rebuild the native app.",
+    "network": "The phone could not reach Firebase. Check the connection and try again.",
+    "auth": "Anonymous sign-in is turned off. In the Firebase console, open Authentication and enable Anonymous, then try again.",
+    "unknown": "Gifteez could not finish starting.",
+    "retry": "Retry",
+    "retryLabel": "Retry starting Gifteez"
+  },
   "firstOpen": {
     "sentence": "Gifteez helps you remember gifts for the people you love, and keep the spending fair.",
     "start": "Start",

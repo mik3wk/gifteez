@@ -8,6 +8,7 @@ import { FirstOpenScreen } from '../screens/FirstOpen';
 import { FairnessScreen, GroupScreen, JoinConfirmScreen, JoinScreen, SettingsScreen } from '../screens/MoreScreens';
 import { describeIncomingLink } from './incomingLink';
 import { PeopleScreen } from '../screens/PeopleScreen';
+import { StartupScreen } from '../screens/StartupScreen';
 import { GifteezProvider, useGifteez } from '../state/GifteezContext';
 import { Body, Button, Screen, Title } from '../ui/ui';
 import { Notice } from '../ui/ui';
@@ -78,6 +79,15 @@ function Navigator() {
       <Screen>
         <Body>{t('common.loading')}</Body>
       </Screen>
+    );
+  }
+  if (gifteez.startupFailure) {
+    return (
+      <StartupScreen
+        kind={gifteez.startupFailure}
+        detail={gifteez.startupDetail ?? ''}
+        onRetry={gifteez.retryStartup}
+      />
     );
   }
   return (

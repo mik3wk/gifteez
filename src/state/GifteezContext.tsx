@@ -16,6 +16,7 @@ import {
   wrapKey,
 } from '../crypto/crypto';
 import { ideaCacheId, suggestIdeas } from '../domain/ideas';
+import { classifyStartupError, startupCause, type StartupFailure } from '../domain/startup';
 import { performJoin } from '../domain/joinFlow';
 import {
   addFeedback,
@@ -101,6 +102,9 @@ type GifteezApi = {
   skinId: string;
   notice: string | null;
   error: string | null;
+  startupFailure: StartupFailure | null;
+  startupDetail: string | null;
+  retryStartup: () => void;
   recoveryCode: string | null;
   storeProduct: StoreProduct | null;
   storeReady: boolean;
@@ -156,8 +160,11 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const [snapshot, setSnapshot] = useState<AppSnapshot>(() => emptySnapshot(Date.now()));
   const snapshotRef = useRef(snapshot);
   const [ready, setReady] = useState(false);
+  const [bootId, setBootId] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [startupFailure, setStartupFailure] = useState<StartupFailure | null>(null);
+  const [startupDetail, setStartupDetail] = useState<string | null>(null);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [skinId, setSkinId] = useState<SkinId>('base');
   const [colors, setColors] = useState<ThemeColors>(colorsFor('base', {}).colors);
@@ -316,8 +323,16 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         } catch {
           // Entitlement stays local until the function is deployed.
         }
-      } catch {
-        setError(t('errors.generic'));
+        if (!cancelled) {
+          setStartupFailure(null);
+          setStartupDetail(null);
+        }
+      } catch (caught) {
+        if (!cancelled) {
+          setError(null);
+          setStartupFailure(classifyStartupError(caught));
+          setStartupDetail(startupCause(caught));
+        }
       } finally {
         if (!cancelled) {
           setReady(true);
@@ -337,7 +352,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       sub.remove();
       clearInterval(timer);
     };
-  }, [commit, env, sync]);
+  }, [bootId, commit, env, sync]);
 
   useEffect(() => {
     const stop = listenToPurchases(purchase => {
@@ -401,6 +416,12 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     skinId,
     notice,
     error,
+    startupFailure,
+    startupDetail,
+    retryStartup: () => {
+      setReady(false);
+      setBootId(value => value + 1);
+    },
     recoveryCode,
     storeProduct,
     storeReady,
@@ -1011,7 +1032,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       return addImported(rows);
     },
-  }), [addImported, cloudRemaining, colors, commit, env, error, fail, notice, ready, recoveryCode, skinId, snapshot, storeProduct, storeReady, sync]);
+  }), [addImported, cloudRemaining, colors, commit, env, error, fail, notice, ready, recoveryCode, skinId, snapshot, startupDetail, startupFailure, storeProduct, storeReady, sync]);
 
   return <GifteezContext.Provider value={api}>{children}</GifteezContext.Provider>;
 }

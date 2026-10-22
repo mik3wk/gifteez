@@ -44,7 +44,7 @@ export const BUNDLED_SKINS: Record<'base' | 'fall' | 'winter', ThemeColors> = {
     surface: '#FFF8EF',
     text: '#2C2118',
     muted: '#6E5844',
-    accent: '#C4622D',
+    accent: '#A24C22',
     accentText: '#FFF8EF',
     border: '#E4CDB4',
     danger: '#9C3B2E',
@@ -108,6 +108,32 @@ export function colorsFor(
     return { id, colors: downloaded[id] as ThemeColors };
   }
   return { id: 'base', colors: BUNDLED_SKINS.base };
+}
+
+function channelLuminance(channel: number): number {
+  const value = channel / 255;
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+function relativeLuminance(hex: string): number {
+  const match = /^#([0-9a-fA-F]{6})$/.exec(hex);
+  if (!match) {
+    throw new Error(`Color must be #RRGGBB, got ${hex}.`);
+  }
+  const raw = match[1];
+  const red = channelLuminance(parseInt(raw.slice(0, 2), 16));
+  const green = channelLuminance(parseInt(raw.slice(2, 4), 16));
+  const blue = channelLuminance(parseInt(raw.slice(4, 6), 16));
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+/** WCAG contrast ratio. 4.5 is the minimum for normal text. */
+export function contrastRatio(foreground: string, background: string): number {
+  const first = relativeLuminance(foreground);
+  const second = relativeLuminance(background);
+  const lighter = Math.max(first, second);
+  const darker = Math.min(first, second);
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 export function parseSkin(value: unknown): ThemeColors | null {

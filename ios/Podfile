@@ -18,6 +18,8 @@ prepare_react_native_project!
 
 # React Native Firebase 27 installs the Firebase Apple SDK with Swift Package
 # Manager. SPM builds require dynamic frameworks; static linkage fails pod install.
+# The same linkage lets the Gifteez target import FirebaseCore. pod install adds
+# that SPM product to the app target (see post_integrate below).
 use_frameworks! :linkage => :dynamic
 
 target 'Gifteez' do
@@ -36,5 +38,11 @@ target 'Gifteez' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+  end
+
+  post_integrate do |installer|
+    if defined?(rnfirebase_add_spm_core_to_app_target)
+      rnfirebase_add_spm_core_to_app_target(installer)
+    end
   end
 end
