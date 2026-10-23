@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Share } from 'react-native';
+import { Share, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -13,7 +13,7 @@ import { useGifteez } from '../state/GifteezContext';
 import { groupHue } from '../theme/skins';
 import { useTheme } from '../theme/useTheme';
 import { useGroupLabel } from '../ui/heading';
-import { Unwrap } from '../ui/motion';
+import { SessionEntrance, Unwrap } from '../ui/motion';
 import { Icon } from '../ui/icons';
 import {
   AccountSheet,
@@ -23,6 +23,7 @@ import {
   Button,
   Caption,
   Card,
+  Display,
   Cluster,
   confirmDestructive,
   EmptyState,
@@ -44,16 +45,18 @@ export function FairnessScreen() {
   const { snapshot } = useGifteez();
   const { scheme } = useTheme();
   const heading = useGroupLabel();
-  const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(snapshot.group));
+  const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(snapshot.group), true);
   const rows = fairnessRows(snapshot, new Date()).filter(row => {
     const person = snapshot.people.find(item => item.id === row.personId);
     return !isHiddenFromViewer(person, snapshot.profile.uid);
   });
   const max = Math.max(1, ...rows.map(row => row.yearSpentCents));
+  const quiet = rows.length > 0 && rows.every(row => row.giftCount === 0);
   return (
     <Screen tab="fairness">
+      <SessionEntrance id="fairness">
       <AppHeader title={heading.label} />
-      <Heading>{t('fairness.title')}</Heading>
+      <Display>{t('fairness.title')}</Display>
       <Body>{t('fairness.intro')}</Body>
       {rows.length === 0 ? (
         <EmptyState
@@ -63,26 +66,28 @@ export function FairnessScreen() {
           onAction={() => navigation.navigate('AddPerson')}
         />
       ) : null}
+      {quiet ? <EmptyState kind="fairness" text={t('fairness.noneYet')} /> : null}
       {rows.map(row => (
         <Card key={row.personId}>
-          <RowLine>
+          <View style={fairnessName}>
             <Avatar initials={row.name} hue={groupHue(row.name.length, scheme)} />
-            <Stack>
-              <Body strong>{row.name}</Body>
-              <Caption>{t('fairness.gifts', { count: row.giftCount })}</Caption>
-              <Caption tone="text">{t('fairness.year', { amount: money(row.yearSpentCents) })}</Caption>
-              <Caption>{t('fairness.all', { amount: money(row.spentCents) })}</Caption>
-              <Caption tone="text">
-                {row.remainingCents == null ? t('fairness.noBudget') : t('fairness.left', { amount: money(row.remainingCents) })}
-              </Caption>
-              <ProgressBar value={row.yearSpentCents / max} />
-            </Stack>
-          </RowLine>
+            <Body strong>{row.name}</Body>
+          </View>
+          <Caption>{t('fairness.gifts', { count: row.giftCount })}</Caption>
+          <Caption tone="text">{t('fairness.year', { amount: money(row.yearSpentCents) })}</Caption>
+          <Caption>{t('fairness.all', { amount: money(row.spentCents) })}</Caption>
+          <Caption tone="text">
+            {row.remainingCents == null ? t('fairness.noBudget') : t('fairness.left', { amount: money(row.remainingCents) })}
+          </Caption>
+          <ProgressBar value={row.yearSpentCents / max} />
         </Card>
       ))}
+      </SessionEntrance>
     </Screen>
   );
 }
+
+const fairnessName = { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12 };
 
 export function GroupScreen() {
   const { snapshot, shareInvite, leave, removeGroupMember, renameList, showRecovery, switchGroup, startGroup, transferOwnership, setListCurrency } = useGifteez();
@@ -106,9 +111,10 @@ export function GroupScreen() {
   const members = snapshot.members.filter(member => !member.deleted);
   return (
     <Screen tab="group">
+      <SessionEntrance id="group">
       <AppHeader title={heading.label} />
       <Heading>{t('groupScreen.lists')}</Heading>
-      {snapshot.roster.length === 0 ? <EmptyState kind="group" text={t('groupScreen.lists')} /> : null}
+      {snapshot.roster.length === 0 ? <EmptyState kind="group" text={t('groupScreen.listsEmpty')} /> : null}
       {snapshot.roster.map(item => {
         const label = groupDisplayName(item.name, item.memberNames);
         const active = item.id === snapshot.group?.id;
@@ -232,6 +238,7 @@ export function GroupScreen() {
           }
         }}
       />
+      </SessionEntrance>
       <UnlockSheet visible={unlocking} onClose={() => setUnlocking(false)} />
       <AccountSheet visible={upgrade} allowName={false} showCreate={false} onClose={() => setUpgrade(false)} />
       <AccountSheet
@@ -475,6 +482,7 @@ export function SettingsScreen() {
   const saved = snapshot.profile.upgraded;
   return (
     <Screen tab="settings">
+      <SessionEntrance id="settings">
       <AppHeader title={heading.label} />
       <Heading>{t('settings.title')}</Heading>
       <Card>
@@ -565,6 +573,7 @@ export function SettingsScreen() {
         />
       </Card>
       {message ? <Body>{message}</Body> : null}
+      </SessionEntrance>
       <AccountSheet
         visible={upgrade}
         allowName={false}

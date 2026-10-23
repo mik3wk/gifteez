@@ -11,6 +11,7 @@ import { groupHue } from '../theme/skins';
 import { useTheme } from '../theme/useTheme';
 import { occasionLook } from '../theme/tokens';
 import { useGroupLabel } from '../ui/heading';
+import { SessionEntrance } from '../ui/motion';
 import { AccountSheet, AppHeader, Banner, EmptyState, HeroCard, PersonRow, Screen, SectionHeader, StatRow, StatTile } from '../ui/ui';
 import { DuplicateOffers } from './mergeUi';
 
@@ -50,6 +51,7 @@ export function PeopleScreen() {
 
   return (
     <Screen tab="people">
+      <SessionEntrance id="people">
       <AppHeader title={heading.label} greeting={greeting} />
       <DuplicateOffers
         offers={duplicateOffers}
@@ -136,6 +138,7 @@ export function PeopleScreen() {
           />
         );
       })}
+      </SessionEntrance>
       <AccountSheet visible={upgrade} allowName={false} showCreate={false} onClose={() => setUpgrade(false)} />
     </Screen>
   );
