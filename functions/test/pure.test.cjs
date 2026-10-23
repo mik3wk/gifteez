@@ -201,6 +201,10 @@ test('a free account cannot start a second list, a paid account can, and joining
 test('pod install enables the Firebase Firestore SwiftPM trait', () => {
   const podfile = fs.readFileSync(path.join(__dirname, '..', '..', 'ios', 'Podfile'), 'utf8');
   const helper = fs.readFileSync(path.join(__dirname, '..', '..', 'ios', 'firebase_spm_traits.rb'), 'utf8');
+  const manifest = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'ios', 'FirebaseFirestoreTrait', 'Package.swift'),
+    'utf8',
+  );
   assert.match(podfile, /require_relative 'firebase_spm_traits'/);
   assert.ok(
     podfile.indexOf("require_relative 'firebase_spm_traits'") < podfile.indexOf('prepare_react_native_project!'),
@@ -211,4 +215,10 @@ test('pod install enables the Firebase Firestore SwiftPM trait', () => {
   assert.match(helper, /GIFTEEZ_FIREBASE_SPM_TRAITS = %w\[Firestore default\]/);
   assert.match(helper, /github.com\/firebase\/firebase-ios-sdk/);
   assert.match(helper, /run_podfile_post_integrate_hooks/);
+  assert.match(helper, /RNFBFirestore/);
+  assert.match(helper, /FirebaseFirestoreTrait/);
+  assert.match(manifest, /exact: "13\.0\.0"/);
+  assert.match(manifest, /"Firestore"/);
+  assert.match(manifest, /\.defaults/);
+  assert.match(manifest, /product\(name: "FirebaseFirestore"/);
 });
