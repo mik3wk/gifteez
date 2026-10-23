@@ -216,7 +216,6 @@
 				"$(SRCROOT)/Gifteez/GoogleService-Info.plist",
 				"$(SRCROOT)/../android/app/google-services.json",
 				"$(SRCROOT)/../.firebaserc",
-				"$(SRCROOT)/Gifteez/Gifteez.entitlements",
 				"$(SRCROOT)/../android/app/src/main/AndroidManifest.xml",
 				"$(SRCROOT)/../hosting/join/index.html",
 				"$(SRCROOT)/../hosting/.well-known/apple-app-site-association",
