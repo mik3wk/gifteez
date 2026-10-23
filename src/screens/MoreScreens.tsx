@@ -140,6 +140,7 @@ export function GroupScreen() {
           ) : null}
         </Card>
       ))}
+      <Body>{t('groupScreen.recoveryWhy')}</Body>
       <Button
         label={t('groupScreen.recovery')}
         tone="secondary"
@@ -384,6 +385,7 @@ export function SettingsScreen() {
           }
         }}
       />
+      <Body>{t('settings.remindersHint')}</Body>
       <Button
         label={snapshot.profile.reminders === 'on' ? t('settings.remindersOn') : t('settings.remindersOff')}
         accessibilityLabel={t('settings.remindersLabel')}
@@ -403,11 +405,13 @@ export function SettingsScreen() {
       </Card>
       <Body>{t('settings.skinNow', { skin: skinId })}</Body>
       <Body>{t('settings.optional')}</Body>
+      <Body>{t('settings.calendarHint')}</Body>
       <Button
         label={t('settings.calendar')}
         tone="secondary"
         onPress={async () => setMessage(await describeImport(await importFromCalendar()))}
       />
+      <Body>{t('settings.contactsHint')}</Body>
       <Button
         label={t('settings.contacts')}
         tone="secondary"

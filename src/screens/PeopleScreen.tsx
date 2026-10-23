@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -16,21 +16,24 @@ import { yearSpentCents } from '../domain/logic';
 
 export function PeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, showBanner, dismissBanner, colors, skinId, duplicateOffers, dismissDuplicateOffer } = useGifteez();
+  const { snapshot, showBanner, dismissBanner, colors, skinId, duplicateOffers, dismissDuplicateOffer, resumePersonId, clearResumePerson } = useGifteez();
   const heading = useGroupHeading();
   const [upgrade, setUpgrade] = useState(false);
   const people = sortPeople(snapshot.people, snapshot.occasions, new Date());
   const year = new Date().getFullYear();
+  useLayoutEffect(() => {
+    if (!resumePersonId) {
+      return;
+    }
+    const personId = resumePersonId;
+    clearResumePerson();
+    navigation.navigate('Person', { personId });
+  }, [clearResumePerson, navigation, resumePersonId]);
   return (
     <Screen
       footer={people.length > 0 ? <Button label={t('people.add')} accessibilityLabel={t('people.add')} onPress={() => navigation.navigate('AddPerson')} /> : undefined}>
       <SkinBanner skinId={skinId} />
-      <Title>{`${heading.emoji} ${heading.label}`}</Title>
-      <View style={styles.actions}>
-        <Button flex label={t('people.fairness')} tone="secondary" onPress={() => navigation.navigate('Fairness')} />
-        <Button flex label={t('people.group')} tone="secondary" onPress={() => navigation.navigate('Group')} />
-        <Button flex label={t('people.settings')} tone="secondary" onPress={() => navigation.navigate('Settings')} />
-      </View>
+      <Title>{people.length === 0 ? t('people.title') : `${heading.emoji} ${heading.label}`}</Title>
       <DuplicateOffers
         offers={duplicateOffers}
         onReview={offer => navigation.navigate('SamePerson', {
@@ -82,6 +85,11 @@ export function PeopleScreen() {
           </Row>
         );
       })}
+      <View style={styles.actions}>
+        <Button flex label={t('people.fairness')} tone="ghost" onPress={() => navigation.navigate('Fairness')} />
+        <Button flex label={t('people.group')} tone="ghost" onPress={() => navigation.navigate('Group')} />
+        <Button flex label={t('people.settings')} tone="ghost" onPress={() => navigation.navigate('Settings')} />
+      </View>
       <AccountSheet visible={upgrade} allowName={false} showCreate={false} onClose={() => setUpgrade(false)} />
     </Screen>
   );

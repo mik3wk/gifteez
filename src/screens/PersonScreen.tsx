@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -20,14 +20,13 @@ export function AddPersonScreen() {
   const navigation = useNavigation();
   const { addPerson } = useGifteez();
   const [name, setName] = useState('');
-  const [budget, setBudget] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
   const [nameError, setNameError] = useState('');
   return (
     <Screen>
-      <Title>{t('person.addTitle')}</Title>
+      <Title>{t('firstOpen.title')}</Title>
+      <Body>{t('firstOpen.lead')}</Body>
       <Field
-        label={t('person.name')}
+        label={t('firstOpen.theirName')}
         value={name}
         error={nameError}
         onChangeText={value => {
@@ -35,16 +34,14 @@ export function AddPersonScreen() {
           setNameError('');
         }}
       />
-      <Field label={t('person.budget')} value={budget} onChangeText={setBudget} keyboardType="decimal-pad" />
-      <TagPicker tags={tags} onChange={setTags} />
       <Button
-        label={t('person.save')}
+        label={t('firstOpen.start')}
         onPress={async () => {
           if (!name.trim()) {
             setNameError(t('errors.name'));
             return;
           }
-          const id = await addPerson({ name, budget, tags });
+          const id = await addPerson({ name, budget: '', tags: [] });
           if (id) {
             (navigation as { navigate: (name: string, params: { personId: string }) => void }).navigate('Person', { personId: id });
           }
@@ -71,10 +68,26 @@ export function PersonScreen() {
   const [buying, setBuying] = useState<string | null>(null);
   const [mineOnly, setMineOnly] = useState(false);
   const [editingGift, setEditingGift] = useState<{ id: string; privateGift: boolean } | null>(null);
+  const [findingIdeas, setFindingIdeas] = useState(true);
+  const [ideaNote, setIdeaNote] = useState('');
+  const [interestTags, setInterestTags] = useState<string[]>(person?.tags ?? []);
 
   useEffect(() => {
+    setInterestTags(person?.tags ?? []);
+  }, [person?.id, person?.tags]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFindingIdeas(true);
+    setIdeaNote('');
     if (person) {
-      focusPerson(person.id).catch(() => undefined);
+      focusPerson(person.id).finally(() => {
+        if (!cancelled) {
+          setFindingIdeas(false);
+        }
+      });
+    } else {
+      setFindingIdeas(false);
     }
     // Focus once when the screen opens. Later edits should not regenerate ideas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,22 +121,72 @@ export function PersonScreen() {
     groupId: snapshot.group?.id ?? null,
   });
   const history = visible.filter(item => !mineOnly || isMyPurchase(item, snapshot.profile.uid));
+  const showSpend = person.budgetCents != null
+    || snapshot.gifts.some(item => item.personId === person.id && !item.deleted)
+    || (snapshot.privateGifts ?? []).some(item => item.personId === person.id && !item.deleted);
+  const ideas = onDevice?.ideas ?? [];
   return (
     <Screen>
-      <Title>{person.name}</Title>
       {hidden ? <Body>{t('person.hiddenRecipient')}</Body> : null}
       {locked ? <Body>{t('person.readOnly')}</Body> : null}
       {snapshot.mergeJournal?.targetPersonId === person.id ? (
         <Button label={t('merge.undo')} accessibilityLabel={t('merge.undoLabel')} tone="secondary" onPress={() => undoMerge()} />
       ) : null}
       {person.imported ? <Body>{t('person.openedImported')}</Body> : null}
-      <Field label={t('person.name')} value={name} onChangeText={setName} />
-      <Field label={t('person.budget')} value={budget} onChangeText={setBudget} keyboardType="decimal-pad" />
-      <Button
-        label={t('person.save')}
-        onPress={() => savePerson(person.id, { name: name.trim() || person.name, budgetCents: budget.trim() ? parseBudget(budget) : null, tags: person.tags })}
-      />
-      {hidden ? null : <SpendBreakdown personId={person.id} budgetCents={person.budgetCents} money={money} />}
+      {hidden || locked ? null : <Heading>{t('person.ideas')}</Heading>}
+      {hidden || locked ? null : <Body>{t('person.ideasHint')}</Body>}
+      {hidden || locked || !findingIdeas || ideas.length > 0 ? null : (
+        <ActivityIndicator accessibilityLabel={t('person.ideasLoading')} color={colors.accent} />
+      )}
+      {hidden || locked || !findingIdeas || ideas.length > 0 ? null : <Body>{t('person.ideasLoading')}</Body>}
+      {ideaNote ? <Body>{ideaNote}</Body> : null}
+      {hidden || locked ? null : ideas.map(idea => (
+        <IdeaRow
+          key={idea}
+          idea={idea}
+          onUp={() => vote(person.id, idea, 'up')}
+          onDown={() => vote(person.id, idea, 'down')}
+          onSave={() => {
+            if (!next) {
+              setIdeaNote(t('person.saveIdeaNeedsDate'));
+              return;
+            }
+            setIdeaNote('');
+            return saveIdeaFor(next.occasion.id, idea).then(() => setIdeaNote(t('person.ideaKept')));
+          }}
+        />
+      ))}
+      {hidden || locked ? null : <Body>{t('person.tagsHint')}</Body>}
+      {hidden || locked ? null : (
+        <TagPicker
+          tags={interestTags}
+          onChange={tags => {
+            setInterestTags(tags);
+            setIdeaNote('');
+            return savePerson(person.id, { tags }).then(() => refreshIdeas(person.id));
+          }}
+        />
+      )}
+      {hidden || locked ? null : <Button label={t('person.refresh')} tone="secondary" onPress={() => refreshIdeas(person.id)} />}
+      {hidden || locked ? null : <Body>{t('person.cloudHint')}</Body>}
+      {!hidden && !locked && cloudRemaining[person.id] != null ? <Body>{t('person.cloudLeft', { count: cloudRemaining[person.id] })}</Body> : null}
+      {hidden || locked ? null : <Button label={t('person.cloud')} tone="secondary" onPress={() => cloudIdeas(person.id)} />}
+      {hidden || locked ? null : (cloud?.ideas ?? []).map(idea => (
+        <IdeaRow
+          key={`cloud-${idea}`}
+          idea={idea}
+          onUp={() => vote(person.id, idea, 'up')}
+          onDown={() => vote(person.id, idea, 'down')}
+          onSave={() => {
+            if (!next) {
+              setIdeaNote(t('person.saveIdeaNeedsDate'));
+              return;
+            }
+            setIdeaNote('');
+            return saveIdeaFor(next.occasion.id, idea).then(() => setIdeaNote(t('person.ideaKept')));
+          }}
+        />
+      ))}
       {peopleOnOtherLists(snapshot).length > 0 ? (
         <Button
           label={t('person.samePerson')}
@@ -132,8 +195,6 @@ export function PersonScreen() {
           onPress={() => navigation.navigate('SamePerson', { personId: person.id })}
         />
       ) : null}
-      <Body>{t('person.tagsHint')}</Body>
-      <TagPicker tags={person.tags} onChange={tags => savePerson(person.id, { tags })} />
       <Heading>{t('person.occasions')}</Heading>
       {snapshot.occasions.filter(item => item.personId === person.id && !item.deleted).map(occasion => {
         const status = statusFor(occasion, snapshot.states, new Date());
@@ -206,18 +267,15 @@ export function PersonScreen() {
           onPress={() => addOccasion(person.id, type, Number(month) || undefined, Number(day) || undefined, Number(year) || undefined)}
         />
       )}
-      {hidden || locked ? null : <Heading>{t('person.ideas')}</Heading>}
-      {hidden || locked ? null : <Body>{t('person.ideasHint')}</Body>}
-      {hidden || locked ? null : (onDevice?.ideas ?? []).map(idea => (
-        <IdeaRow key={idea} idea={idea} onUp={() => vote(person.id, idea, 'up')} onDown={() => vote(person.id, idea, 'down')} onSave={() => next && saveIdeaFor(next.occasion.id, idea)} />
-      ))}
-      {hidden || locked ? null : <Button label={t('person.refresh')} tone="secondary" onPress={() => refreshIdeas(person.id)} />}
-      {hidden || locked ? null : <Body>{t('person.cloudHint')}</Body>}
-      {!hidden && !locked && cloudRemaining[person.id] != null ? <Body>{t('person.cloudLeft', { count: cloudRemaining[person.id] })}</Body> : null}
-      {hidden || locked ? null : <Button label={t('person.cloud')} onPress={() => cloudIdeas(person.id)} />}
-      {hidden || locked ? null : (cloud?.ideas ?? []).map(idea => (
-        <IdeaRow key={`cloud-${idea}`} idea={idea} onUp={() => vote(person.id, idea, 'up')} onDown={() => vote(person.id, idea, 'down')} onSave={() => next && saveIdeaFor(next.occasion.id, idea)} />
-      ))}
+      <ReminderOffer />
+      <Heading>{t('person.details')}</Heading>
+      <Field label={t('person.name')} value={name} onChangeText={setName} />
+      <Field label={t('person.budget')} value={budget} onChangeText={setBudget} keyboardType="decimal-pad" />
+      <Button
+        label={t('person.save')}
+        onPress={() => savePerson(person.id, { name: name.trim() || person.name, budgetCents: budget.trim() ? parseBudget(budget) : null, tags: interestTags })}
+      />
+      {hidden || !showSpend ? null : <SpendBreakdown personId={person.id} budgetCents={person.budgetCents} money={money} />}
       {hidden ? null : <Heading>{t('person.history')}</Heading>}
       {hidden ? null : (
         <Button
@@ -390,7 +448,24 @@ function PurchaseWarning({ occasionId, date }: { occasionId: string; date: strin
   return <Text accessibilityLabel={message} style={{ color: colors.muted }}>{message}</Text>;
 }
 
-function TagPicker({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
+function ReminderOffer() {
+  const { snapshot, setReminders } = useGifteez();
+  const waiting = (snapshot.profile.reminders ?? 'unset') === 'unset';
+  const hasDate = snapshot.occasions.some(item => !item.deleted);
+  if (!waiting || !hasDate) {
+    return null;
+  }
+  return (
+    <Card>
+      <Heading>{t('person.remindTitle')}</Heading>
+      <Body>{t('person.remindBody')}</Body>
+      <Button label={t('person.remindYes')} onPress={() => setReminders(true)} />
+      <Button label={t('person.remindNo')} tone="ghost" onPress={() => setReminders(false)} />
+    </Card>
+  );
+}
+
+function TagPicker({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void | Promise<unknown> }) {
   const { colors } = useGifteez();
   return (
     <View style={styles.tags}>

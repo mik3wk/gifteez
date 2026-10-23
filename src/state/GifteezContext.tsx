@@ -126,12 +126,15 @@ type GifteezApi = {
   startupDetail: string | null;
   retryStartup: () => void;
   recoveryCode: string | null;
+  resumePersonId: string | null;
+  openPerson: (personId: string) => void;
+  clearResumePerson: () => void;
   storeProduct: StoreProduct | null;
   storeReady: boolean;
   clearNotice: () => void;
   clearError: () => void;
   acknowledgeRecovery: () => void;
-  startGroup: (displayName: string, groupName: string) => Promise<void>;
+  startGroup: (displayName: string, groupName: string) => Promise<boolean>;
   switchGroup: (groupId: string) => Promise<void>;
   previewInvite: (url: string) => Promise<{ label: string; emoji: string; color: string } | null>;
   sendEmail: (email: string) => Promise<void>;
@@ -206,6 +209,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const [startupFailure, setStartupFailure] = useState<StartupFailure | null>(null);
   const [startupDetail, setStartupDetail] = useState<string | null>(null);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
+  const [resumePersonId, setResumePersonId] = useState<string | null>(null);
+  const clearResumePerson = useCallback(() => setResumePersonId(null), []);
   const [skinId, setSkinId] = useState<SkinId>('base');
   const [colors, setColors] = useState<ThemeColors>(() => withColorScheme(colorsFor('base', {}).colors, Appearance.getColorScheme()));
   const paletteRef = useRef<ThemeColors>(colorsFor('base', {}).colors);
@@ -462,6 +467,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       setBootId(value => value + 1);
     },
     recoveryCode,
+    resumePersonId,
+    openPerson: setResumePersonId,
+    clearResumePerson,
     storeProduct,
     storeReady,
     cloudRemaining,
@@ -480,7 +488,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         : withProfile(snapshotRef.current, { uid });
       if (!canStartAnotherList(base, uid)) {
         fail('oneList');
-        return;
+        return false;
       }
       const previous = base;
       const name = displayName.trim() || base.profile.displayName || sillyName(uid);
@@ -501,7 +509,6 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         now: Date.now(),
       });
       await commit(next);
-      setRecoveryCode(code);
       try {
         const created = await callFunction<{ groupId: string; entitled: boolean }>(env, 'createOwnedGroup', {
           groupId,
@@ -523,10 +530,11 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           setRecoveryCode(null);
           await commit(previous);
           fail('oneList');
-          return;
+          return false;
         }
         setNotice(t('sync.offline'));
       }
+      return snapshotRef.current.group?.id === groupId;
     },
     switchGroup: async groupId => {
       const next = switchGroupSnapshot(snapshotRef.current, groupId);
@@ -584,6 +592,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           pendingEmail: null,
           upgradeBannerDismissed: true,
         }));
+        setNotice(t('groupCreate.savedAccount'));
       } catch {
         fail('auth');
       }
@@ -624,6 +633,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           pendingVerificationId: null,
           upgradeBannerDismissed: true,
         }));
+        setNotice(t('groupCreate.savedAccount'));
       } catch {
         fail('auth');
       }
@@ -764,11 +774,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         fail('invalid');
         return;
       }
-      let next = addOccasion(snapshotRef.current, occasion);
-      if ((next.profile.reminders ?? 'unset') === 'unset') {
-        const granted = await requestReminderPermission();
-        next = withProfile(next, { reminders: granted ? 'on' : 'off' });
-      }
+      const next = addOccasion(snapshotRef.current, occasion);
       await commit(next);
       scheduleReminders(snapshotRef.current).catch(() => undefined);
       sync().catch(() => undefined);
@@ -1335,7 +1341,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       return addImported(rows);
     },
-  }), [addImported, cloudRemaining, colors, commit, duplicateOffers, env, error, fail, notice, ready, recoveryCode, skinId, snapshot, startupDetail, startupFailure, storeProduct, storeReady, sync]);
+  }), [addImported, clearResumePerson, cloudRemaining, colors, commit, duplicateOffers, env, error, fail, notice, ready, recoveryCode, resumePersonId, skinId, snapshot, startupDetail, startupFailure, storeProduct, storeReady, sync]);
 
   return <GifteezContext.Provider value={api}>{children}</GifteezContext.Provider>;
 }
