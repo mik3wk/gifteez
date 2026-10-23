@@ -4,6 +4,7 @@ import Animated, {
   cancelAnimation,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withRepeat,
   withSequence,
   withSpring,
@@ -16,6 +17,9 @@ import { motion, shadowOffset, space, stroke, type CelebrateName } from '../them
 
 const PRESS = { damping: 18, stiffness: 420, mass: 0.35 };
 const SETTLE = { damping: 16, stiffness: 220, mass: 0.6 };
+const POP = { damping: 10, stiffness: 160, mass: 0.55 };
+
+const playedEntrances = new Set<string>();
 
 const PIECES = [
   { x: -110, y: -140, spin: -18 },
@@ -71,12 +75,13 @@ export function useStickerMotion(pressed: boolean, shadow: boolean) {
   return { face, shade };
 }
 
-export function Settle({ children, distance = 16 }: { children: React.ReactNode; distance?: number }) {
+export function Settle({ children, distance = 16, delay = 0 }: { children: React.ReactNode; distance?: number; delay?: number }) {
   const reduce = useReduceMotion();
-  const progress = useSharedValue(reduce ? 1 : 0);
+  const progress = useSharedValue(reduce || delay === 0 ? (reduce ? 1 : 0) : 0);
   useEffect(() => {
-    progress.value = reduce ? 1 : withSpring(1, SETTLE);
-  }, [progress, reduce]);
+    const spring = withSpring(1, SETTLE);
+    progress.value = reduce ? 1 : delay > 0 ? withDelay(delay, spring) : spring;
+  }, [delay, progress, reduce]);
   const style = useAnimatedStyle(() => ({
     opacity: progress.value,
     transform: [{ translateY: (1 - progress.value) * distance }],
@@ -225,7 +230,7 @@ export function HeartPop({ saved, children }: { saved: boolean; children: React.
   const was = useRef(saved);
   useEffect(() => {
     if (saved && !was.current && !reduce) {
-      scale.value = withSequence(withSpring(1.35, PRESS), withSpring(1, SETTLE));
+      scale.value = withSequence(withSpring(1.3, POP), withDelay(90, withSpring(1, POP)));
     } else if (reduce) {
       scale.value = 1;
     }
@@ -236,6 +241,28 @@ export function HeartPop({ saved, children }: { saved: boolean; children: React.
     return <View>{children}</View>;
   }
   return <Animated.View style={style}>{children}</Animated.View>;
+}
+
+/** Card entrance for a tab. Later visits in this session appear at once. */
+export function SessionEntrance({ id, children }: { id: string; children: React.ReactNode }) {
+  const reduce = useReduceMotion();
+  const [play] = useState(() => !reduce && !playedEntrances.has(id));
+  useEffect(() => {
+    playedEntrances.add(id);
+  }, [id]);
+  const items = React.Children.toArray(children);
+  if (!play) {
+    return <View style={styles.stack}>{children}</View>;
+  }
+  return (
+    <View style={styles.stack}>
+      {items.map((child, index) => (
+        <Settle key={index} delay={Math.min(index, 5) * 50} distance={14}>
+          {child}
+        </Settle>
+      ))}
+    </View>
+  );
 }
 
 export function Unwrap({ children }: { children: React.ReactNode }) {
@@ -312,6 +339,7 @@ const styles = StyleSheet.create({
   piece: { position: 'absolute', width: 88, height: 88 },
   moment: { position: 'absolute', top: 0, right: 0 },
   center: { alignSelf: 'center' },
+  stack: { gap: space.sm },
   shimmer: { gap: space.xs },
   bar: { height: 18, borderRadius: 12, borderWidth: stroke.inner },
   steady: { opacity: 0.7 },

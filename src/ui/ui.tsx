@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -41,6 +41,7 @@ function StickerBox({
   fill,
   radius,
   borderWidth,
+  borderColor,
   pressed,
   dashed,
   shadow = true,
@@ -50,6 +51,7 @@ function StickerBox({
   fill: string;
   radius: number;
   borderWidth: number;
+  borderColor?: string;
   pressed?: boolean;
   dashed?: boolean;
   shadow?: boolean;
@@ -67,10 +69,11 @@ function StickerBox({
           face,
           {
             backgroundColor: fill,
-            borderColor: colors.outline,
+            borderColor: borderColor ?? colors.outline,
             borderWidth,
             borderStyle: dashed ? 'dashed' : 'solid',
             borderRadius: radius,
+            overflow: 'visible',
           },
         ]}>
         {children}
@@ -86,38 +89,42 @@ export function Screen({
   footer,
   centered,
   tab,
+  pinned,
 }: {
   children: React.ReactNode;
   footer?: React.ReactNode;
   centered?: boolean;
   tab?: TabId;
+  pinned?: React.ReactNode;
 }) {
   const { colors } = useTheme();
   const { notice, error } = useGifteez();
   const insets = useSafeAreaInsets();
   const headerHeight = useContext(HeaderHeightContext);
   const bar = tab ? <TabBar active={tab} /> : footer;
-  const underStatus = screenTopInset(headerHeight, insets.top) > 0;
+  const coverStatus = Boolean(tab) || !headerHeight;
+  const topPad = (coverStatus ? insets.top : 0) + space.sm;
   const toast = Boolean(notice || error);
   return (
     <KeyboardAvoidingView
       style={[styles.screen, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={headerHeight ?? 0}>
+      {pinned ? <View style={[styles.pinned, { paddingTop: topPad }]}>{pinned}</View> : null}
       <ScrollView
         style={[styles.screen, toast ? { marginBottom: layout.toastGap } : null]}
         contentContainerStyle={[
           styles.content,
           centered ? styles.centered : null,
           {
-            paddingTop: screenTopInset(headerHeight, insets.top) + space.sm,
+            paddingTop: pinned ? space.sm : topPad,
             paddingBottom: bar ? space.sm : insets.bottom + space.lg,
           },
         ]}
         keyboardShouldPersistTaps="handled">
         <View style={styles.column}>{children}</View>
       </ScrollView>
-      {underStatus ? (
+      {coverStatus ? (
         <View pointerEvents="none" style={[styles.statusBar, { height: insets.top, backgroundColor: colors.background }]} />
       ) : null}
       {bar ? (
@@ -201,10 +208,16 @@ export function Caption({ children, tone = 'muted', color }: { children: string;
   );
 }
 
-export function Display({ children, color }: { children: string; color?: string }) {
+export function Display({ children, color, lines }: { children: string; color?: string; lines?: number }) {
   const { colors, type, typeScale } = useTheme();
   return (
-    <Text maxFontSizeMultiplier={typeScale.display} style={[type.display, styles.ink, { color: color ?? colors.text }]}>
+    <Text
+      accessibilityRole="header"
+      numberOfLines={lines}
+      adjustsFontSizeToFit={lines === 1}
+      minimumFontScale={0.6}
+      maxFontSizeMultiplier={typeScale.display}
+      style={[type.display, styles.ink, { color: color ?? colors.text }]}>
       {children}
     </Text>
   );
@@ -334,6 +347,7 @@ export function Button({
   compact,
   icon,
   accessibilityLabel,
+  hint,
 }: {
   label: string;
   onPress: () => void | Promise<unknown>;
@@ -344,6 +358,7 @@ export function Button({
   compact?: boolean;
   icon?: IconName;
   accessibilityLabel?: string;
+  hint?: string;
 }) {
   const { colors, type, typeScale } = useTheme();
   const [pending, setPending] = useState(false);
@@ -356,9 +371,11 @@ export function Button({
   const fill = hero ? sticker.light.ink : quiet ? colors.surfaceAlt : tone === 'primary' ? colors.button : colors.surface;
   const text = hero ? sticker.dark.ink : quiet ? colors.muted : tone === 'primary' ? colors.onButton : danger ? colors.dangerText : colors.text;
   return (
+    <View style={flex ? styles.buttonFlex : compact ? styles.compact : null}>
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityHint={quiet ? hint : undefined}
       accessibilityState={{ disabled: blocked, busy: working }}
       disabled={blocked}
       onPress={() => {
@@ -372,12 +389,13 @@ export function Button({
           setPending(false);
         });
       }}
-      style={[flex ? styles.buttonFlex : null, compact ? styles.compact : null]}>
+      style={flex ? styles.buttonFlex : null}>
       {({ pressed }) => (
         <StickerBox
           fill={ghost ? 'transparent' : fill}
           radius={999}
           borderWidth={ghost ? 0 : stroke.control}
+          borderColor={hero ? sticker.light.ink : undefined}
           pressed={pressed && !blocked}
           dashed={quiet && !ghost}
           shadow={!ghost && !quiet}>
@@ -390,6 +408,8 @@ export function Button({
         </StickerBox>
       )}
     </Pressable>
+    {quiet && hint ? <Caption>{hint}</Caption> : null}
+    </View>
   );
 }
 
@@ -549,9 +569,9 @@ export function Notice({
   const closeRef = React.useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
-    const timer = setTimeout(() => closeRef.current(), 5000);
+    const timer = setTimeout(() => closeRef.current(), action ? 5000 : 2500);
     return () => clearTimeout(timer);
-  }, [text]);
+  }, [action, text]);
   return (
     <View
       pointerEvents="box-none"
@@ -724,10 +744,10 @@ export function Avatar({
   hue?: string;
 }) {
   const { colors, type, typeScale } = useTheme();
-  const ring = hue || colors.pink;
+  const fill = hue || colors.pink;
   return (
-    <View style={[styles.avatar, { backgroundColor: colors.surface, borderColor: ring }]}>
-      <Text maxFontSizeMultiplier={typeScale.heading} style={[type.heading, { color: colors.text }]}>{initials.slice(0, 1).toUpperCase()}</Text>
+    <View style={[styles.avatar, { backgroundColor: fill, borderColor: colors.outline }]}>
+      <Text maxFontSizeMultiplier={typeScale.heading} style={[type.heading, { color: sticker.light.ink }]}>{initials.slice(0, 1).toUpperCase()}</Text>
     </View>
   );
 }
@@ -818,18 +838,20 @@ export function HeroCard({
   return (
     <StickerBox fill={colors.sunshine} radius={radius.card} borderWidth={stroke.card} style={styles.heroCard}>
       <View style={styles.hero}>
-        {initials ? <Avatar initials={initials} hue={hue} /> : null}
         <View style={styles.heroCopy}>
           <Caption color={ink}>{kicker}</Caption>
-          <Heading color={ink}>{title}</Heading>
+          <View style={styles.heroName}>
+            {initials ? <Avatar initials={initials} hue={hue} /> : null}
+            <Heading color={ink}>{title}</Heading>
+          </View>
           <Display color={ink}>{figure}</Display>
           {unit ? <Caption color={ink}>{unit}</Caption> : null}
           <Caption color={ink}>{detail}</Caption>
           <ProgressBar value={progress ?? null} />
           <Button icon="gift" label={action} tone="hero" onPress={onAction} />
         </View>
-        <View style={styles.heroArt}>
-          <ArtSlot name={art} size={120} />
+        <View pointerEvents="none" style={styles.heroArt}>
+          <ArtSlot name={art} size={150} />
         </View>
       </View>
     </StickerBox>
@@ -937,12 +959,12 @@ export function AppHeader({ title, greeting }: { title: string; greeting?: strin
         <GroupAvatar size={64} />
         <View style={styles.personCopy}>
           {greeting ? <Caption>{greeting}</Caption> : null}
-          <Title>{title}</Title>
+          <Display lines={1}>{title}</Display>
         </View>
       </View>
       <IconButton label={t('people.remindersA11y')} name="bell" onPress={() => setOpen(true)} />
       <Sheet visible={open} onClose={() => setOpen(false)}>
-        <Heading>{t('person.remindTitle')}</Heading>
+        <Heading>{t('people.remindersA11y')}</Heading>
         <Body>{on ? t('people.remindersOn') : t('person.remindBody')}</Body>
         {on ? (
           <Button label={t('person.remindNo')} tone="secondary" onPress={() => { setReminders(false).catch(() => undefined); setOpen(false); }} />
@@ -1006,17 +1028,34 @@ export function IconButton({
   onPress,
   color,
   filled,
+  size = 22,
 }: {
   label: string;
   name: IconName;
   onPress: () => void;
   color?: string;
   filled?: boolean;
+  size?: number;
 }) {
   const { colors } = useTheme();
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.iconButton}>
-      <Icon name={name} color={color || colors.text} filled={filled} />
+      <Icon name={name} color={color || colors.text} filled={filled} size={size} />
+    </Pressable>
+  );
+}
+
+export function GhostRow({ label, onPress }: { label: string; onPress: () => void }) {
+  const { colors, type, typeScale, radius } = useTheme();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}>
+      {({ pressed }) => (
+        <StickerBox fill="transparent" radius={radius.card} borderWidth={stroke.card} pressed={pressed} dashed shadow={false}>
+          <View style={styles.buttonInner}>
+            <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: colors.text }]}>{label}</Text>
+          </View>
+        </StickerBox>
+      )}
     </Pressable>
   );
 }
@@ -1063,15 +1102,26 @@ export function CheckRow({
 export function Sheet({
   visible,
   onClose,
+  onDismiss,
   children,
 }: {
   visible: boolean;
   onClose: () => void;
+  onDismiss?: () => void;
   children: React.ReactNode;
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const reduce = useReduceMotion();
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
+  const wasVisible = useRef(visible);
+  useEffect(() => {
+    if (wasVisible.current && !visible) {
+      dismissRef.current?.();
+    }
+    wasVisible.current = visible;
+  }, [visible]);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   useEffect(() => {
     if (!visible) {
@@ -1204,6 +1254,7 @@ export function AccountSheet({
           return sendEmail(email);
         }}
         disabled={!email.trim()}
+        hint={t('groupCreate.emailFirst')}
       />
       {linkSent ? (
         <>
@@ -1213,6 +1264,7 @@ export function AccountSheet({
             tone={showCreate ? 'secondary' : 'primary'}
             onPress={() => finishEmail(link)}
             disabled={!link.trim()}
+            hint={t('groupCreate.linkFirst')}
           />
         </>
       ) : null}
@@ -1221,9 +1273,9 @@ export function AccountSheet({
         <>
           <Body>{t('groupCreate.smsRegion')}</Body>
           <Field label={t('groupCreate.phone')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" textContentType="telephoneNumber" autoComplete="tel" />
-          <Button label={t('groupCreate.sendCode')} tone="secondary" onPress={() => sendPhone(phone)} disabled={!phone.trim()} />
+          <Button label={t('groupCreate.sendCode')} tone="secondary" onPress={() => sendPhone(phone)} disabled={!phone.trim()} hint={t('groupCreate.phoneFirst')} />
           <Field label={t('groupCreate.code')} value={code} onChangeText={setCode} keyboardType="number-pad" textContentType="oneTimeCode" autoComplete="sms-otp" />
-          <Button label={t('groupCreate.confirmCode')} tone="secondary" onPress={() => confirmPhone(code)} disabled={!code.trim()} />
+          <Button label={t('groupCreate.confirmCode')} tone="secondary" onPress={() => confirmPhone(code)} disabled={!code.trim()} hint={t('groupCreate.codeFirst')} />
         </>
       ) : null}
       {showCreate ? <Button label={t('groupCreate.skip')} onPress={onClose} tone="ghost" /> : null}
@@ -1308,7 +1360,9 @@ export function Toggle({
   value: boolean;
   onValueChange: (value: boolean) => void;
 }) {
-  const { colors, type, typeScale } = useTheme();
+  const { colors, scheme, type, typeScale } = useTheme();
+  const off = scheme === 'dark' ? '#3A3142' : '#5C5266';
+  const thumb = scheme === 'dark' ? '#FFF6E9' : '#FFFFFF';
   return (
     <Pressable
       accessibilityRole="switch"
@@ -1317,14 +1371,16 @@ export function Toggle({
       onPress={() => onValueChange(!value)}
       style={styles.toggle}>
       <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, styles.ink, { color: colors.text, flex: 1 }]}>{label}</Text>
-      <Switch
-        pointerEvents="none"
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ false: colors.muted, true: colors.pink }}
-        ios_backgroundColor={colors.muted}
-        thumbColor={value ? colors.onPink : colors.surface}
-      />
+      <View style={[styles.switchBorder, { borderColor: colors.outline }]}>
+        <Switch
+          pointerEvents="none"
+          value={value}
+          onValueChange={onValueChange}
+          trackColor={{ false: off, true: colors.pink }}
+          ios_backgroundColor={off}
+          thumbColor={value ? colors.onPink : thumb}
+        />
+      </View>
     </Pressable>
   );
 }
@@ -1332,6 +1388,7 @@ export function Toggle({
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   statusBar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 4 },
+  pinned: { paddingHorizontal: space.md, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center', gap: space.sm },
   modalFill: { flex: 1, justifyContent: 'center', padding: space.lg },
   content: { paddingHorizontal: space.md, flexGrow: 1, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
   column: { gap: space.sm },
@@ -1378,9 +1435,11 @@ const styles = StyleSheet.create({
   blockChip: { alignSelf: 'stretch' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.xs },
   heroCard: { overflow: 'visible' },
-  hero: { flexDirection: 'row', alignItems: 'center', padding: space.md, gap: space.xs, overflow: 'visible' },
+  hero: { flexDirection: 'row', alignItems: 'flex-start', padding: space.md, gap: space.xs, overflow: 'visible' },
   heroCopy: { flex: 1, gap: space.xxs },
-  heroArt: { marginRight: -space.lg, marginBottom: -space.lg },
+  heroName: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  heroArt: { marginTop: -28, marginRight: -44, marginBottom: -24 },
+  switchBorder: { borderWidth: stroke.inner, borderRadius: 16, overflow: 'hidden' },
   statRow: { flexDirection: 'row', alignItems: 'stretch', gap: space.xxs },
   statFlex: { flex: 1 },
   stat: { padding: space.sm, gap: space.xxs, minHeight: 96 },

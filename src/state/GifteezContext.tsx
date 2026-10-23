@@ -49,6 +49,7 @@ import {
   phoneAllowed,
   removeMember,
   renameGroup,
+  clearIdea,
   saveIdea,
   setGroupCurrency,
   switchGroup as switchGroupSnapshot,
@@ -163,6 +164,8 @@ type GifteezApi = {
     extra?: { label?: string; recurs?: boolean },
   ) => Promise<void>;
   saveIdeaFor: (occasionId: string, idea: string) => Promise<void>;
+  unsaveIdea: (occasionId: string) => Promise<void>;
+  toast: (message: string) => void;
   logGift: (occasionId: string, title: string, price: string, date: string) => Promise<boolean>;
   updateGift: (giftId: string, title: string, price: string, date: string, privateGift: boolean) => Promise<boolean>;
   deleteGift: (giftId: string, privateGift: boolean) => Promise<void>;
@@ -933,6 +936,16 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       haptic('success');
       sync().catch(() => undefined);
     },
+    unsaveIdea: async occasionId => {
+      const occasion = snapshotRef.current.occasions.find(item => item.id === occasionId);
+      if (!occasion) {
+        return;
+      }
+      await commit(clearIdea({ snapshot: snapshotRef.current, occasion, today: new Date(), now: Date.now() }));
+      showNotice(t('person.ideaCleared'));
+      sync().catch(() => undefined);
+    },
+    toast: message => showNotice(message),
     logGift: async (occasionId, title, price, date) => {
       const occasion = snapshotRef.current.occasions.find(item => item.id === occasionId);
       if (!occasion || !title.trim()) {

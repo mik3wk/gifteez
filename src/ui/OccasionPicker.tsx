@@ -12,18 +12,17 @@ import {
 import type { Occasion } from '../domain/types';
 import { formatDate, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
-import { DateField } from './DateField';
+import { MonthDayField } from './DateField';
 import { Body, Button, Chip, Cluster, Field, Heading, Select, Stack, Toggle } from './ui';
 
 const GROUPS: OccasionPreset['group'][] = ['holiday', 'celebration', 'life'];
 
-export function OccasionPicker({ personId }: { personId: string }) {
+export function OccasionPicker({ personId, onAdded }: { personId: string; onAdded?: () => void }) {
   const { addOccasion } = useGifteez();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState('');
-  const [pickedDate, setPickedDate] = useState('');
-  const [rememberYear, setRememberYear] = useState(false);
+  const [knowYear, setKnowYear] = useState(false);
   const [customName, setCustomName] = useState('');
   const [month, setMonth] = useState('');
   const [day, setDay] = useState('');
@@ -120,22 +119,27 @@ export function OccasionPicker({ personId }: { personId: string }) {
         />
       ) : null}
       {needsDate ? (
-        <>
-          <DateField
-            label={t('person.date')}
-            value={pickedDate}
-            error={dateError}
-            onChange={iso => {
-              setPickedDate(iso);
-              const [yearText, monthText, dayText] = iso.split('-');
-              setYear(yearText ?? '');
-              setMonth(String(Number(monthText)));
-              setDay(String(Number(dayText)));
-              setDateError('');
-            }}
-          />
-          <Toggle label={t('person.year')} value={rememberYear} onValueChange={setRememberYear} />
-        </>
+        <MonthDayField
+          label={t('person.date')}
+          month={month}
+          day={day}
+          year={year}
+          knowYear={knowYear}
+          error={dateError}
+          onKnowYear={value => {
+            setKnowYear(value);
+            if (!value) {
+              setYear('');
+            }
+            setDateError('');
+          }}
+          onChange={next => {
+            setMonth(next.month);
+            setDay(next.day);
+            setYear(next.year);
+            setDateError('');
+          }}
+        />
       ) : null}
       {asksRecurrence ? (
         <Toggle label={t('person.everyYear')} value={everyYear} onValueChange={setEveryYear} />
@@ -145,24 +149,26 @@ export function OccasionPicker({ personId }: { personId: string }) {
       <Button
         label={t('person.addOccasion')}
         disabled={!picked}
+        hint={t('person.pickOccasionFirst')}
         onPress={() => {
-          if (selected === 'custom' && !customName.trim()) {
-            setNameError(t('person.nameNeeded'));
-            return;
-          }
+          const nameMissing = selected === 'custom' && !customName.trim();
           const monthNum = Number(month);
           const dayNum = Number(day);
-          if (needsDate && !isRealMonthDay(monthNum, dayNum)) {
-            setDateError(t('errors.date'));
+          const dateMissing = needsDate && !isRealMonthDay(monthNum, dayNum);
+          const yearNum = Number(year);
+          const yearMissing = needsDate && knowYear && !(yearNum > 0);
+          setNameError(nameMissing ? t('person.nameNeeded') : '');
+          setDateError(dateMissing ? t('errors.date') : yearMissing ? t('person.yearMissing') : '');
+          if (!picked || nameMissing || dateMissing || yearMissing) {
             return;
           }
-          const yearNum = Number(year);
+          onAdded?.();
           return addOccasion(
             personId,
             selected,
             needsDate ? monthNum : undefined,
             needsDate ? dayNum : undefined,
-            needsDate && rememberYear && yearNum > 0 ? yearNum : undefined,
+            needsDate && knowYear && yearNum > 0 ? yearNum : undefined,
             {
               label: selected === 'custom' ? customName.trim() : undefined,
               recurs: asksRecurrence ? everyYear : true,

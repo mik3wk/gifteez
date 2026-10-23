@@ -1,6 +1,6 @@
 import { openJson, randomKey, reencryptJson, sealJson } from '../src/crypto/crypto';
 import { buyerLabel, claimOccasion, claimWarningUid, isMyPurchase, otherClaim, spendByMember, unclaimOccasion, visibleGifts } from '../src/domain/claims';
-import { logPurchase, saveIdea, stateId } from '../src/domain/logic';
+import { clearIdea, logPurchase, saveIdea, stateId } from '../src/domain/logic';
 import { applyMerge, findDuplicatePeople, giftsOnList, mergePrivateGifts, normalizePersonName, peopleOnOtherLists } from '../src/domain/merge';
 import { emptySnapshot, type AppSnapshot, type GiftRecord, type GroupArchive, type GroupMeta, type Member, type Occasion, type OccasionState, type Person, type PrivateGift } from '../src/domain/types';
 
@@ -43,6 +43,30 @@ test('claims this year, blocks a second claimer, and lets the claimer or owner u
   if (owner.ok) {
     expect(owner.value.claimedBy).toBeUndefined();
   }
+});
+
+test('clearing a saved idea keeps a purchase and drops only the idea', () => {
+  const snapshot = withPeople(base(), [person('ada', 'Ada')], [occasion('bday', 'ada', 'birthday', 10, 25)]);
+  const saved = saveIdea({
+    snapshot,
+    occasion: snapshot.occasions[0],
+    idea: 'A book',
+    today,
+    now: 20,
+  });
+  const cleared = clearIdea({ snapshot: saved, occasion: saved.occasions[0], today, now: 21 });
+  const state = cleared.states.find(item => item.id === stateId('bday', 2026));
+  expect(state?.savedIdea).toBeNull();
+  expect(state?.status).toBe('not-started');
+  const purchased = logPurchase({
+    snapshot: saved,
+    occasion: saved.occasions[0],
+    gift: makeGift('g1', 'ada', 'bday', 1800, '2026-10-22', 'me'),
+  });
+  const kept = clearIdea({ snapshot: purchased, occasion: purchased.occasions[0], today, now: 22 });
+  const bought = kept.states.find(item => item.id === stateId('bday', 2026));
+  expect(bought?.status).toBe('purchased');
+  expect(bought?.savedIdea).toBeNull();
 });
 
 test('saving an idea or logging a purchase keeps the claim, and a warning does not block the gift', () => {

@@ -13,6 +13,7 @@ const PATHS = {
   bell: 'M18 8a6 6 0 1 0-12 0c0 7-3 7-3 7h18s-3 0-3-7M13.7 21a2 2 0 0 1-3.4 0',
   plus: 'M12 5v14M5 12h14',
   calendar: 'M8 3v3M16 3v3M4 9h16M6 5h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z',
+  more: 'M6 10a2 2 0 1 0 .01 4A2 2 0 0 0 6 10zM12 10a2 2 0 1 0 .01 4A2 2 0 0 0 12 10zM18 10a2 2 0 1 0 .01 4A2 2 0 0 0 18 10z',
 } as const;
 
 export type IconName = keyof typeof PATHS;

@@ -672,6 +672,31 @@ export function saveIdea(input: {
   };
 }
 
+export function clearIdea(input: {
+  snapshot: AppSnapshot;
+  occasion: Occasion;
+  today: Date;
+  now: number;
+}): AppSnapshot {
+  const year = occurrenceYear(input.occasion, input.today);
+  const id = stateId(input.occasion.id, year);
+  const existing = input.snapshot.states.find(state => state.id === id && !state.deleted);
+  if (!existing?.savedIdea) {
+    return input.snapshot;
+  }
+  const next: OccasionState = {
+    ...existing,
+    status: existing.status === 'purchased' ? 'purchased' : 'not-started',
+    savedIdea: null,
+    updatedAt: input.now,
+  };
+  return {
+    ...input.snapshot,
+    states: input.snapshot.states.map(state => (state.id === id ? next : state)),
+    dirty: { ...input.snapshot.dirty, [dirtyKey('states', id)]: true },
+  };
+}
+
 export function logPurchase(input: {
   snapshot: AppSnapshot;
   gift: GiftRecord;
