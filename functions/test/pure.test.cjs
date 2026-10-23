@@ -197,3 +197,18 @@ test('a free account cannot start a second list, a paid account can, and joining
   assert.match(ops, /active: false/);
   assert.match(ops, /needsRotation: true/);
 });
+
+test('pod install enables the Firebase Firestore SwiftPM trait', () => {
+  const podfile = fs.readFileSync(path.join(__dirname, '..', '..', 'ios', 'Podfile'), 'utf8');
+  const helper = fs.readFileSync(path.join(__dirname, '..', '..', 'ios', 'firebase_spm_traits.rb'), 'utf8');
+  assert.match(podfile, /require_relative 'firebase_spm_traits'/);
+  assert.ok(
+    podfile.indexOf("require_relative 'firebase_spm_traits'") < podfile.indexOf('prepare_react_native_project!'),
+    'the trait attribute must be registered before the Xcode project is opened',
+  );
+  assert.match(podfile, /gifteez_enable_firebase_spm_traits_for_installer\(installer\)/);
+  assert.match(podfile, /gifteez_install_firebase_spm_traits_hook!\(installer\)/);
+  assert.match(helper, /GIFTEEZ_FIREBASE_SPM_TRAITS = %w\[Firestore default\]/);
+  assert.match(helper, /github.com\/firebase\/firebase-ios-sdk/);
+  assert.match(helper, /run_podfile_post_integrate_hooks/);
+});
