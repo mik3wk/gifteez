@@ -7,6 +7,7 @@ import { statusFor, upcomingOccasion } from '../domain/logic';
 import { sortPeople } from '../domain/logic';
 import { formatDate, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
+import { DuplicateOffers } from './mergeUi';
 import { EmptyArt, SkinBanner } from '../ui/art';
 import { useGroupHeading } from '../ui/heading';
 import { AccountSheet, Banner, Body, Button, Card, Screen, Title } from '../ui/ui';
@@ -14,7 +15,7 @@ import { yearSpentCents } from '../domain/logic';
 
 export function PeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, showBanner, dismissBanner, colors, skinId } = useGifteez();
+  const { snapshot, showBanner, dismissBanner, colors, skinId, duplicateOffers, dismissDuplicateOffer } = useGifteez();
   const heading = useGroupHeading();
   const [upgrade, setUpgrade] = useState(false);
   const people = sortPeople(snapshot.people, snapshot.occasions, new Date());
@@ -29,6 +30,15 @@ export function PeopleScreen() {
         <Button label={t('people.group')} tone="secondary" onPress={() => navigation.navigate('Group')} />
         <Button label={t('people.settings')} tone="secondary" onPress={() => navigation.navigate('Settings')} />
       </View>
+      <DuplicateOffers
+        offers={duplicateOffers}
+        onReview={offer => navigation.navigate('SamePerson', {
+          personId: offer.targetPersonId,
+          sourcePersonId: offer.sourcePersonId,
+          sourceGroupId: offer.sourceGroupId,
+        })}
+        onDismiss={offer => dismissDuplicateOffer(offer.sourcePersonId, offer.sourceGroupId, offer.targetPersonId)}
+      />
       {showBanner ? (
         <Banner
           text={t('people.banner')}

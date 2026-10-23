@@ -55,6 +55,11 @@ export function openJson<T>(payload: string, key: Uint8Array): T {
   return JSON.parse(openString(payload, key)) as T;
 }
 
+/** Open with the source list key and seal with the destination key. The source key is not copied into the new payload. */
+export function reencryptJson(payload: string, fromKey: Uint8Array, toKey: Uint8Array): string {
+  return sealJson(openJson(payload, fromKey), toKey);
+}
+
 export function keyToString(key: Uint8Array): string {
   return base64UrlEncode(key);
 }

@@ -183,6 +183,27 @@ export async function writeSealed(
   });
 }
 
+export async function writePrivateGift(uid: string, sealed: SealedDoc): Promise<void> {
+  await setDoc(doc(getFirestore(), 'users', uid, 'privateGifts', sealed.id), {
+    updatedAt: sealed.updatedAt,
+    deleted: sealed.deleted,
+    ciphertext: sealed.ciphertext,
+  });
+}
+
+export async function readPrivateGifts(uid: string): Promise<SealedDoc[]> {
+  const snap = await getDocs(collection(getFirestore(), 'users', uid, 'privateGifts'));
+  return snap.docs.map(item => {
+    const data = item.data() as Partial<SealedDoc>;
+    return {
+      id: item.id,
+      updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : 0,
+      deleted: Boolean(data.deleted),
+      ciphertext: typeof data.ciphertext === 'string' ? data.ciphertext : '',
+    };
+  });
+}
+
 export async function readSealed(groupId: string, collectionName: string): Promise<SealedDoc[]> {
   const snap = await getDocs(collection(getFirestore(), 'groups', groupId, collectionName));
   return snap.docs.map(item => {

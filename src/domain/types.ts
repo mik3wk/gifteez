@@ -32,6 +32,9 @@ export type OccasionState = {
   year: number;
   status: GiftStatus;
   savedIdea: string | null;
+  /** Member who said they would buy this year's gift. Inside the group ciphertext. */
+  claimedBy?: string;
+  claimedAt?: number;
   updatedAt: number;
   deleted?: boolean;
 };
@@ -44,6 +47,23 @@ export type GiftRecord = {
   title: string;
   priceCents: number;
   purchasedOn: string;
+  /** Member who logged the purchase. Inside the group ciphertext. Omitted on older gifts. */
+  boughtBy?: string;
+  updatedAt: number;
+  deleted?: boolean;
+};
+
+/** A gift kept off the shared list. Sealed with the device key, never the group key. */
+export type PrivateGift = {
+  id: string;
+  personId: string;
+  groupId: string;
+  occasionId: string;
+  year: number;
+  title: string;
+  priceCents: number;
+  purchasedOn: string;
+  boughtBy?: string;
   updatedAt: number;
   deleted?: boolean;
 };
@@ -134,6 +154,8 @@ export type AppSnapshot = {
   occasions: Occasion[];
   states: OccasionState[];
   gifts: GiftRecord[];
+  /** Gifts this user unchecked during a merge. Not shared with the group. */
+  privateGifts: PrivateGift[];
   feedback: FeedbackEntry[];
   ideas: IdeaCacheEntry[];
   entitlementPaid: boolean;
@@ -174,6 +196,7 @@ export function emptySnapshot(now: number): AppSnapshot {
     occasions: [],
     states: [],
     gifts: [],
+    privateGifts: [],
     feedback: [],
     ideas: [],
     entitlementPaid: false,

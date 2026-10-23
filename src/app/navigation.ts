@@ -4,6 +4,7 @@ export type RootStack = {
   JoinConfirm: { url: string };
   People: undefined;
   Person: { personId: string };
+  SamePerson: { personId: string; sourcePersonId?: string; sourceGroupId?: string };
   AddPerson: undefined;
   Fairness: undefined;
   Group: undefined;

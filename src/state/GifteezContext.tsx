@@ -16,6 +16,8 @@ import {
   wrapKey,
 } from '../crypto/crypto';
 import { ideaCacheId, suggestIdeas } from '../domain/ideas';
+import { claimOccasion as claimOccasionSnapshot, claimWarningUid, claimerName, unclaimOccasion as unclaimOccasionSnapshot } from '../domain/claims';
+import { applyMerge, findDuplicatePeople, mergePrivateGifts, type DuplicateHint } from '../domain/merge';
 import { classifyStartupError, startupCause, type StartupFailure } from '../domain/startup';
 import { performJoin } from '../domain/joinFlow';
 import {
@@ -56,9 +58,11 @@ import {
   emptySnapshot,
   dirtyKey,
   type AppSnapshot,
+  type GroupArchive,
   type Occasion,
   type OccasionType,
   type Person,
+  type PrivateGift,
   type RemoteRecord,
 } from '../domain/types';
 import { formatMoney } from '../i18n';
@@ -78,10 +82,12 @@ import {
   initFirebase,
   listRecovery,
   readGroupDocument,
+  readPrivateGifts,
   readSealed,
   sendMagicLink,
   sendSmsCode,
   updateGroupDocument,
+  writePrivateGift,
   writeRecovery,
   writeSealed,
   type SealedDoc,
@@ -126,6 +132,16 @@ type GifteezApi = {
   addOccasion: (personId: string, type: OccasionType, month?: number, day?: number, year?: number) => Promise<void>;
   saveIdeaFor: (occasionId: string, idea: string) => Promise<void>;
   logGift: (occasionId: string, title: string, price: string, date: string) => Promise<void>;
+  claimOccasion: (occasionId: string) => Promise<void>;
+  unclaimOccasion: (occasionId: string) => Promise<void>;
+  mergePeople: (input: {
+    targetPersonId: string;
+    sourcePersonId: string;
+    sourceGroupId: string;
+    sharedGiftIds: string[];
+  }) => Promise<boolean>;
+  duplicateOffers: DuplicateHint[];
+  dismissDuplicateOffer: (sourcePersonId: string, sourceGroupId: string, targetPersonId: string) => void;
   vote: (personId: string, idea: string, vote: 'up' | 'down') => Promise<void>;
   focusPerson: (personId: string) => Promise<void>;
   refreshIdeas: (personId: string) => Promise<void>;
@@ -172,6 +188,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const [storeProduct, setStoreProduct] = useState<StoreProduct | null>(null);
   const [storeReady, setStoreReady] = useState(false);
   const [cloudRemaining, setCloudRemaining] = useState<Record<string, number>>({});
+  const [duplicateOffers, setDuplicateOffers] = useState<DuplicateHint[]>([]);
   const downloadedRef = useRef(downloaded);
   downloadedRef.current = downloaded;
 
@@ -208,9 +225,14 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     let next = current;
     try {
       await pushSnapshot(next, key, env);
+      next = await flushDirtyArchives(next, env);
+      next = await flushPrivateGifts(next);
       const cleared = { ...next.dirty };
-      Object.keys(cleared).forEach(dirty => {
-        delete cleared[dirty];
+      Object.keys(cleared).forEach(name => {
+        if (name.startsWith('privateGifts:')) {
+          return;
+        }
+        delete cleared[name];
       });
       next = { ...next, dirty: cleared };
       const remoteGroup = await readGroupDocument(groupId);
@@ -614,6 +636,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         setNotice(t('sync.offline'));
       }
       await sync(snapshotRef.current);
+      setDuplicateOffers(findDuplicatePeople(snapshotRef.current));
       return true;
     },
     restoreWithCode: async code => {
@@ -759,6 +782,14 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       const priceCents = parseBudget(price) ?? 0;
       const purchasedOn = date || new Date().toISOString().slice(0, 10);
       const year = Number(purchasedOn.slice(0, 4)) || occurrenceYear(occasion, new Date());
+      const uid = snapshotRef.current.profile.uid;
+      const warningUid = claimWarningUid({
+        states: snapshotRef.current.states,
+        occasion,
+        purchaseYear: year,
+        today: new Date(),
+        uid,
+      });
       await commit(logPurchase({
         snapshot: snapshotRef.current,
         occasion,
@@ -771,9 +802,99 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           priceCents,
           purchasedOn,
           updatedAt: Date.now(),
+          ...(uid ? { boughtBy: uid } : {}),
         },
       }));
+      if (warningUid) {
+        setNotice(t('purchase.claimedWarning', { name: claimerName(warningUid, snapshotRef.current.members) }));
+      }
       sync().catch(() => undefined);
+    },
+    claimOccasion: async occasionId => {
+      const uid = snapshotRef.current.profile.uid;
+      if (!uid) {
+        fail('auth');
+        return;
+      }
+      const result = claimOccasionSnapshot({
+        snapshot: snapshotRef.current,
+        occasionId,
+        uid,
+        now: Date.now(),
+        today: new Date(),
+      });
+      if (!result.ok) {
+        fail(result.error);
+        return;
+      }
+      await commit(result.snapshot);
+      sync().catch(() => undefined);
+    },
+    unclaimOccasion: async occasionId => {
+      const uid = snapshotRef.current.profile.uid;
+      if (!uid) {
+        fail('auth');
+        return;
+      }
+      const result = unclaimOccasionSnapshot({
+        snapshot: snapshotRef.current,
+        occasionId,
+        uid,
+        now: Date.now(),
+        today: new Date(),
+      });
+      if (!result.ok) {
+        fail(result.error);
+        return;
+      }
+      await commit(result.snapshot);
+      sync().catch(() => undefined);
+    },
+    mergePeople: async input => {
+      const uid = snapshotRef.current.profile.uid;
+      if (!uid) {
+        fail('auth');
+        return false;
+      }
+      const result = applyMerge({
+        snapshot: snapshotRef.current,
+        targetPersonId: input.targetPersonId,
+        targetGroupId: snapshotRef.current.group?.id ?? '',
+        sourcePersonId: input.sourcePersonId,
+        sourceGroupId: input.sourceGroupId,
+        sharedGiftIds: input.sharedGiftIds,
+        uid,
+        now: Date.now(),
+        freeLimit: env.freeTierMaxPeople,
+        newId: randomId,
+      });
+      if (!result.ok) {
+        fail(result.error);
+        return false;
+      }
+      await commit(result.snapshot);
+      setDuplicateOffers(current =>
+        current.filter(offer => offer.sourcePersonId !== input.sourcePersonId || offer.sourceGroupId !== input.sourceGroupId),
+      );
+      setNotice(t('merge.done'));
+      callFunction(env, 'claimPersonSlot', {
+        deviceId: await deviceId(),
+        action: 'remove',
+        groupId: input.sourceGroupId,
+      }).catch(() => undefined);
+      sync().catch(() => undefined);
+      return true;
+    },
+    duplicateOffers,
+    dismissDuplicateOffer: (sourcePersonId, sourceGroupId, targetPersonId) => {
+      setDuplicateOffers(current =>
+        current.filter(
+          offer =>
+            offer.sourcePersonId !== sourcePersonId ||
+            offer.sourceGroupId !== sourceGroupId ||
+            offer.targetPersonId !== targetPersonId,
+        ),
+      );
     },
     vote: async (personId, idea, choice) => {
       await commit(addFeedback(snapshotRef.current, {
@@ -1032,7 +1153,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       return addImported(rows);
     },
-  }), [addImported, cloudRemaining, colors, commit, env, error, fail, notice, ready, recoveryCode, skinId, snapshot, startupDetail, startupFailure, storeProduct, storeReady, sync]);
+  }), [addImported, cloudRemaining, colors, commit, duplicateOffers, env, error, fail, notice, ready, recoveryCode, skinId, snapshot, startupDetail, startupFailure, storeProduct, storeReady, sync]);
 
   return <GifteezContext.Provider value={api}>{children}</GifteezContext.Provider>;
 }
@@ -1097,6 +1218,7 @@ async function loadSnapshot(): Promise<AppSnapshot> {
       ...parsed,
       profile: { ...base.profile, ...parsed.profile },
       releasedGroupIds: Array.isArray(parsed.releasedGroupIds) ? parsed.releasedGroupIds : [],
+      privateGifts: Array.isArray(parsed.privateGifts) ? parsed.privateGifts : [],
     };
   } catch {
     return emptySnapshot(Date.now());
@@ -1141,16 +1263,16 @@ function sealMember(uid: string, displayName: string, key: Uint8Array, now: numb
   };
 }
 
-async function pushSnapshot(snapshot: AppSnapshot, key: Uint8Array, env: AppEnv): Promise<void> {
+async function pushSnapshot(snapshot: AppSnapshot, key: Uint8Array, env: AppEnv): Promise<boolean> {
   if (!snapshot.group) {
-    return;
+    return false;
   }
   const groupId = snapshot.group.id;
   if (snapshot.dirty['group:meta'] || snapshot.dirty['group:members']) {
     const existing = await readGroupDocument(groupId);
     if (!existing) {
       if (snapshot.group.ownerId !== snapshot.profile.uid) {
-        return;
+        return false;
       }
       await callFunction(env, 'createOwnedGroup', {
         groupId,
@@ -1192,6 +1314,109 @@ async function pushSnapshot(snapshot: AppSnapshot, key: Uint8Array, env: AppEnv)
       });
     }
   }
+  return true;
+}
+
+function snapshotForArchive(base: AppSnapshot, archive: GroupArchive): AppSnapshot {
+  return {
+    ...base,
+    group: archive.group,
+    members: archive.members,
+    people: archive.people,
+    occasions: archive.occasions,
+    states: archive.states,
+    gifts: archive.gifts,
+    ideas: archive.ideas,
+    dirty: archive.dirty,
+  };
+}
+
+/** Soft-deletes on a list that is not open are sealed with that list's key, not the active group's key. */
+async function flushDirtyArchives(snapshot: AppSnapshot, env: AppEnv): Promise<AppSnapshot> {
+  let next = snapshot;
+  for (const id of Object.keys(next.archives ?? {})) {
+    if (id === next.group?.id) {
+      continue;
+    }
+    const archive = next.archives[id];
+    if (!archive || Object.keys(archive.dirty).length === 0) {
+      continue;
+    }
+    const groupKey = await loadGroupKeyString(archive.group.id);
+    if (!groupKey) {
+      continue;
+    }
+    const wrote = await pushSnapshot(snapshotForArchive(next, archive), keyFromString(groupKey), env);
+    if (!wrote) {
+      continue;
+    }
+    next = {
+      ...next,
+      archives: {
+        ...next.archives,
+        [id]: { ...next.archives[id], dirty: {} },
+      },
+    };
+  }
+  return next;
+}
+
+function privateGiftBody(gift: PrivateGift): Record<string, unknown> {
+  return {
+    personId: gift.personId,
+    groupId: gift.groupId,
+    occasionId: gift.occasionId,
+    year: gift.year,
+    title: gift.title,
+    priceCents: gift.priceCents,
+    purchasedOn: gift.purchasedOn,
+    ...(gift.boughtBy ? { boughtBy: gift.boughtBy } : {}),
+  };
+}
+
+/** Private gifts are sealed with the device key. The group key cannot read them. */
+async function flushPrivateGifts(snapshot: AppSnapshot): Promise<AppSnapshot> {
+  const uid = snapshot.profile.uid;
+  if (!uid) {
+    return snapshot;
+  }
+  const deviceKey = await ensureDeviceKey();
+  const dirty = { ...snapshot.dirty };
+  const pending = (snapshot.privateGifts ?? []).filter(gift => dirty[dirtyKey('privateGifts', gift.id)]);
+  for (const gift of pending) {
+    await writePrivateGift(uid, {
+      id: gift.id,
+      updatedAt: gift.updatedAt,
+      deleted: Boolean(gift.deleted),
+      ciphertext: sealJson(privateGiftBody(gift), deviceKey),
+    });
+    delete dirty[dirtyKey('privateGifts', gift.id)];
+  }
+  let privateGifts = snapshot.privateGifts ?? [];
+  try {
+    const docs = await readPrivateGifts(uid);
+    const remote: PrivateGift[] = [];
+    docs.forEach(item => {
+      if (!item.ciphertext) {
+        return;
+      }
+      try {
+        const data = openJson<PrivateGift>(item.ciphertext, deviceKey);
+        remote.push({
+          ...data,
+          id: item.id,
+          updatedAt: item.updatedAt,
+          deleted: item.deleted || Boolean(data.deleted),
+        });
+      } catch {
+        // Sealed with a key this phone does not hold.
+      }
+    });
+    privateGifts = mergePrivateGifts(snapshot.privateGifts ?? [], remote, snapshot.dirty);
+  } catch {
+    privateGifts = snapshot.privateGifts ?? [];
+  }
+  return { ...snapshot, privateGifts, dirty };
 }
 
 function recordsFor(snapshot: AppSnapshot, name: (typeof COLLECTIONS)[number]): Array<{ id: string; updatedAt: number; deleted?: boolean; body: Record<string, unknown> }> {

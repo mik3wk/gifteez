@@ -3,6 +3,7 @@ import { Linking, View } from 'react-native';
 import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { t } from '../i18n';
+import { MergeScreen } from '../screens/MergeScreen';
 import { AddPersonScreen, PersonScreen } from '../screens/PersonScreen';
 import { FirstOpenScreen } from '../screens/FirstOpen';
 import { FairnessScreen, GroupScreen, JoinConfirmScreen, JoinScreen, SettingsScreen } from '../screens/MoreScreens';
@@ -98,6 +99,7 @@ function Navigator() {
             <>
               <Stack.Screen name="People" component={PeopleScreen} options={{ title: t('people.title') }} />
               <Stack.Screen name="Person" component={PersonScreen} options={{ title: t('person.ideas') }} />
+              <Stack.Screen name="SamePerson" component={MergeScreen} options={{ title: t('merge.title') }} />
               <Stack.Screen name="AddPerson" component={AddPersonScreen} options={{ title: t('person.addTitle') }} />
               <Stack.Screen name="Fairness" component={FairnessScreen} options={{ title: t('fairness.title') }} />
               <Stack.Screen name="Group" component={GroupScreen} options={{ title: t('groupScreen.title') }} />

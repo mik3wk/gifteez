@@ -53,6 +53,7 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - **Several groups (decided with the build):** one person can belong to more than one group. Each group has an optional name, set at creation and editable later in group settings. The name is user content and is stored only inside the group ciphertext, same as other user content. If no name is set, the label is the members' names joined (`Mike, Sam & Jo`), shortened with `+N` when it would run long. At 10 members that label stays short (`Mike, Sam & Jo +7`). A stable emoji and color, derived from the group id, mark the group in the switcher, headers, and invite preview. The invite preview ciphertext is on the invite document so the server still cannot read the name; the key stays in the link fragment.
 - **Group size (decided with the build):** a group holds up to 10 members. These are families buying gifts together, and they are unlikely to go past about 10. A list can still start with one person. The same group key in the invite-link fragment is shared with every member, up to that cap. The paid gift-recipient list is intentionally uncapped for now. Membership is separate from the free-tier limit below.
 - **Monetization (one list on the free tier):** a free account can start one list and keep up to 5 gift recipients on it. They can join any number of lists other people start. Joining is never limited by the joiner's tier. The $9.99 one-time unlock is per account, not per list. The purchase stays on `entitlements/{fingerprint}` (the device id hashed with the pepper; only Functions can write it) and is copied onto `accounts/{uid}`, which only Functions can write. Unlocking lets that account start more lists and removes the recipient cap on every list they own. Recipient limits follow the list owner: a paid member does not raise the cap on someone else's free list, and a free member can add past 5 people on a list whose owner has unlocked. Deleting the only list you started frees that slot. This closes the hole where a free user could start multiple lists. The rules cannot count owned groups, so direct creates are denied and `createOwnedGroup` is the only writer.
+- **Claims, buyers, and private gifts:** "I'll get this" stores `claimedBy` and `claimedAt` on that year's occasion state. A logged purchase stores `boughtBy` on the gift. Both live inside the group ciphertext, so the rules still only see ciphertext. A gift left unchecked when two copies of a person are merged is stored at `users/{uid}/privateGifts/{id}`, sealed with the device key (not the group key), and shown only to that user on the group recipient. Merging never runs by itself. Deleting the source copy frees that list's recipient slot. The merge does not add a recipient on the target list, and it refuses if it would push a free list past 5.
 
 ## 1. Foundation
 - [x] React Native 0.88 TypeScript scaffold for iOS and Android (`~/Documents/Projects/Gifteez`)
@@ -63,6 +64,7 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] Add React Native Firebase (app, auth, firestore, functions, app-check, remote-config, storage)
 - [ ] Set a billing budget alert in Google Cloud
 - [x] Write Firestore security rules: only group members can read or write their group
+- [x] Private gifts sit at `users/{uid}/privateGifts` and only that user can read or write them. Claim and buyer fields stay inside group ciphertext
 - [ ] Enable App Check (App Attest on iOS, Play Integrity on Android)
 - [x] Make Firestore the source of truth for all user data
 - [x] Build an encrypted local cache that mirrors Firestore, not a separate data model
@@ -118,6 +120,9 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] Show recommendations as text
 - [x] Show the gift history for this person across occasions and years
 - [x] Let the user edit the person's tags and budget
+- [x] Gift history can filter to "My purchases". Each recipient shows who spent what this year and all time, next to the totals and budget
+- [x] On a group recipient, "Same person as…" merges a copy from another list. Occasions with the same type, month, and day combine. The source copy is removed and that list's recipient slot frees. Unchecked gifts stay private to the person who merged them
+- [x] After joining a list, offer a merge when a recipient matches one on your other lists by name or birthday. The offer can be dismissed. Nothing merges automatically
 
 ## 7. Occasions and the gift-giving loop
 - [x] Support per-person occasions: birthday, Christmas and wedding
@@ -125,6 +130,9 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] Reset the status for each new occurrence of an occasion
 - [x] Gift-giving loop: get ideas, save an idea, mark it purchased, log the date and price, give feedback
 - [x] Logging a purchase counts it toward the person's budget
+- [x] "I'll get this" claims this year's occasion. Every member sees who claimed it. The claimer or the list owner can unclaim
+- [x] Logging a purchase records who bought it. History says "Bought by" that name, or "You". Older gifts with no buyer still show
+- [x] A gentle warning shows if you log a purchase on an occasion another member claimed. The purchase still saves
 - [x] Build a fairness view comparing spend (and gift counts) across people
 
 ## 8. Recommendations: on-device AI (free baseline)

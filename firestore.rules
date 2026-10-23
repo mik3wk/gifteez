@@ -65,6 +65,8 @@ service cloud.firestore {
       // Owner deletes go through releaseOwnedGroup so the free slot is freed.
       allow delete: if false;
 
+      // claimedBy, claimedAt, and boughtBy live inside ciphertext. Rules cannot read them.
+      // Private gifts are not group docs; see users/{uid}/privateGifts.
       match /{collection}/{docId} {
         allow read: if isMember(groupId);
         allow create, update: if isMember(groupId)
@@ -93,6 +95,15 @@ service cloud.firestore {
       allow read, write: if signedIn() && request.auth.uid == uid;
       match /keys/{groupId} {
         allow read, write: if signedIn() && request.auth.uid == uid;
+      }
+      // Unchecked merge gifts. Ciphertext is sealed with the device key, not the group key.
+      match /privateGifts/{giftId} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create, update: if signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.updatedAt is number
+          && request.resource.data.ciphertext is string;
+        allow delete: if signedIn() && request.auth.uid == uid;
       }
     }
 

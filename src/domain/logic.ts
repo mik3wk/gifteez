@@ -116,7 +116,7 @@ export function allTimeSpentCents(personId: string, gifts: GiftRecord[]): number
     .reduce((sum, gift) => sum + gift.priceCents, 0);
 }
 
-export function giftYear(gift: GiftRecord): number {
+export function giftYear(gift: { purchasedOn: string; updatedAt: number }): number {
   const match = /^(\d{4})/.exec(gift.purchasedOn);
   return match ? Number(match[1]) : new Date(gift.updatedAt).getFullYear();
 }
@@ -590,6 +590,7 @@ export function saveIdea(input: {
     status: 'idea-saved',
     savedIdea: input.idea,
     updatedAt: input.now,
+    ...carriedClaim(existing),
   };
   const states = existing
     ? input.snapshot.states.map(state => (state.id === id ? next : state))
@@ -616,6 +617,7 @@ export function logPurchase(input: {
     status: 'purchased',
     savedIdea: existing?.savedIdea ?? input.gift.title,
     updatedAt: input.gift.updatedAt,
+    ...carriedClaim(existing),
   };
   const states = existing
     ? input.snapshot.states.map(state => (state.id === id ? nextState : state))
@@ -762,6 +764,16 @@ export function applyGroupRemote(
 }
 
 type Timed = { id: string; updatedAt: number };
+
+function carriedClaim(existing: OccasionState | undefined): Partial<Pick<OccasionState, 'claimedBy' | 'claimedAt'>> {
+  if (!existing?.claimedBy) {
+    return {};
+  }
+  if (existing.claimedAt == null) {
+    return { claimedBy: existing.claimedBy };
+  }
+  return { claimedBy: existing.claimedBy, claimedAt: existing.claimedAt };
+}
 
 function readRecord(
   snapshot: AppSnapshot,

@@ -145,4 +145,15 @@ test('a free account cannot start a second list, a paid account can, and joining
   assert.equal(ownerEntitledForMember({ memberIds: ['owner'], uid: 'stranger', groupEntitled: true }), false);
   assert.equal(claimSlot(5, false, 'add', 5).ok, false);
   assert.equal(claimSlot(5, true, 'add', 5).ok, true);
+  assert.match(rules, /claimedBy, claimedAt, and boughtBy live inside ciphertext/);
+  const privateGifts = rules.slice(rules.indexOf('match /privateGifts/{giftId}'));
+  assert.notEqual(privateGifts, '');
+  const privateBlock = privateGifts.slice(0, privateGifts.indexOf('match /aiUsage'));
+  assert.match(privateBlock, /request\.auth\.uid == uid/);
+  assert.match(privateBlock, /ciphertext is string/);
+  assert.match(privateBlock, /updatedAt is number/);
+  assert.match(privateBlock, /allow delete: if signedIn\(\) && request\.auth\.uid == uid/);
+  const groupDocs = rules.slice(rules.indexOf('match /{collection}/{docId}'), rules.indexOf('match /invites/{inviteId}'));
+  assert.match(groupDocs, /ciphertext is string/);
+  assert.match(groupDocs, /updatedAt is number/);
 });
