@@ -137,6 +137,7 @@ function Navigator() {
       ) : gifteez.notice ? (
         <Notice
           text={gifteez.notice}
+          art={gifteez.noticeArt ?? undefined}
           onClose={gifteez.clearNotice}
           action={gifteez.canUndo ? t('common.undo') : undefined}
           onAction={gifteez.canUndo ? () => { gifteez.runUndo().catch(() => undefined); } : undefined}

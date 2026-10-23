@@ -1,8 +1,8 @@
 import React from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { t } from '../i18n';
+import { stroke, type ArtName, type CelebrateName, type EmptyArtName } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
-import { stroke } from '../theme/tokens';
 
 const SKINS = {
   base: require('../assets/skins/base.png'),
@@ -12,7 +12,56 @@ const SKINS = {
   summer: require('../assets/skins/summer.png'),
 };
 
-/** Seasonal art sits on the banner color. Step 2 replaces the bitmap with a sticker illustration. */
+const SKIN_ART: Record<ArtName, number> = {
+  birthday: require('../assets/art/skins/skin-birthday.png'),
+  anniversary: require('../assets/art/skins/skin-anniversary.png'),
+  wedding: require('../assets/art/skins/skin-wedding.png'),
+  baby: require('../assets/art/skins/skin-baby.png'),
+  holiday: require('../assets/art/skins/skin-holiday.png'),
+  hanukkah: require('../assets/art/skins/skin-hanukkah.png'),
+  diwali: require('../assets/art/skins/skin-diwali.png'),
+  valentine: require('../assets/art/skins/skin-valentine.png'),
+  mother: require('../assets/art/skins/skin-mother.png'),
+  father: require('../assets/art/skins/skin-father.png'),
+  graduation: require('../assets/art/skins/skin-graduation.png'),
+  house: require('../assets/art/skins/skin-house.png'),
+  gift: require('../assets/art/skins/skin-gift.png'),
+};
+
+const EMPTY_ART: Record<EmptyArtName, number> = {
+  people: require('../assets/art/empty/empty-people.png'),
+  fairness: require('../assets/art/empty/empty-fairness.png'),
+  occasions: require('../assets/art/empty/empty-occasions.png'),
+  ideas: require('../assets/art/empty/empty-ideas.png'),
+  group: require('../assets/art/empty/empty-group.png'),
+  error: require('../assets/art/empty/empty-error.png'),
+  offline: require('../assets/art/empty/empty-offline.png'),
+};
+
+const CELEBRATE_ART: Record<CelebrateName, number> = {
+  claim: require('../assets/art/celebrate/celebrate-claim.png'),
+  'save-idea': require('../assets/art/celebrate/celebrate-save-idea.png'),
+  purchase: require('../assets/art/celebrate/celebrate-purchase.png'),
+};
+
+/** Group list mark. The file is the gift sticker, not a face. */
+export const GROUP_AVATAR = require('../assets/art/avatars/group-avatar.png');
+
+/**
+ * confetti-burst.png (@2x/@3x) sits beside the celebration art for the motion
+ * step. Nothing requires it yet, so it stays out of the bundle.
+ */
+export function artSource(name: ArtName | EmptyArtName | CelebrateName): number {
+  if (Object.prototype.hasOwnProperty.call(EMPTY_ART, name)) {
+    return EMPTY_ART[name as EmptyArtName];
+  }
+  if (Object.prototype.hasOwnProperty.call(CELEBRATE_ART, name)) {
+    return CELEBRATE_ART[name as CelebrateName];
+  }
+  return SKIN_ART[name as ArtName] ?? SKIN_ART.gift;
+}
+
+/** Seasonal banners stay the season bitmaps. Occasion skins are separate. */
 export function SkinBanner({ skinId }: { skinId: string }) {
   const { colors, radius } = useTheme();
   const source = SKINS[skinId as keyof typeof SKINS] ?? SKINS.base;

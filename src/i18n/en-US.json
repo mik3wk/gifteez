@@ -149,6 +149,7 @@
     "tags": "Interests",
     "tagsHint": "Tap a few interests. The ideas above will shift.",
     "occasions": "Occasions",
+    "occasionsEmpty": "No occasions yet. Add a birthday or any date.",
     "addOccasion": "Add occasion",
     "addOccasionHeading": "Add an occasion",
     "editDetails": "Edit",
@@ -172,6 +173,7 @@
     "statusPurchased": "Purchased",
     "ideas": "Ideas",
     "ideasHint": "A few ideas to start. Tap an interest and they get closer.",
+    "ideasEmpty": "No ideas yet. Add a date and a few interests.",
     "ideasLoading": "Finding a few ideas…",
     "saveIdeaNeedsDate": "Add a date below and this idea can stay with it.",
     "ideaKept": "Saved with their next occasion.",
@@ -191,6 +193,7 @@
     "saveIdea": "Save idea",
     "purchase": "Log a purchase",
     "claim": "I'll get this",
+    "claimedToast": "You're getting this one.",
     "claimLabel": "I'll get this {occasion}",
     "unclaim": "I can't get this anymore",
     "unclaimLabel": "Unclaim {occasion}",
@@ -253,6 +256,7 @@
     "price": "Price",
     "date": "Date",
     "save": "Save purchase",
+    "saved": "Purchase logged.",
     "claimedWarning": "{name} already said they would get this. You can still log a purchase."
   },
   "merge": {

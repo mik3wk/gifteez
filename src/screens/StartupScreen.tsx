@@ -1,7 +1,7 @@
 import React from 'react';
 import type { StartupFailure } from '../domain/startup';
 import { t } from '../i18n';
-import { Body, Button, Screen, Title } from '../ui/ui';
+import { ArtSlot, Body, Button, Screen, Title } from '../ui/ui';
 
 export function StartupScreen({
   kind,
@@ -15,6 +15,7 @@ export function StartupScreen({
   const title = t('startup.title');
   return (
     <Screen centered>
+      <ArtSlot name="error" size={160} />
       <Title accessibilityLabel={title}>{title}</Title>
       <Body>{t(`startup.${kind}`)}</Body>
       <Body>{detail}</Body>

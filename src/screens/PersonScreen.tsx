@@ -15,10 +15,11 @@ import { peopleOnOtherLists } from '../domain/merge';
 import type { Occasion } from '../domain/types';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, t, todayIso } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
+import { occasionLook } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { DateField } from '../ui/DateField';
 import { OccasionPicker } from '../ui/OccasionPicker';
-import { Body, Button, Caption, Card, Chip, Cluster, confirmDestructive, Field, HeaderTextButton, Heading, IconButton, Screen, Segment, Sheet, Split, Title, Toggle } from '../ui/ui';
+import { ArtRow, ArtSlot, Body, Button, Caption, Card, Chip, Cluster, confirmDestructive, EmptyState, Field, HeaderTextButton, Heading, IconButton, Screen, Segment, Sheet, Split, Title, Toggle } from '../ui/ui';
 
 export function AddPersonScreen() {
   const navigation = useNavigation();
@@ -116,6 +117,7 @@ export function PersonScreen() {
   if (!person) {
     return (
       <Screen>
+        <ArtSlot name="error" size={160} />
         <Body>{t('errors.generic')}</Body>
         <Button label={t('common.back')} onPress={() => navigation.goBack()} />
       </Screen>
@@ -159,6 +161,9 @@ export function PersonScreen() {
       {section !== 'ideas' || hidden || locked ? null : <Heading>{t('person.ideas')}</Heading>}
       {section !== 'ideas' || hidden || locked ? null : <Body>{t('person.ideasHint')}</Body>}
       {section !== 'ideas' || hidden || locked || !findingIdeas || ideas.length > 0 ? null : <Body>{t('person.ideasLoading')}</Body>}
+      {section !== 'ideas' || hidden || locked || findingIdeas || ideas.length > 0 || (cloud?.ideas ?? []).length > 0 ? null : (
+        <EmptyState kind="ideas" text={t('person.ideasEmpty')} />
+      )}
       {ideaNote ? <Body>{ideaNote}</Body> : null}
       {section !== 'ideas' || hidden || locked ? null : ideas.map(idea => (
         <IdeaRow
@@ -218,6 +223,9 @@ export function PersonScreen() {
         />
       ) : null}
       {section !== 'occasions' ? null : <Heading>{t('person.occasions')}</Heading>}
+      {section !== 'occasions' || snapshot.occasions.some(item => item.personId === person.id && !item.deleted) ? null : (
+        <EmptyState kind="occasions" text={t('person.occasionsEmpty')} />
+      )}
       {section !== 'occasions' ? null : snapshot.occasions.filter(item => item.personId === person.id && !item.deleted).map(occasion => (
         <OccasionCard
           key={occasion.id}
@@ -492,7 +500,9 @@ function OccasionCard({
   const note = presetFor(occasion.type)?.note;
   return (
     <Card>
-      <Body strong>{`${label} · ${when}`}</Body>
+      <ArtRow art={occasionLook(occasion.type).art}>
+        <Body strong>{`${label} · ${when}`}</Body>
+      </ArtRow>
       {note ? <Caption>{t(note)}</Caption> : null}
       {estimated ? <Caption>{t('person.dateEstimated')}</Caption> : null}
       {hidden ? null : <Caption tone="text">{t(status === 'idea-saved' ? 'person.statusIdea' : status === 'purchased' ? 'person.statusPurchased' : 'person.statusNotStarted')}</Caption>}

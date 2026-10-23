@@ -110,6 +110,7 @@ import { deleteSecret, loadSecret, saveSecret } from '../platform/secure';
 import { occasionLabel, planOccasion, presetFor } from '../domain/occasions';
 import { classifySyncError } from '../domain/syncStatus';
 import { haptic } from '../platform/haptics';
+import type { CelebrateName } from '../theme/tokens';
 import { colorsFor, parseSkin, resolveSkin, withColorScheme, type ResolvedColors, type SkinId, type ThemeColors } from '../theme/skins';
 
 const COLLECTIONS = ['people', 'occasions', 'states', 'gifts', 'ideas', 'members'] as const;
@@ -126,6 +127,7 @@ type GifteezApi = {
   onNavigate: () => void;
   skinId: string;
   notice: string | null;
+  noticeArt: CelebrateName | null;
   error: string | null;
   startupFailure: StartupFailure | null;
   startupDetail: string | null;
@@ -216,7 +218,12 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const snapshotRef = useRef(snapshot);
   const [ready, setReady] = useState(false);
   const [bootId, setBootId] = useState(0);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNoticeState] = useState<string | null>(null);
+  const [noticeArt, setNoticeArt] = useState<CelebrateName | null>(null);
+  const setNotice = useCallback((message: string | null, art: CelebrateName | null = null) => {
+    setNoticeArt(message ? art : null);
+    setNoticeState(message);
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [startupFailure, setStartupFailure] = useState<StartupFailure | null>(null);
   const [startupDetail, setStartupDetail] = useState<string | null>(null);
@@ -253,13 +260,13 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const syncReported = useRef<string | null>(null);
   const noticeStickyUntil = useRef(0);
 
-  const showNotice = useCallback((message: string, sticky = false) => {
+  const showNotice = useCallback((message: string, sticky = false, art: CelebrateName | null = null) => {
     setError(null);
-    setNotice(message);
+    setNotice(message, art);
     if (sticky) {
       noticeStickyUntil.current = Date.now() + 6000;
     }
-  }, []);
+  }, [setNotice]);
 
   const noteSync = useCallback((caught: unknown) => {
     const kind = classifySyncError(caught);
@@ -306,7 +313,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     if (restore) {
       await restore();
     }
-  }, []);
+  }, [setNotice]);
 
   const onNavigate = useCallback(() => {
     if (Date.now() < noticeStickyUntil.current) {
@@ -314,7 +321,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     }
     setNotice(null);
     setError(null);
-  }, []);
+  }, [setNotice]);
 
   const fail = useCallback((code: string, vars?: Record<string, string | number>) => {
     const key = `errors.${code}`;
@@ -324,7 +331,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     undoRestore.current = null;
     setError(message === key ? t('errors.generic') : message);
     haptic('error');
-  }, []);
+  }, [setNotice]);
 
   const sync = useCallback(async (source?: AppSnapshot) => {
     let current = source ?? snapshotRef.current;
@@ -552,6 +559,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     colors,
     skinId,
     notice,
+    noticeArt,
     error,
     offline,
     canUndo,
@@ -914,6 +922,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return;
       }
       await commit(saveIdea({ snapshot: snapshotRef.current, occasion, idea, today: new Date(), now: Date.now() }));
+      showNotice(t('person.ideaKept'), false, 'save-idea');
       haptic('success');
       sync().catch(() => undefined);
     },
@@ -954,7 +963,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         },
       }));
       if (warningUid) {
-        setNotice(t('purchase.claimedWarning', { name: claimerName(warningUid, snapshotRef.current.members) }));
+        showNotice(t('purchase.claimedWarning', { name: claimerName(warningUid, snapshotRef.current.members) }), false, 'purchase');
+      } else {
+        showNotice(t('purchase.saved'), false, 'purchase');
       }
       haptic('success');
       sync().catch(() => undefined);
@@ -978,6 +989,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return;
       }
       await commit(result.snapshot);
+      showNotice(t('person.claimedToast'), false, 'claim');
       haptic('success');
       sync().catch(() => undefined);
     },
@@ -1507,7 +1519,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       return addImported(rows);
     },
-  }), [addImported, canUndo, clearResumePerson, cloudRemaining, colors, commit, duplicateOffers, env, error, fail, noteSync, notice, offerUndo, offline, onNavigate, ready, recoveryCode, resumePersonId, runUndo, showNotice, skinId, snapshot, startupDetail, startupFailure, storeProduct, storeReady, sync]);
+  }), [addImported, canUndo, clearResumePerson, cloudRemaining, colors, commit, duplicateOffers, env, error, fail, noteSync, notice, noticeArt, offerUndo, offline, onNavigate, ready, recoveryCode, resumePersonId, runUndo, setNotice, showNotice, skinId, snapshot, startupDetail, startupFailure, storeProduct, storeReady, sync]);
 
   return <GifteezContext.Provider value={api}>{children}</GifteezContext.Provider>;
 }

@@ -2,8 +2,8 @@ import { Platform, type TextStyle, type ViewStyle } from 'react-native';
 
 /**
  * Sticker tokens. Screens read these through useTheme(), not as raw hexes.
- * Step 2 drops illustrations into ArtSlot. To add an occasion skin, add an
- * ArtName, draw assets/src/<name>.svg, and point the preset at it in OCCASION_LOOK.
+ * Occasion art is the PNG set in src/assets/art. To add a skin, add an ArtName,
+ * drop skin-<name>.png at @1x/@2x/@3x, and point the preset at it in OCCASION_LOOK.
  */
 
 export const sticker = {
@@ -186,6 +186,9 @@ export function occasionLook(id: string): OccasionLook {
 }
 
 export type EmptyArtName = 'people' | 'fairness' | 'occasions' | 'ideas' | 'group' | 'error' | 'offline';
+
+/** Static celebration art. Confetti motion is a later step and is not part of this set. */
+export type CelebrateName = 'claim' | 'save-idea' | 'purchase';
 
 export const EMPTY_LOOK: Record<EmptyArtName, { art: ArtName; emoji: string }> = {
   people: { art: 'gift', emoji: '🎁' },

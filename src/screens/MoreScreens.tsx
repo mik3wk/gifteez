@@ -6,7 +6,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { describeIncomingLink, joinConfirmModel, type JoinPreview } from '../app/incomingLink';
 import type { RootStack } from '../app/navigation';
 import { getEnv } from '../config/env';
-import { accountUnlocked, canStartAnotherList, fairnessRows, groupCurrency, groupDisplayName, groupMarker } from '../domain/logic';
+import { accountUnlocked, canStartAnotherList, fairnessRows, groupCurrency, groupDisplayName } from '../domain/logic';
 import { isHiddenFromViewer } from '../domain/visibility';
 import { deviceLocale, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
@@ -26,6 +26,7 @@ import {
   confirmDestructive,
   EmptyState,
   Field,
+  GroupAvatar,
   Heading,
   HueDot,
   ProgressBar,
@@ -84,7 +85,7 @@ export function FairnessScreen() {
 
 export function GroupScreen() {
   const { snapshot, shareInvite, leave, removeGroupMember, renameList, showRecovery, switchGroup, startGroup, transferOwnership, setListCurrency } = useGifteez();
-  const { colors, scheme } = useTheme();
+  const { colors } = useTheme();
   const heading = useGroupLabel();
   const groupName = snapshot.group?.name ?? '';
   const groupId = snapshot.group?.id;
@@ -108,13 +109,12 @@ export function GroupScreen() {
       <Heading>{t('groupScreen.lists')}</Heading>
       {snapshot.roster.length === 0 ? <EmptyState kind="group" text={t('groupScreen.lists')} /> : null}
       {snapshot.roster.map(item => {
-        const marker = groupMarker(item.id);
         const label = groupDisplayName(item.name, item.memberNames);
         const active = item.id === snapshot.group?.id;
         return (
           <Row key={item.id} accessibilityLabel={label} onPress={() => switchGroup(item.id)}>
             <RowLine>
-              <Avatar initials="G" hue={groupHue(marker.index, scheme)} />
+              <GroupAvatar />
               <Stack>
                 <Body strong>{label}</Body>
                 {item.stale ? <Caption>{t('groupScreen.notCurrent')}</Caption> : null}

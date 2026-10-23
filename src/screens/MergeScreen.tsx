@@ -6,7 +6,7 @@ import type { RootStack } from '../app/navigation';
 import { giftsOnList, peopleOnOtherLists } from '../domain/merge';
 import { t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
-import { Body, Button, Screen, Title } from '../ui/ui';
+import { ArtSlot, Body, Button, Screen, Title } from '../ui/ui';
 import { MergeChecklist } from './mergeUi';
 
 export function MergeScreen() {
@@ -23,6 +23,7 @@ export function MergeScreen() {
   if (!target) {
     return (
       <Screen>
+        <ArtSlot name="error" size={160} />
         <Title>{t('errors.generic')}</Title>
         <Body>{t('errors.generic')}</Body>
         <Button label={t('common.back')} onPress={() => navigation.goBack()} />

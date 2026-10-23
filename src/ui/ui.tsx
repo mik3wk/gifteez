@@ -3,6 +3,7 @@ import {
   AccessibilityInfo,
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -27,8 +28,8 @@ import { formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { readable } from '../theme/skins';
 import { useTheme } from '../theme/useTheme';
-import { layout, shadowOffset, space, stroke, touch } from '../theme/tokens';
-import { EMPTY_LOOK, occasionLook, type ArtName, type ChipTint, type EmptyArtName } from '../theme/tokens';
+import { layout, occasionLook, shadowOffset, space, stroke, touch, type ArtName, type CelebrateName, type ChipTint, type EmptyArtName } from '../theme/tokens';
+import { artSource, GROUP_AVATAR } from './art';
 import { Icon, type IconName } from './icons';
 
 /** A stack header already includes the status bar, so a second top inset doubles the gap. */
@@ -508,12 +509,14 @@ export function Notice({
   text,
   onClose,
   tone = 'success',
+  art,
   action,
   onAction,
 }: {
   text: string;
   onClose: () => void;
   tone?: 'success' | 'danger';
+  art?: CelebrateName;
   action?: string;
   onAction?: () => void;
 }) {
@@ -533,11 +536,16 @@ export function Notice({
       style={[styles.notice, { bottom: insets.bottom + layout.tabBar + space.xs }]}>
       <StickerBox fill={colors.surface} radius={radius.card} borderWidth={stroke.card}>
         <View style={styles.pad}>
-          <Caption tone={tone === 'danger' ? 'danger' : 'text'}>{text}</Caption>
-          <Cluster>
-            {action && onAction ? <Button compact label={action} tone="secondary" onPress={onAction} /> : null}
-            <Button compact label={t('common.dismiss')} tone="ghost" onPress={onClose} />
-          </Cluster>
+          <View style={styles.artRow}>
+            {art ? <ArtSlot name={art} size={72} /> : null}
+            <View style={styles.personCopy}>
+              <Caption tone={tone === 'danger' ? 'danger' : 'text'}>{text}</Caption>
+              <Cluster>
+                {action && onAction ? <Button compact label={action} tone="secondary" onPress={onAction} /> : null}
+                <Button compact label={t('common.dismiss')} tone="ghost" onPress={onClose} />
+              </Cluster>
+            </View>
+          </View>
         </View>
       </StickerBox>
     </View>
@@ -551,7 +559,12 @@ export function OfflineBanner({ text }: { text: string }) {
     <View accessibilityLiveRegion="polite" pointerEvents="none" style={[styles.offline, { top: insets.top + space.xs }]}>
       <StickerBox fill={colors.surface} radius={radius.card} borderWidth={stroke.inner}>
         <View style={styles.pad}>
-          <Caption tone="text">{text}</Caption>
+          <View style={styles.artRow}>
+            <ArtSlot name="offline" size={64} />
+            <View style={styles.personCopy}>
+              <Caption tone="text">{text}</Caption>
+            </View>
+          </View>
         </View>
       </StickerBox>
     </View>
@@ -582,20 +595,52 @@ export function Card({
   );
 }
 
-export function ArtSlot({ name, size = 88 }: { name: ArtName | EmptyArtName; size?: number }) {
-  const { colors, radius } = useTheme();
-  const look = name in EMPTY_LOOK ? EMPTY_LOOK[name as EmptyArtName] : { art: name as ArtName, emoji: occasionLook(name).emoji };
-  const tint = colors.sunshine;
+export function ArtSlot({
+  name,
+  size = 88,
+}: {
+  name: ArtName | EmptyArtName | CelebrateName;
+  size?: number;
+}) {
   return (
-    <View
+    <Image
       accessibilityElementsHidden
-      style={{ width: size, height: size, transform: [{ rotate: '-3deg' }] }}>
-      <StickerBox fill={tint} radius={radius.card} borderWidth={stroke.card}>
-        <View style={[styles.art, { height: size - shadowOffset }]}>
-          <Text style={{ fontSize: Math.round(size * 0.42) }}>{look.emoji}</Text>
-        </View>
-      </StickerBox>
+      importantForAccessibility="no-hide-descendants"
+      accessibilityIgnoresInvertColors
+      source={artSource(name)}
+      resizeMode="contain"
+      style={{ width: size, height: size }}
+    />
+  );
+}
+
+export function ArtRow({
+  art,
+  size = 88,
+  children,
+}: {
+  art: ArtName;
+  size?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.artRow}>
+      <ArtSlot name={art} size={size} />
+      <View style={styles.personCopy}>{children}</View>
     </View>
+  );
+}
+
+export function GroupAvatar({ size = 48 }: { size?: number }) {
+  return (
+    <Image
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      accessibilityIgnoresInvertColors
+      source={GROUP_AVATAR}
+      resizeMode="contain"
+      style={{ width: size, height: size }}
+    />
   );
 }
 
@@ -613,7 +658,7 @@ export function EmptyState({
   return (
     <Card variant="dashed">
       <View style={styles.empty}>
-        <ArtSlot name={kind} />
+        <ArtSlot name={kind} size={160} />
         <Body>{text}</Body>
         {action && onAction ? <Button label={action} onPress={onAction} /> : null}
       </View>
@@ -829,7 +874,7 @@ export function AppHeader({ title, greeting }: { title: string; greeting?: strin
   return (
     <View style={styles.header}>
       <View style={styles.headerCopy}>
-        <ArtSlot name="gift" size={56} />
+        <GroupAvatar size={64} />
         <View style={styles.personCopy}>
           {greeting ? <Caption>{greeting}</Caption> : null}
           <Title>{title}</Title>
@@ -1187,7 +1232,6 @@ const styles = StyleSheet.create({
   notice: { position: 'absolute', left: space.md, right: space.md },
   offline: { position: 'absolute', left: space.md, right: space.md },
   empty: { gap: space.sm, alignItems: 'center' },
-  art: { alignItems: 'center', justifyContent: 'center' },
   progress: { flexDirection: 'row', gap: space.xxs },
   progressDot: { flex: 1, height: 8, borderRadius: 4, borderWidth: stroke.inner },
   avatar: {
@@ -1211,6 +1255,7 @@ const styles = StyleSheet.create({
   stat: { padding: space.sm, gap: space.xxs, minHeight: 96 },
   person: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   personCopy: { flex: 1, gap: space.xxs },
+  artRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.xs },
   headerCopy: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flex: 1 },
   tabs: { flexDirection: 'row', paddingVertical: space.xs, paddingHorizontal: space.xxs },
