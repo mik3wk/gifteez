@@ -27,9 +27,11 @@ prepare_react_native_project!
 # that SPM product to the app target (see post_integrate below).
 #
 # Firebase 13's Firestore product does not compile unless the package's Firestore
-# trait is on. ios/firebase_spm_traits.rb (required above) writes that trait onto
-# every firebase-ios-sdk package reference. Auth, App Check, Functions, Remote
-# Config, and Storage are not trait-gated in this SDK.
+# trait is on. Xcode 26.2 ignores a `traits` key on the package reference (Xcode
+# 26.4+ is what reads it). ios/FirebaseFirestoreTrait is a local package that
+# depends on firebase-ios-sdk with the Firestore trait enabled, which SwiftPM
+# 6.2 does honor. pod install links that package from the RNFBFirestore pod.
+# Auth, App Check, Functions, Remote Config, and Storage are not trait-gated.
 use_frameworks! :linkage => :dynamic
 
 target 'Gifteez' do
