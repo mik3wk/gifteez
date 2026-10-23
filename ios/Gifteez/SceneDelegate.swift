@@ -49,6 +49,30 @@ class SceneDelegate: RCTDefaultReactNativeFactoryDelegate, UIWindowSceneDelegate
 
   override func customize(_ rootView: RCTRootView) {
     rootView.backgroundColor = Self.launchBackground
+    // The new-architecture root view is an RCTSurfaceHostingProxyRootView. The
+    // protocol types it as RCTRootView; both classes implement setLoadingView:,
+    // which covers the storyboard-to-JS gap with the same 240pt centred logo.
+    rootView.loadingView = Self.launchLogo()
+    rootView.loadingViewFadeDelay = 0
+    rootView.loadingViewFadeDuration = 0
+  }
+
+  /// Matches LaunchScreen.storyboard: SplashLogo, 240×240, centred on LaunchBackground.
+  private static func launchLogo() -> UIView {
+    let host = UIView()
+    host.backgroundColor = launchBackground
+    host.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    let logo = UIImageView(image: UIImage(named: "SplashLogo"))
+    logo.contentMode = .scaleAspectFit
+    logo.translatesAutoresizingMaskIntoConstraints = false
+    host.addSubview(logo)
+    NSLayoutConstraint.activate([
+      logo.centerXAnchor.constraint(equalTo: host.centerXAnchor),
+      logo.centerYAnchor.constraint(equalTo: host.centerYAnchor),
+      logo.widthAnchor.constraint(equalToConstant: 240),
+      logo.heightAnchor.constraint(equalToConstant: 240),
+    ])
+    return host
   }
 
   override func bundleURL() -> URL? {
