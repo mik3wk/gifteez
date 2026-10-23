@@ -455,7 +455,6 @@ export function SettingsScreen() {
   } = useSettingsData();
   const heading = useGroupLabel();
   const [upgrade, setUpgrade] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const exportAfterSave = useRef(false);
   const [pasted, setPasted] = useState('');
   const [message, setMessage] = useState<string | null>(envNotice);
@@ -479,24 +478,18 @@ export function SettingsScreen() {
         <Body>{saved ? t('settings.saved') : t('settings.anonymous')}</Body>
         <Heading>{snapshot.profile.displayName}</Heading>
         {saved ? null : <Button label={t('settings.upgrade')} onPress={() => setUpgrade(true)} />}
+        <Heading>{t('settings.unlock')}</Heading>
+        {accountUnlocked(snapshot) ? <Body>{t('settings.unlocked')}</Body> : (
+          <>
+            <Body>{t('settings.unlockPrice', { price: storeProduct?.displayPrice || messagePrice() })}</Body>
+            {storeReady ? null : <Body>{t('settings.storeMissing')}</Body>}
+            <Button label={t('settings.unlock')} tone="secondary" onPress={buy} />
+            <Button label={t('settings.restore')} tone="secondary" onPress={restorePurchases} />
+          </>
+        )}
       </Card>
-      <Body>{t('settings.exportHint')}</Body>
-      <Button
-        label={t('settings.export')}
-        tone={saved ? 'primary' : 'secondary'}
-        onPress={async () => {
-          if (!snapshot.profile.upgraded) {
-            exportAfterSave.current = true;
-            setUpgrade(true);
-            return;
-          }
-          const text = exportText();
-          if (text) {
-            await Share.share({ message: text });
-          }
-        }}
-      />
       <Card>
+        <Heading>{t('settings.reminders')}</Heading>
         <Body>{t('settings.remindersHint')}</Body>
         <Toggle
           label={t('settings.remindersLabel')}
@@ -505,55 +498,68 @@ export function SettingsScreen() {
         />
       </Card>
       <Card>
-        <Heading>{t('settings.unlock')}</Heading>
-        {accountUnlocked(snapshot) ? <Body>{t('settings.unlocked')}</Body> : (
-          <>
-            <Body>{t('settings.unlockPrice', { price: storeProduct?.displayPrice || messagePrice() })}</Body>
-            {storeReady ? null : <Body>{t('settings.storeMissing')}</Body>}
-            <Button label={t('settings.unlock')} tone={saved ? 'primary' : 'secondary'} onPress={buy} />
-            <Button label={t('settings.restore')} tone="secondary" onPress={restorePurchases} />
-          </>
-        )}
+        <Heading>{t('settings.appearance')}</Heading>
+        <Caption tone="text">{t('settings.skinNow', { skin: skinId })}</Caption>
       </Card>
-      <Caption>{t('settings.skinNow', { skin: skinId })}</Caption>
-      <Body>{t('settings.optional')}</Body>
-      <Body>{t('settings.calendarHint')}</Body>
-      <Button
-        label={t('settings.calendar')}
-        tone="secondary"
-        onPress={async () => setMessage(await describeImport(await importFromCalendar()))}
-      />
-      <Body>{t('settings.contactsHint')}</Body>
-      <Button
-        label={t('settings.contacts')}
-        tone="secondary"
-        onPress={async () => setMessage(await describeImport(await importFromContacts()))}
-      />
-      <Field label={t('settings.pasteImport')} value={pasted} onChangeText={setPasted} />
-      <Body>{t('settings.pasteHint')}</Body>
-      <Button
-        label={t('settings.importAction')}
-        tone="secondary"
-        onPress={async () => setMessage(await describeImport(await importText(pasted)))}
-      />
-      {confirmDelete ? (
-        <Card variant="dashed">
-          <Body>{t('settings.deleteAccountBody')}</Body>
-          <Button
-            label={t('settings.deleteAccountConfirm')}
-            accessibilityLabel={t('settings.deleteAccountConfirmLabel')}
-            tone="danger"
-            onPress={() => deleteAccount()}
-          />
-        </Card>
-      ) : (
+      <Card>
+        <Heading>{t('settings.data')}</Heading>
+        <Body>{t('settings.exportHint')}</Body>
+        <Button
+          label={t('settings.export')}
+          tone={saved ? 'primary' : 'secondary'}
+          onPress={async () => {
+            if (!snapshot.profile.upgraded) {
+              exportAfterSave.current = true;
+              setUpgrade(true);
+              return;
+            }
+            const text = exportText();
+            if (text) {
+              await Share.share({ message: text });
+            }
+          }}
+        />
+        <Body>{t('settings.optional')}</Body>
+        <Body>{t('settings.calendarHint')}</Body>
+        <Button
+          label={t('settings.calendar')}
+          tone="secondary"
+          onPress={async () => setMessage(await describeImport(await importFromCalendar()))}
+        />
+        <Body>{t('settings.contactsHint')}</Body>
+        <Button
+          label={t('settings.contacts')}
+          tone="secondary"
+          onPress={async () => setMessage(await describeImport(await importFromContacts()))}
+        />
+        <Field label={t('settings.pasteImport')} value={pasted} onChangeText={setPasted} />
+        <Body>{t('settings.pasteHint')}</Body>
+        <Button
+          label={t('settings.importAction')}
+          tone="secondary"
+          onPress={async () => setMessage(await describeImport(await importText(pasted)))}
+        />
+      </Card>
+      <Card>
+        <Heading>{t('settings.danger')}</Heading>
         <Button
           label={t('settings.deleteAccount')}
           accessibilityLabel={t('settings.deleteAccountLabel')}
           tone="danger-quiet"
-          onPress={() => setConfirmDelete(true)}
+          onPress={() => {
+            confirmDestructive(
+              t('settings.deleteAccount'),
+              t('settings.deleteAccountBody'),
+              t('settings.deleteAccountConfirm'),
+              t('settings.deleteAccountConfirmLabel'),
+            ).then(ok => {
+              if (ok) {
+                deleteAccount().catch(() => undefined);
+              }
+            }).catch(() => undefined);
+          }}
         />
-      )}
+      </Card>
       {message ? <Body>{message}</Body> : null}
       <AccountSheet
         visible={upgrade}

@@ -48,7 +48,19 @@ export const radius = { chip: 12, card: 16, button: 999, pill: 999 } as const;
 export const stroke = { card: 2.5, control: 2.5, inner: 2 } as const;
 export const shadowOffset = 4;
 export const touch = { minTarget: 48 } as const;
-export const layout = { maxContent: 640, tabBar: 76, toastGap: 128 } as const;
+export const layout = { maxContent: 640, tabBar: 76, toastGap: 200 } as const;
+
+/** Dialog and sheet backdrops. Black in both schemes so dark mode does not wash out. */
+export const scrim = 'rgba(0,0,0,0.6)';
+
+/**
+ * Icon ink on a white or plum surface. Chip fills stay the brighter sticker
+ * colors; these are only for the glyph, so light mode can clear 3:1.
+ */
+export const iconOnSurface = {
+  light: { teal: '#00897D', lilac: '#7B61D9' },
+  dark: { teal: sticker.dark.teal, lilac: sticker.dark.lilac },
+} as const;
 
 /** Archivo Black is already heavy, so display stays at weight 400. Android picks the file name. */
 export const fonts = {

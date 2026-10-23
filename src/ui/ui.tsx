@@ -13,7 +13,6 @@ import {
   Switch,
   Text,
   TextInput,
-  useColorScheme,
   View,
   type StyleProp,
   type ViewStyle,
@@ -26,9 +25,8 @@ import type { RootStack } from '../app/navigation';
 import { getEnv } from '../config/env';
 import { formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
-import { readable } from '../theme/skins';
 import { useTheme } from '../theme/useTheme';
-import { layout, occasionLook, shadowOffset, space, stroke, touch, type ArtName, type CelebrateName, type ChipTint, type EmptyArtName } from '../theme/tokens';
+import { iconOnSurface, layout, occasionLook, scrim, shadowOffset, space, sticker, stroke, touch, type ArtName, type CelebrateName, type ChipTint, type EmptyArtName } from '../theme/tokens';
 import { artSource, GROUP_AVATAR } from './art';
 import { Icon, type IconName } from './icons';
 
@@ -103,27 +101,33 @@ export function Screen({
   tab?: TabId;
 }) {
   const { colors } = useTheme();
+  const { notice, error } = useGifteez();
   const insets = useSafeAreaInsets();
   const headerHeight = useContext(HeaderHeightContext);
   const bar = tab ? <TabBar active={tab} /> : footer;
+  const underStatus = screenTopInset(headerHeight, insets.top) > 0;
+  const toast = Boolean(notice || error);
   return (
     <KeyboardAvoidingView
       style={[styles.screen, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={headerHeight ?? 0}>
       <ScrollView
-        style={styles.screen}
+        style={[styles.screen, toast ? { marginBottom: layout.toastGap } : null]}
         contentContainerStyle={[
           styles.content,
           centered ? styles.centered : null,
           {
             paddingTop: screenTopInset(headerHeight, insets.top) + space.sm,
-            paddingBottom: (bar ? space.sm : insets.bottom + space.lg) + layout.toastGap,
+            paddingBottom: bar ? space.sm : insets.bottom + space.lg,
           },
         ]}
         keyboardShouldPersistTaps="handled">
         <View style={styles.column}>{children}</View>
       </ScrollView>
+      {underStatus ? (
+        <View pointerEvents="none" style={[styles.statusBar, { height: insets.top, backgroundColor: colors.background }]} />
+      ) : null}
       {bar ? (
         <View style={[styles.footer, { backgroundColor: colors.background, paddingBottom: insets.bottom + space.xs }]}>
           {bar}
@@ -176,10 +180,10 @@ export function Title({ children, accessibilityLabel }: { children: string; acce
   );
 }
 
-export function Heading({ children }: { children: string }) {
+export function Heading({ children, color }: { children: string; color?: string }) {
   const { colors, type, typeScale } = useTheme();
   return (
-    <Text accessibilityRole="header" maxFontSizeMultiplier={typeScale.heading} style={[type.heading, styles.ink, { color: colors.text }]}>
+    <Text accessibilityRole="header" maxFontSizeMultiplier={typeScale.heading} style={[type.heading, styles.ink, { color: color ?? colors.text }]}>
       {children}
     </Text>
   );
@@ -194,20 +198,21 @@ export function Body({ children, strong, accessibilityLabel }: { children: strin
   );
 }
 
-export function Caption({ children, tone = 'muted' }: { children: string; tone?: 'muted' | 'danger' | 'text' }) {
+export function Caption({ children, tone = 'muted', color }: { children: string; tone?: 'muted' | 'danger' | 'text'; color?: string }) {
   const { colors, type, typeScale } = useTheme();
-  const color = tone === 'danger' ? colors.dangerText : tone === 'text' ? colors.text : colors.muted;
+  const toneColor = tone === 'danger' ? colors.dangerText : tone === 'text' ? colors.text : colors.muted;
+  const ink = color ?? toneColor;
   return (
-    <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, styles.ink, { color }]}>
+    <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, styles.ink, { color: ink }]}>
       {children}
     </Text>
   );
 }
 
-export function Display({ children }: { children: string }) {
+export function Display({ children, color }: { children: string; color?: string }) {
   const { colors, type, typeScale } = useTheme();
   return (
-    <Text maxFontSizeMultiplier={typeScale.display} style={[type.display, styles.ink, { color: colors.text }]}>
+    <Text maxFontSizeMultiplier={typeScale.display} style={[type.display, styles.ink, { color: color ?? colors.text }]}>
       {children}
     </Text>
   );
@@ -217,12 +222,18 @@ type ConfirmRequest = {
   title: string;
   message: string;
   confirmLabel: string;
+  confirmAccessibilityLabel?: string;
   resolve: (value: boolean) => void;
 };
 
 let confirmListener: ((request: ConfirmRequest | null) => void) | null = null;
 
-export function confirmDestructive(title: string, message: string, confirmLabel: string): Promise<boolean> {
+export function confirmDestructive(
+  title: string,
+  message: string,
+  confirmLabel: string,
+  confirmAccessibilityLabel?: string,
+): Promise<boolean> {
   return new Promise(resolve => {
     if (!confirmListener) {
       let settled = false;
@@ -239,7 +250,7 @@ export function confirmDestructive(title: string, message: string, confirmLabel:
       ], { cancelable: true, onDismiss: () => finish(false) });
       return;
     }
-    confirmListener({ title, message, confirmLabel, resolve });
+    confirmListener({ title, message, confirmLabel, confirmAccessibilityLabel, resolve });
   });
 }
 
@@ -247,28 +258,31 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel,
+  confirmAccessibilityLabel,
   onConfirm,
   onCancel,
 }: {
   title: string;
   message: string;
   confirmLabel: string;
+  confirmAccessibilityLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  const { colors } = useTheme();
   return (
-    <View style={styles.scrim} accessibilityViewIsModal>
-      <View style={[styles.scrimFill, { backgroundColor: colors.ink }]} />
-      <View style={styles.dialog}>
-        <Card>
-          <Heading>{title}</Heading>
-          <Body>{message}</Body>
-          <Button label={confirmLabel} tone="danger" onPress={onConfirm} />
-          <Button label={t('common.cancel')} tone="secondary" onPress={onCancel} />
-        </Card>
+    <Modal transparent visible animationType="fade" onRequestClose={onCancel} statusBarTranslucent>
+      <View style={styles.modalFill} accessibilityViewIsModal>
+        <View style={[styles.scrimFill, { backgroundColor: scrim }]} />
+        <View style={styles.dialog}>
+          <Card>
+            <Heading>{title}</Heading>
+            <Body>{message}</Body>
+            <Button label={confirmLabel} accessibilityLabel={confirmAccessibilityLabel} tone="danger" onPress={onConfirm} />
+            <Button label={t('common.cancel')} tone="secondary" onPress={onCancel} />
+          </Card>
+        </View>
       </View>
-    </View>
+    </Modal>
   );
 }
 
@@ -294,6 +308,7 @@ export function ConfirmHost() {
       title={request.title}
       message={request.message}
       confirmLabel={request.confirmLabel}
+      confirmAccessibilityLabel={request.confirmAccessibilityLabel}
       onConfirm={() => finish(true)}
       onCancel={() => finish(false)}
     />
@@ -313,7 +328,7 @@ export function Button({
 }: {
   label: string;
   onPress: () => void | Promise<unknown>;
-  tone?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'danger-quiet';
+  tone?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'danger-quiet' | 'hero';
   disabled?: boolean;
   busy?: boolean;
   flex?: boolean;
@@ -328,8 +343,9 @@ export function Button({
   const quiet = Boolean(disabled) && !working;
   const danger = tone === 'danger' || tone === 'danger-quiet';
   const ghost = tone === 'ghost';
-  const fill = quiet ? colors.surfaceAlt : tone === 'primary' ? colors.button : colors.surface;
-  const text = quiet ? colors.muted : tone === 'primary' ? colors.onButton : danger ? colors.dangerText : colors.text;
+  const hero = tone === 'hero';
+  const fill = hero ? sticker.light.ink : quiet ? colors.surfaceAlt : tone === 'primary' ? colors.button : colors.surface;
+  const text = hero ? sticker.dark.ink : quiet ? colors.muted : tone === 'primary' ? colors.onButton : danger ? colors.dangerText : colors.text;
   return (
     <Pressable
       accessibilityRole="button"
@@ -354,6 +370,7 @@ export function Button({
           radius={999}
           borderWidth={ghost ? 0 : stroke.control}
           pressed={pressed && !blocked}
+          dashed={quiet && !ghost}
           shadow={!ghost && !quiet}>
           <View style={styles.buttonInner}>
             {working ? <ActivityIndicator color={text} /> : (
@@ -684,11 +701,10 @@ export function Avatar({
   hue?: string;
 }) {
   const { colors, type, typeScale } = useTheme();
-  const fill = hue || colors.pink;
-  const ink = readable(colors.text, [fill]);
+  const ring = hue || colors.pink;
   return (
-    <View style={[styles.avatar, { backgroundColor: fill, borderColor: colors.outline }]}>
-      <Text maxFontSizeMultiplier={typeScale.heading} style={[type.heading, { color: ink }]}>{initials.slice(0, 1).toUpperCase()}</Text>
+    <View style={[styles.avatar, { backgroundColor: colors.surface, borderColor: ring }]}>
+      <Text maxFontSizeMultiplier={typeScale.heading} style={[type.heading, { color: colors.text }]}>{initials.slice(0, 1).toUpperCase()}</Text>
     </View>
   );
 }
@@ -733,14 +749,16 @@ export function SectionHeader({
   title,
   action,
   onAction,
+  display,
 }: {
   title: string;
   action?: string;
   onAction?: () => void;
+  display?: boolean;
 }) {
   return (
     <View style={styles.sectionHeader}>
-      <Heading>{title}</Heading>
+      {display ? <Display>{title}</Display> : <Heading>{title}</Heading>}
       {action && onAction ? <Button compact icon="plus" label={action} tone="secondary" onPress={onAction} /> : null}
     </View>
   );
@@ -755,6 +773,9 @@ export function HeroCard({
   action,
   onAction,
   art,
+  initials,
+  hue,
+  progress,
 }: {
   kicker: string;
   title: string;
@@ -764,20 +785,28 @@ export function HeroCard({
   action: string;
   onAction: () => void;
   art: ArtName;
+  initials?: string;
+  hue?: string;
+  progress?: number | null;
 }) {
-  const { colors } = useTheme();
+  const { colors, radius } = useTheme();
+  const ink = sticker.light.ink;
   return (
-    <StickerBox fill={colors.sunshine} radius={16} borderWidth={stroke.card}>
+    <StickerBox fill={colors.sunshine} radius={radius.card} borderWidth={stroke.card} style={styles.heroCard}>
       <View style={styles.hero}>
+        {initials ? <Avatar initials={initials} hue={hue} /> : null}
         <View style={styles.heroCopy}>
-          <Caption tone="text">{kicker}</Caption>
-          <Heading>{title}</Heading>
-          <Display>{figure}</Display>
-          {unit ? <Caption tone="text">{unit}</Caption> : null}
-          <Caption tone="text">{detail}</Caption>
-          <Button icon="gift" label={action} onPress={onAction} />
+          <Caption color={ink}>{kicker}</Caption>
+          <Heading color={ink}>{title}</Heading>
+          <Display color={ink}>{figure}</Display>
+          {unit ? <Caption color={ink}>{unit}</Caption> : null}
+          <Caption color={ink}>{detail}</Caption>
+          <ProgressBar value={progress ?? null} />
+          <Button icon="gift" label={action} tone="hero" onPress={onAction} />
         </View>
-        <ArtSlot name={art} size={108} />
+        <View style={styles.heroArt}>
+          <ArtSlot name={art} size={120} />
+        </View>
       </View>
     </StickerBox>
   );
@@ -796,23 +825,30 @@ export function StatTile({
   tint: ChipTint;
   onPress?: () => void;
 }) {
-  const { colors, type, typeScale } = useTheme();
-  const iconColor = colors[tint];
-  const body = (
-    <StickerBox fill={colors.surface} radius={16} borderWidth={stroke.card}>
+  const { colors, scheme, type, typeScale, radius } = useTheme();
+  const iconColor = tint === 'teal' || tint === 'lilac' ? iconOnSurface[scheme][tint] : colors[tint];
+  const face = (pressed: boolean) => (
+    <StickerBox fill={colors.surface} radius={radius.card} borderWidth={stroke.card} pressed={pressed}>
       <View style={styles.stat}>
         <Icon name={icon} color={iconColor} />
-        <Text maxFontSizeMultiplier={typeScale.title} style={[type.title, { color: colors.text }]}>{value}</Text>
+        <Text
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
+          maxFontSizeMultiplier={typeScale.heading}
+          style={[type.heading, styles.statValue, { color: colors.text }]}>
+          {value}
+        </Text>
         <Caption>{label}</Caption>
       </View>
     </StickerBox>
   );
   if (!onPress) {
-    return <View style={styles.statFlex}>{body}</View>;
+    return <View style={styles.statFlex}>{face(false)}</View>;
   }
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${value} ${label}`} onPress={onPress} style={styles.statFlex}>
-      {body}
+      {({ pressed }) => face(pressed)}
     </Pressable>
   );
 }
@@ -880,7 +916,7 @@ export function AppHeader({ title, greeting }: { title: string; greeting?: strin
           <Title>{title}</Title>
         </View>
       </View>
-      <IconButton label={t('person.remindTitle')} name="bell" onPress={() => setOpen(true)} />
+      <IconButton label={t('people.remindersA11y')} name="bell" onPress={() => setOpen(true)} />
       <Sheet visible={open} onClose={() => setOpen(false)}>
         <Heading>{t('person.remindTitle')}</Heading>
         <Body>{on ? t('people.remindersOn') : t('person.remindBody')}</Body>
@@ -906,7 +942,7 @@ export function TabBar({ active }: { active: TabId }) {
   const { colors, type, typeScale, radius } = useTheme();
   return (
     <StickerBox fill={colors.surface} radius={radius.card} borderWidth={stroke.card}>
-      <View style={styles.tabs}>
+      <View accessibilityRole="tablist" style={styles.tabs}>
         {TABS.map(tab => {
           const selected = tab.id === active;
           const ink = selected ? colors.onPink : colors.text;
@@ -918,10 +954,20 @@ export function TabBar({ active }: { active: TabId }) {
               accessibilityLabel={tab.label}
               onPress={() => navigation.navigate(tab.route)}
               style={styles.tab}>
-              <View style={[styles.tabIcon, selected ? { backgroundColor: colors.pink, borderRadius: radius.pill } : null]}>
-                <Icon name={tab.icon} color={ink} size={20} />
-              </View>
-              <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: colors.text }]}>{tab.label}</Text>
+              {({ pressed }) => (
+                <StickerBox
+                  fill={selected ? colors.pink : 'transparent'}
+                  radius={radius.chip}
+                  borderWidth={selected ? stroke.card : 0}
+                  pressed={pressed}
+                  shadow={selected}
+                  style={styles.tabFlex}>
+                  <View style={styles.tabInner}>
+                    <Icon name={tab.icon} color={ink} size={20} />
+                    <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: ink }]}>{tab.label}</Text>
+                  </View>
+                </StickerBox>
+              )}
             </Pressable>
           );
         })}
@@ -1001,12 +1047,11 @@ export function Sheet({
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const scheme = useColorScheme();
   return (
-    <Modal key={scheme ?? 'light'} visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top }]}>
         <IconButton label={t('common.close')} name="close" onPress={onClose} />
-        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + layout.toastGap }]} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled">
           <View style={styles.column}>{children}</View>
         </ScrollView>
       </View>
@@ -1051,6 +1096,7 @@ export function AccountSheet({
   const [link, setLink] = useState('');
   const [sms, setSms] = useState(false);
   const [emailError, setEmailError] = useState('');
+  const [linkSent, setLinkSent] = useState(false);
   return (
     <Sheet visible={visible} onClose={onClose}>
       <Title>{showCreate ? t('groupCreate.title') : t('settings.account')}</Title>
@@ -1082,18 +1128,28 @@ export function AccountSheet({
       />
       <Button
         label={t('groupCreate.sendLink')}
-        tone={showCreate ? 'secondary' : 'primary'}
+        tone={showCreate || linkSent ? 'secondary' : 'primary'}
         onPress={() => {
           if (!email.includes('@')) {
             setEmailError(t('errors.email'));
             return;
           }
+          setLinkSent(true);
           return sendEmail(email);
         }}
         disabled={!email.trim()}
       />
-      <Field label={t('groupCreate.pasteLink')} value={link} onChangeText={setLink} />
-      <Button label={t('groupCreate.finishLink')} tone="secondary" onPress={() => finishEmail(link)} disabled={!link.trim()} />
+      {linkSent ? (
+        <>
+          <Field label={t('groupCreate.pasteLink')} value={link} onChangeText={setLink} />
+          <Button
+            label={t('groupCreate.finishLink')}
+            tone={showCreate ? 'secondary' : 'primary'}
+            onPress={() => finishEmail(link)}
+            disabled={!link.trim()}
+          />
+        </>
+      ) : null}
       <Button label={t('groupCreate.useSms')} onPress={() => setSms(true)} tone="secondary" />
       {sms ? (
         <>
@@ -1104,7 +1160,7 @@ export function AccountSheet({
           <Button label={t('groupCreate.confirmCode')} tone="secondary" onPress={() => confirmPhone(code)} disabled={!code.trim()} />
         </>
       ) : null}
-      <Button label={showCreate ? t('groupCreate.skip') : t('common.close')} onPress={onClose} tone="ghost" />
+      {showCreate ? <Button label={t('groupCreate.skip')} onPress={onClose} tone="ghost" /> : null}
     </Sheet>
   );
 }
@@ -1120,7 +1176,7 @@ export function Segment({
 }) {
   const { colors, type, typeScale } = useTheme();
   return (
-    <View style={[styles.segment, { backgroundColor: colors.surface, borderColor: colors.outline }]}>
+    <View accessibilityRole="tablist" style={[styles.segment, { backgroundColor: colors.surface, borderColor: colors.outline }]}>
       {options.map(option => {
         const selected = option.id === value;
         return (
@@ -1150,23 +1206,26 @@ export function Chip({
   onPress: () => void;
   block?: boolean;
 }) {
-  const { colors, type, typeScale } = useTheme();
+  const { colors, type, typeScale, radius } = useTheme();
+  const ink = selected ? colors.onPink : colors.text;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected: Boolean(selected) }}
+      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
       onPress={onPress}
       style={block ? styles.blockChip : null}>
       {({ pressed }) => (
         <StickerBox
           fill={selected ? colors.pink : colors.surface}
-          radius={block ? 16 : 12}
+          radius={block ? radius.card : radius.chip}
           borderWidth={stroke.inner}
           pressed={pressed}
           shadow={false}>
-          <View style={[styles.chip, block ? styles.chipBlock : null]}>
-            <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: selected ? colors.onPink : colors.text }]}>{label}</Text>
+          <View style={[styles.chip, styles.chipPress, block ? styles.chipBlock : null]}>
+            {selected ? <Icon name="check" color={ink} size={16} /> : null}
+            <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: ink }]}>{label}</Text>
           </View>
         </StickerBox>
       )}
@@ -1196,7 +1255,8 @@ export function Toggle({
         pointerEvents="none"
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: colors.surfaceAlt, true: colors.pink }}
+        trackColor={{ false: colors.muted, true: colors.pink }}
+        ios_backgroundColor={colors.muted}
         thumbColor={value ? colors.onPink : colors.surface}
       />
     </Pressable>
@@ -1205,6 +1265,8 @@ export function Toggle({
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  statusBar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 4 },
+  modalFill: { flex: 1, justifyContent: 'center', padding: space.lg },
   content: { paddingHorizontal: space.md, flexGrow: 1, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
   column: { gap: space.sm },
   centered: { justifyContent: 'center' },
@@ -1238,29 +1300,34 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    borderWidth: stroke.inner,
+    borderWidth: stroke.card,
     alignItems: 'center',
     justifyContent: 'center',
   },
   track: { height: 14, borderWidth: stroke.inner, overflow: 'hidden', justifyContent: 'center' },
   bar: { height: 10, marginHorizontal: 1 },
   chip: { borderWidth: stroke.inner, borderRadius: 12, minHeight: 32, paddingHorizontal: space.xs, paddingVertical: space.xxs, justifyContent: 'center' },
+  chipPress: { minHeight: touch.minTarget, flexDirection: 'row', alignItems: 'center', gap: space.xxs },
   chipBlock: { minHeight: touch.minTarget, alignItems: 'flex-start' },
   blockChip: { alignSelf: 'stretch' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.xs },
-  hero: { flexDirection: 'row', alignItems: 'center', padding: space.md, gap: space.xs },
+  heroCard: { overflow: 'visible' },
+  hero: { flexDirection: 'row', alignItems: 'center', padding: space.md, gap: space.xs, overflow: 'visible' },
   heroCopy: { flex: 1, gap: space.xxs },
+  heroArt: { marginRight: -space.lg, marginBottom: -space.lg },
   statRow: { flexDirection: 'row', alignItems: 'stretch', gap: space.xxs },
   statFlex: { flex: 1 },
   stat: { padding: space.sm, gap: space.xxs, minHeight: 96 },
+  statValue: { width: '100%' },
   person: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   personCopy: { flex: 1, gap: space.xxs },
   artRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.xs },
   headerCopy: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flex: 1 },
   tabs: { flexDirection: 'row', paddingVertical: space.xs, paddingHorizontal: space.xxs },
-  tab: { flex: 1, minHeight: touch.minTarget, alignItems: 'center', justifyContent: 'center', gap: 2 },
-  tabIcon: { minWidth: 44, minHeight: 28, alignItems: 'center', justifyContent: 'center' },
+  tab: { flex: 1, minHeight: touch.minTarget },
+  tabFlex: { flex: 1 },
+  tabInner: { minHeight: touch.minTarget, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: space.xxs },
   iconButton: { minWidth: touch.minTarget, minHeight: touch.minTarget, alignItems: 'center', justifyContent: 'center' },
   hue: { width: 16, height: 16, borderRadius: 8, borderWidth: stroke.inner },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: touch.minTarget },

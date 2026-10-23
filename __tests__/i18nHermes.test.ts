@@ -14,6 +14,12 @@ function withIntl<K extends keyof typeof Intl>(key: K, value: unknown, run: () =
   }
 }
 
+test('whole dollar amounts can drop the trailing cents', () => {
+  expect(formatMoney(0, 'en-US', 'USD', true)).toBe('$0');
+  expect(formatMoney(20000, 'en-US', 'USD', true)).toBe('$200');
+  expect(formatMoney(150, 'en-US', 'USD', true)).toBe('$1.50');
+});
+
 test('plural copy works when Hermes has no Intl.PluralRules', () => {
   withIntl('PluralRules', undefined, () => {
     expect(typeof Intl.PluralRules).not.toBe('function');

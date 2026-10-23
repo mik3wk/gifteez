@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Platform, Pressable, StyleSheet } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { formatLongDate, todayIso } from '../i18n';
+import { formatDate, formatLongDate, t, todayIso } from '../i18n';
 import { useTheme } from '../theme/useTheme';
 import { stroke, touch } from '../theme/tokens';
 import { Body, Caption } from './ui';
@@ -11,23 +11,28 @@ export function DateField({
   value,
   onChange,
   error,
+  maximumDate,
+  hideYear,
 }: {
   label: string;
   value: string;
   onChange: (iso: string) => void;
   error?: string;
+  maximumDate?: Date;
+  hideYear?: boolean;
 }) {
   const { colors, radius } = useTheme();
-  const [open, setOpen] = useState(Platform.OS === 'ios');
-  const parsed = parseIso(value) ?? new Date();
-  const shown = parseIso(value) ? formatLongDate(parsed) : value;
+  const [open, setOpen] = useState(false);
+  const known = parseIso(value);
+  const parsed = known ?? new Date();
+  const shown = known ? (hideYear ? formatDate(known) : formatLongDate(known)) : t('person.chooseDate');
   return (
     <>
       <Caption>{label}</Caption>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={error ? `${label}. ${error}` : label}
-        onPress={() => setOpen(true)}
+        accessibilityLabel={error ? `${label}. ${error}` : `${label}. ${shown}`}
+        onPress={() => setOpen(valueOpen => !valueOpen)}
         style={[styles.field, { borderColor: error ? colors.dangerText : colors.outline, backgroundColor: colors.surface, borderRadius: radius.card }]}>
         <Body>{shown}</Body>
       </Pressable>
@@ -36,6 +41,7 @@ export function DateField({
         <DateTimePicker
           value={parsed}
           mode="date"
+          maximumDate={maximumDate}
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={(event, next) => {
             if (Platform.OS !== 'ios') {

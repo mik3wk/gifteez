@@ -122,7 +122,7 @@ export function OccasionPicker({ personId }: { personId: string }) {
       {needsDate ? (
         <>
           <DateField
-            label={t('person.updateOccasion')}
+            label={t('person.date')}
             value={pickedDate}
             error={dateError}
             onChange={iso => {

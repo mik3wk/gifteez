@@ -12,6 +12,7 @@ import { PeopleScreen } from '../screens/PeopleScreen';
 import { StartupScreen } from '../screens/StartupScreen';
 import { GifteezProvider, useGifteez } from '../state/GifteezContext';
 import { listenForReminderOpens } from '../platform/reminders';
+import { type as appType } from '../theme/tokens';
 import { Body, BrandedLoading, Button, ConfirmHost, Notice, OfflineBanner, Screen, Title } from '../ui/ui';
 import type { AppEnv } from '../config/env';
 import type { RootStack } from './navigation';
@@ -105,7 +106,13 @@ function Navigator() {
         onStateChange={() => gifteez.onNavigate()}>
         <Stack.Navigator screenOptions={{
           headerShadowVisible: false,
+          headerStyle: { backgroundColor: gifteez.colors.background },
           headerTintColor: gifteez.colors.text,
+          headerTitleStyle: {
+            fontFamily: appType.heading.fontFamily,
+            fontWeight: appType.heading.fontWeight,
+            color: gifteez.colors.text,
+          },
           headerTitleAlign: 'center',
           headerBackButtonDisplayMode: 'minimal',
           contentStyle: { backgroundColor: gifteez.colors.background },

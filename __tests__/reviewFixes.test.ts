@@ -1,7 +1,7 @@
 import { OCCASION_PRESETS } from '../src/domain/occasions';
 import { classifyStartupError, startupCause } from '../src/domain/startup';
 import { BUNDLED_SKINS, contrastRatio, withColorScheme, type ThemeColors } from '../src/theme/skins';
-import { occasionLook } from '../src/theme/tokens';
+import { iconOnSurface, occasionLook, scrim } from '../src/theme/tokens';
 
 const MIN_CONTRAST = 4.5;
 const MIN_BOUNDARY = 3;
@@ -68,6 +68,14 @@ test('every skin and scheme keeps text and boundaries readable', () => {
     expect(contrastRatio(dark.banner, dark.background)).toBeGreaterThan(1.8);
   }
   expect(withColorScheme(BUNDLED_SKINS.fall, 'dark').banner).not.toBe(withColorScheme(BUNDLED_SKINS.winter, 'dark').banner);
+});
+
+test('light icon ink clears 3:1 on white and the scrim stays black', () => {
+  expect(contrastRatio(iconOnSurface.light.teal, '#FFFFFF')).toBeGreaterThanOrEqual(3);
+  expect(contrastRatio(iconOnSurface.light.lilac, '#FFFFFF')).toBeGreaterThanOrEqual(3);
+  expect(contrastRatio(iconOnSurface.dark.teal, '#221A29')).toBeGreaterThanOrEqual(3);
+  expect(contrastRatio(iconOnSurface.dark.lilac, '#221A29')).toBeGreaterThanOrEqual(3);
+  expect(scrim).toBe('rgba(0,0,0,0.6)');
 });
 
 test('every occasion preset has a sticker skin', () => {

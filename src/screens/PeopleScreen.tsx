@@ -10,14 +10,13 @@ import { useGifteez } from '../state/GifteezContext';
 import { groupHue } from '../theme/skins';
 import { useTheme } from '../theme/useTheme';
 import { occasionLook } from '../theme/tokens';
-import { SkinBanner } from '../ui/art';
 import { useGroupLabel } from '../ui/heading';
 import { AccountSheet, AppHeader, Banner, EmptyState, HeroCard, PersonRow, Screen, SectionHeader, StatRow, StatTile } from '../ui/ui';
 import { DuplicateOffers } from './mergeUi';
 
 export function PeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, showBanner, dismissBanner, skinId, duplicateOffers, dismissDuplicateOffer, resumePersonId, clearResumePerson } = useGifteez();
+  const { snapshot, showBanner, dismissBanner, duplicateOffers, dismissDuplicateOffer, resumePersonId, clearResumePerson } = useGifteez();
   const { scheme } = useTheme();
   const heading = useGroupLabel();
   const [upgrade, setUpgrade] = useState(false);
@@ -52,7 +51,6 @@ export function PeopleScreen() {
   return (
     <Screen tab="people">
       <AppHeader title={heading.label} greeting={greeting} />
-      <SkinBanner skinId={skinId} />
       <DuplicateOffers
         offers={duplicateOffers}
         onReview={offer => navigation.navigate('SamePerson', {
@@ -79,6 +77,11 @@ export function PeopleScreen() {
           detail={heroDetail(nextPerson.id, nextPerson.budgetCents, snapshot.gifts, year, snapshot.group)}
           action={t('people.findGift')}
           art={occasionLook(next.occasion.type).art}
+          initials={nextPerson.name}
+          hue={groupHue(nextPerson.name.length, scheme)}
+          progress={nextPerson.budgetCents && nextPerson.budgetCents > 0
+            ? yearSpentCents(nextPerson.id, snapshot.gifts, year) / nextPerson.budgetCents
+            : null}
           onAction={() => navigation.navigate('Person', { personId: nextPerson.id })}
         />
       ) : null}
@@ -96,12 +99,12 @@ export function PeopleScreen() {
       {people.length === 0 ? (
         <EmptyState kind="people" text={t('people.empty')} action={t('people.add')} onAction={() => navigation.navigate('AddPerson')} />
       ) : (
-        <SectionHeader title={t('people.title')} action={t('people.addShort')} onAction={() => navigation.navigate('AddPerson')} />
+        <SectionHeader display title={t('people.title')} action={t('people.addShort')} onAction={() => navigation.navigate('AddPerson')} />
       )}
       {people.map(person => {
         const item = upcomingOccasion(person.id, snapshot.occasions, today);
         const hidden = isHiddenFromViewer(person, snapshot.profile.uid);
-        const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(snapshot.group));
+        const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(snapshot.group), true);
         const spent = yearSpentCents(person.id, snapshot.gifts, year);
         const budget = hidden
           ? ''
@@ -145,7 +148,7 @@ function heroDetail(
   year: number,
   group: Parameters<typeof groupCurrency>[0],
 ): string {
-  const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(group));
+  const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(group), true);
   const spent = yearSpentCents(personId, gifts, year);
   if (budgetCents == null) {
     return t('people.heroOpen', { used: money(spent) });

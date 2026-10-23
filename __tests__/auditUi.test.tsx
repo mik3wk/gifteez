@@ -65,6 +65,7 @@ jest.mock('../src/state/GifteezContext', () => {
 
 import { MergeScreen } from '../src/screens/MergeScreen';
 import { SettingsScreen } from '../src/screens/MoreScreens';
+import { ConfirmHost } from '../src/ui/ui';
 
 const { setReminders, deleteAccount } = jest.requireMock('../src/state/GifteezContext') as {
   setReminders: jest.Mock;
@@ -75,7 +76,12 @@ test('settings keeps export until an account exists, and labels reminders and de
   const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: Share.sharedAction, activityType: undefined });
   let renderer: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(() => {
-    renderer = ReactTestRenderer.create(<SettingsScreen />);
+    renderer = ReactTestRenderer.create(
+      <>
+        <SettingsScreen />
+        <ConfirmHost />
+      </>,
+    );
   });
   const exportButton = renderer!.root.findAllByProps({ accessibilityRole: 'button' }).find(node =>
     node.findAllByType(Text).some(item => item.props.children === 'Export list'),

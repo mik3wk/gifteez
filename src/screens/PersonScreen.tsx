@@ -1,5 +1,4 @@
 import React, { useEffect, useLayoutEffect, useState } from 'react';
-import { View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -8,7 +7,7 @@ import { INTEREST_TAGS } from '../domain/catalog';
 import { buyerLabel, claimerName, claimWarningUid, isMyPurchase, spendByMember, visibleGifts } from '../domain/claims';
 import { ideaCacheId } from '../domain/ideas';
 import { canEditSharedGift } from '../domain/edits';
-import { allTimeSpentCents, groupCurrency, isRealMonthDay, occurrenceYear, parseBudget, parseLooseDate, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
+import { allTimeSpentCents, daysUntil, groupCurrency, isRealMonthDay, occurrenceYear, parseBudget, parseLooseDate, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
 import { dateIsEstimated, isOneTimeOccasion, nextOccasionDate, occasionLabel, occasionNeedsDate, presetFor } from '../domain/occasions';
 import { isHiddenFromViewer, isPersonLocked } from '../domain/visibility';
 import { peopleOnOtherLists } from '../domain/merge';
@@ -19,7 +18,7 @@ import { occasionLook } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { DateField } from '../ui/DateField';
 import { OccasionPicker } from '../ui/OccasionPicker';
-import { ArtRow, ArtSlot, Body, Button, Caption, Card, Chip, Cluster, confirmDestructive, EmptyState, Field, HeaderTextButton, Heading, IconButton, Screen, Segment, Sheet, Split, Title, Toggle } from '../ui/ui';
+import { ArtRow, ArtSlot, Body, Button, Caption, Card, Chip, Cluster, confirmDestructive, EmptyState, Field, HeaderTextButton, Heading, IconButton, OccasionChip, Screen, Segment, Sheet, Title, Toggle } from '../ui/ui';
 
 export function AddPersonScreen() {
   const navigation = useNavigation();
@@ -329,7 +328,6 @@ export function PersonScreen() {
           await removePerson(person.id);
         }}
       />
-      <Button label={t('common.close')} tone="secondary" onPress={() => setEditingDetails(false)} />
       </Sheet>
       {section !== 'history' || hidden || !showSpend ? null : <SpendBreakdown personId={person.id} budgetCents={person.budgetCents} money={money} />}
       {section !== 'history' || hidden ? null : <Heading>{t('person.history')}</Heading>}
@@ -340,7 +338,9 @@ export function PersonScreen() {
           onValueChange={setMineOnly}
         />
       )}
-      {section !== 'history' || hidden || history.length === 0 ? (section !== 'history' || hidden ? null : <Body>{mineOnly ? t('person.historyMineEmpty') : t('person.historyEmpty')}</Body>) : null}
+      {section !== 'history' || hidden || history.length > 0 ? null : (
+        <EmptyState kind="ideas" text={mineOnly ? t('person.historyMineEmpty') : t('person.historyEmpty')} />
+      )}
       {section !== 'history' || hidden ? null : history.map(item => {
         const buyerText = buyerLine(item.boughtBy, snapshot.profile.uid, snapshot.members);
         const editable = item.privateGift || canEditSharedGift(snapshot, item, snapshot.profile.uid);
@@ -498,10 +498,19 @@ function OccasionCard({
   const estimated = dateIsEstimated(occasion, (next ?? today).getFullYear());
   const canEdit = occasionNeedsDate(occasion.type) || estimated;
   const note = presetFor(occasion.type)?.note;
+  const days = next ? daysUntil(next, today) : null;
+  const iso = isRealMonthDay(Number(month), Number(day))
+    ? `${year.trim() || '2000'}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+    : '';
   return (
     <Card>
       <ArtRow art={occasionLook(occasion.type).art}>
-        <Body strong>{`${label} · ${when}`}</Body>
+        <OccasionChip
+          occasionId={occasion.type}
+          label={label}
+          trailing={days == null ? undefined : days === 0 ? t('people.today') : t('people.inDays', { count: days })}
+        />
+        <Body strong>{when}</Body>
       </ArtRow>
       {note ? <Caption>{t(note)}</Caption> : null}
       {estimated ? <Caption>{t('person.dateEstimated')}</Caption> : null}
@@ -509,32 +518,21 @@ function OccasionCard({
       {!hidden && state?.savedIdea ? <Body>{state.savedIdea}</Body> : null}
       {!hidden && !locked && canEdit && editing ? (
         <>
-          <Split>
-            <View>
-              <Field
-                label={t('person.month')}
-                value={month}
-                error={dateError}
-                onChangeText={value => {
-                  setMonth(value);
-                  setDateError('');
-                }}
-                keyboardType="number-pad"
-              />
-            </View>
-            <View>
-              <Field
-                label={t('person.day')}
-                value={day}
-                invalid={Boolean(dateError)}
-                onChangeText={value => {
-                  setDay(value);
-                  setDateError('');
-                }}
-                keyboardType="number-pad"
-              />
-            </View>
-          </Split>
+          <DateField
+            label={t('person.date')}
+            value={iso}
+            hideYear={!year.trim()}
+            error={dateError}
+            onChange={nextIso => {
+              const [yearText, monthText, dayText] = nextIso.split('-');
+              setMonth(String(Number(monthText)));
+              setDay(String(Number(dayText)));
+              if (year.trim()) {
+                setYear(yearText ?? '');
+              }
+              setDateError('');
+            }}
+          />
           <Field
             label={t('person.year')}
             value={year}
@@ -593,7 +591,7 @@ function OccasionCard({
         />
       ) : null}
       {hidden || locked ? null : (
-        <Button label={t('person.purchase')} tone="secondary" onPress={() => onPurchase(state?.savedIdea ?? '')} />
+        <Button label={t('person.purchase')} onPress={() => onPurchase(state?.savedIdea ?? '')} />
       )}
       {!hidden && !locked ? (
         <Button
@@ -803,7 +801,7 @@ function GiftSheet({
       {occasionId ? <PurchaseWarning occasionId={occasionId} date={date} /> : null}
       <Field label={t('purchase.gift')} value={gift} error={giftError} onChangeText={onGift} />
       <Field label={t('purchase.price')} value={price} error={priceError} onChangeText={onPrice} keyboardType="decimal-pad" />
-      <DateField label={t('purchase.date')} value={date} error={dateError} onChange={onDate} />
+      <DateField label={t('purchase.date')} value={date} error={dateError} maximumDate={new Date()} onChange={onDate} />
       <Button label={saveLabel} accessibilityLabel={saveAccessibilityLabel} onPress={onSave} />
       <Button label={t('common.cancel')} tone="secondary" onPress={onClose} />
     </Sheet>
@@ -814,7 +812,7 @@ function giftFieldErrors(gift: string, price: string, date: string): { gift: str
   return {
     gift: gift.trim() ? '' : t('errors.invalid'),
     price: parseBudget(price) == null ? t('errors.price') : '',
-    date: date.trim() && !validPurchaseDate(date) ? t('errors.purchaseDate') : '',
+    date: date.trim() && (!validPurchaseDate(date) || date.trim() > todayIso()) ? t('errors.purchaseDate') : '',
   };
 }
 
