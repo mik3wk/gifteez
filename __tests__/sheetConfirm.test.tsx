@@ -57,6 +57,21 @@ test('a confirm opened from a sheet stays in that sheet and cancel leaves it usa
   });
   const titles = renderer!.root.findAllByType(Text).filter(node => node.props.children === 'Remove Marie?');
   expect(titles).toHaveLength(1);
+  await ReactTestRenderer.act(async () => {
+    await new Promise<void>(resolve => {
+      setTimeout(resolve, 350);
+    });
+  });
+  const whileOpen = renderer!.root.findAllByProps({ accessibilityRole: 'button' }).find(node =>
+    node.findAllByType(Text).some(item => item.props.children === 'Remove person'),
+  );
+  expect(whileOpen?.props.accessibilityState.busy).toBe(false);
+  const hiddenSheet = renderer!.root.findAll(node =>
+    node.props?.accessibilityElementsHidden === true
+    && node.props?.importantForAccessibility === 'no-hide-descendants'
+    && node.findAllByType(Text).some(item => item.props.children === 'Remove person'),
+  );
+  expect(hiddenSheet.length).toBeGreaterThan(0);
   const cancel = renderer!.root.findAllByProps({ accessibilityRole: 'button' }).find(node =>
     node.findAllByType(Text).some(item => item.props.children === 'Cancel'),
   );

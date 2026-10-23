@@ -1,4 +1,14 @@
+import { t } from '../i18n';
+
 export type SummaryAction = 'add' | 'find' | 'claim' | 'log' | 'logged';
+
+const SUMMARY_LABEL: Record<SummaryAction, string> = {
+  add: 'person.addOccasion',
+  find: 'people.findGift',
+  claim: 'person.claim',
+  log: 'person.purchase',
+  logged: 'person.logged',
+};
 
 export function summaryPrimary(input: {
   hidden: boolean;
@@ -28,6 +38,12 @@ export function summaryPrimary(input: {
     return 'claim';
   }
   return 'find';
+}
+
+/** The words for `summaryPrimary`, shared by the person summary and the People hero. */
+export function summaryPrimaryLabel(input: Parameters<typeof summaryPrimary>[0]): string | null {
+  const action = summaryPrimary(input);
+  return action ? t(SUMMARY_LABEL[action]) : null;
 }
 
 /** Occasions lead when the next date is a week away or closer. */

@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -13,7 +13,7 @@ import { dateIsEstimated, isOneTimeOccasion, nextOccasionDate, occasionLabel, oc
 import { isHiddenFromViewer, isPersonLocked } from '../domain/visibility';
 import { peopleOnOtherLists } from '../domain/merge';
 import type { Occasion, OccasionState } from '../domain/types';
-import { initialPersonSection, summaryPrimary } from './personSummary';
+import { initialPersonSection, summaryPrimary, summaryPrimaryLabel } from './personSummary';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, t, todayIso } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { groupHue } from '../theme/skins';
@@ -203,7 +203,7 @@ export function PersonScreen() {
     ? snapshot.states.find(item => item.occasionId === next.occasion.id && item.year === occurrenceYear(next.occasion, today) && !item.deleted)
     : undefined;
   const uid = snapshot.profile.uid;
-  const action = summaryPrimary({
+  const summaryInput = {
     hidden,
     locked,
     hasOccasion: Boolean(next),
@@ -211,7 +211,9 @@ export function PersonScreen() {
     claimedByMe: Boolean(nextState?.claimedBy && nextState.claimedBy === uid),
     claimedByOther: Boolean(nextState?.claimedBy && nextState.claimedBy !== uid),
     savedIdea: Boolean(nextState?.savedIdea),
-  });
+  };
+  const action = summaryPrimary(summaryInput);
+  const primaryLabel = summaryPrimaryLabel(summaryInput) ?? '';
   const days = next ? daysUntil(next.date, today) : null;
   const occasions = snapshot.occasions.filter(item => item.personId === person.id && !item.deleted);
   const menuOccasion = menu?.kind === 'occasion' ? occasions.find(item => item.id === menu.id) : undefined;
@@ -295,16 +297,6 @@ export function PersonScreen() {
     }
   }
 
-  const primaryLabel = action === 'add'
-    ? t('person.addOccasion')
-    : action === 'find'
-      ? t('people.findGift')
-      : action === 'claim'
-        ? t('person.claim')
-        : action === 'log'
-          ? t('person.purchase')
-          : '';
-
   return (
     <Screen
       pinned={(
@@ -334,6 +326,9 @@ export function PersonScreen() {
             ) : null}
             {budgetLabel ? <Caption tone="text">{budgetLabel}</Caption> : null}
             {hidden ? null : <ProgressBar value={progress} />}
+            {(action === 'claim' || action === 'log') && nextState?.savedIdea ? (
+              <Body>{t('person.savedIdeaLine', { idea: nextState.savedIdea })}</Body>
+            ) : null}
             {action === 'logged' ? (
               <View style={styles.logged}>
                 <Caption tone="text">{t('person.logged')}</Caption>
@@ -574,6 +569,14 @@ export function PersonScreen() {
         {menu?.kind === 'idea' ? (
           <>
             <Heading>{menu.idea}</Heading>
+            <Button
+              label={savedFor(menu.idea) ? t('person.unsaveIdea') : t('person.saveIdea')}
+              tone="secondary"
+              onPress={() => {
+                onSaveIdea(menu.idea);
+                setMenu(null);
+              }}
+            />
             <Button label={t('person.thumbsUp')} tone="secondary" onPress={() => { vote(person.id, menu.idea, 'up').catch(() => undefined); setMenu(null); }} />
             <Button label={t('person.thumbsDown')} tone="secondary" onPress={() => { vote(person.id, menu.idea, 'down').catch(() => undefined); setMenu(null); }} />
           </>
@@ -737,7 +740,7 @@ function OccasionRow({
     : state?.claimedBy
       ? t('person.claimedBy', { name: claimerName(state.claimedBy, members) })
       : t(state?.status === 'purchased' ? 'person.statusPurchased' : state?.status === 'idea-saved' ? 'person.statusIdea' : 'person.statusNotStarted');
-  return (
+  const row = (
     <Card>
       <View style={styles.occasionRow}>
         <ArtSlot name={occasionLook(occasion.type).art} size={40} />
@@ -749,6 +752,24 @@ function OccasionRow({
         {hidden ? null : <IconButton label={t('person.occasionMenu')} name="more" filled onPress={onMenu} />}
       </View>
     </Card>
+  );
+  if (hidden) {
+    return row;
+  }
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={[label, trailing ? `${when}, ${trailing}` : when, status].filter(Boolean).join('. ')}
+      accessibilityHint={t('person.occasionMenuHint')}
+      accessibilityActions={[{ name: 'open-menu', label: t('person.occasionMenu') }]}
+      onAccessibilityAction={event => {
+        if (event.nativeEvent.actionName === 'activate' || event.nativeEvent.actionName === 'open-menu') {
+          onMenu();
+        }
+      }}
+      onPress={onMenu}>
+      {row}
+    </Pressable>
   );
 }
 
@@ -1024,24 +1045,35 @@ function IdeaRow({
   onMenu: () => void;
 }) {
   return (
-    <Card>
-      <View style={styles.ideaRow}>
-        <View style={styles.ideaCopy}>
-          <Body>{idea}</Body>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={idea}
+      accessibilityHint={t('person.ideaMenuHint')}
+      accessibilityActions={[{ name: 'open-menu', label: t('person.ideaMenu') }]}
+      onAccessibilityAction={event => {
+        if (event.nativeEvent.actionName === 'activate' || event.nativeEvent.actionName === 'open-menu') {
+          onMenu();
+        }
+      }}
+      onPress={onMenu}>
+      <Card>
+        <View style={styles.ideaRow}>
+          <View style={styles.ideaCopy}>
+            <Body>{idea}</Body>
+          </View>
+          <HeartPop saved={saved}>
+            <IconButton
+              label={saved ? t('person.unsaveIdea') : t('person.saveIdea')}
+              name="heart"
+              color={color}
+              filled={saved}
+              size={28}
+              onPress={() => { onSave(); }}
+            />
+          </HeartPop>
         </View>
-        <HeartPop saved={saved}>
-          <IconButton
-            label={saved ? t('person.unsaveIdea') : t('person.saveIdea')}
-            name="heart"
-            color={color}
-            filled={saved}
-            size={28}
-            onPress={() => { onSave(); }}
-          />
-        </HeartPop>
-        <IconButton label={t('person.ideaMenu')} name="more" filled onPress={onMenu} />
-      </View>
-    </Card>
+      </Card>
+    </Pressable>
   );
 }
 

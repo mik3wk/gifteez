@@ -20,7 +20,7 @@ import { HeaderHeightContext } from '@react-navigation/elements';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { RootStack } from '../app/navigation';
+import { openTab, type RootStack } from '../app/navigation';
 import { getEnv } from '../config/env';
 import { formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
@@ -234,12 +234,23 @@ type ConfirmRequest = {
 
 let confirmListener: ((request: ConfirmRequest | null) => void) | null = null;
 const sheetConfirmHosts: Array<(request: ConfirmRequest | null) => void> = [];
+let openConfirms = 0;
+const confirmWatchers = new Set<() => void>();
+
+function noteConfirm(open: boolean) {
+  openConfirms += open ? 1 : -1;
+  if (openConfirms < 0) {
+    openConfirms = 0;
+  }
+  confirmWatchers.forEach(listener => listener());
+}
 
 function settleConfirm(request: ConfirmRequest, value: boolean) {
   if (request.settled) {
     return;
   }
   request.settled = true;
+  noteConfirm(false);
   request.resolve(value);
 }
 
@@ -250,6 +261,7 @@ export function confirmDestructive(
   confirmAccessibilityLabel?: string,
 ): Promise<boolean> {
   return new Promise(resolve => {
+    noteConfirm(true);
     const request: ConfirmRequest = { title, message, confirmLabel, confirmAccessibilityLabel, resolve };
     const sheetHost = sheetConfirmHosts[sheetConfirmHosts.length - 1];
     if (sheetHost) {
@@ -383,9 +395,25 @@ export function Button({
         if (!result || typeof (result as Promise<unknown>).then !== 'function') {
           return;
         }
-        const timer = setTimeout(() => setPending(true), 0);
+        let settled = false;
+        const showPending = () => {
+          if (!settled && openConfirms === 0) {
+            setPending(true);
+          }
+        };
+        const timer = setTimeout(showPending, 300);
+        const watch = () => {
+          if (openConfirms > 0) {
+            setPending(false);
+            return;
+          }
+          showPending();
+        };
+        confirmWatchers.add(watch);
         Promise.resolve(result).finally(() => {
+          settled = true;
           clearTimeout(timer);
+          confirmWatchers.delete(watch);
           setPending(false);
         });
       }}
@@ -726,12 +754,16 @@ export function EmptyState({
 
 export function BrandedLoading() {
   return (
-    <View style={styles.empty}>
-      <Bob>
-        <ArtSlot name="gift" size={120} />
-      </Bob>
-      <Title>{t('appName')}</Title>
-      <Body>{t('common.loading')}</Body>
+    <View accessibilityRole="progressbar" accessibilityLabel={t('common.loading')} style={styles.launch}>
+      <View style={styles.launchLogo}>
+        <Bob>
+          <ArtSlot name="gift" size={240} />
+        </Bob>
+      </View>
+      <View style={styles.launchCopy}>
+        <Title>{t('appName')}</Title>
+        <Body>{t('common.loading')}</Body>
+      </View>
     </View>
   );
 }
@@ -826,7 +858,7 @@ export function HeroCard({
   figure: string;
   unit?: string;
   detail: string;
-  action: string;
+  action: string | null;
   onAction: () => void;
   art: ArtName;
   initials?: string;
@@ -848,7 +880,7 @@ export function HeroCard({
           {unit ? <Caption color={ink}>{unit}</Caption> : null}
           <Caption color={ink}>{detail}</Caption>
           <ProgressBar value={progress ?? null} />
-          <Button icon="gift" label={action} tone="hero" onPress={onAction} />
+          {action ? <Button icon="gift" label={action} tone="hero" onPress={onAction} /> : null}
         </View>
         <View pointerEvents="none" style={styles.heroArt}>
           <ArtSlot name={art} size={150} />
@@ -998,7 +1030,11 @@ export function TabBar({ active }: { active: TabId }) {
               accessibilityRole="tab"
               accessibilityState={{ selected }}
               accessibilityLabel={tab.label}
-              onPress={() => navigation.navigate(tab.route)}
+              onPress={() => {
+                if (!selected) {
+                  openTab(navigation, tab.route);
+                }
+              }}
               style={styles.tab}>
               {({ pressed }) => (
                 <StickerBox
@@ -1151,12 +1187,17 @@ export function Sheet({
   return (
     <Modal visible={visible} animationType={reduce ? 'fade' : 'slide'} presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-        <IconButton label={t('common.close')} name="close" onPress={onClose} />
-        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled">
-          <Settle distance={10}>
-            <View style={styles.column}>{children}</View>
-          </Settle>
-        </ScrollView>
+        <View
+          style={styles.screen}
+          accessibilityElementsHidden={confirm != null}
+          importantForAccessibility={confirm ? 'no-hide-descendants' : 'auto'}>
+          <IconButton label={t('common.close')} name="close" onPress={onClose} />
+          <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled">
+            <Settle distance={10}>
+              <View style={styles.column}>{children}</View>
+            </Settle>
+          </ScrollView>
+        </View>
         {confirm ? (
           <View style={styles.sheetConfirm}>
             <ConfirmDialog
@@ -1417,6 +1458,24 @@ const styles = StyleSheet.create({
   floater: { position: 'absolute', left: 0, right: 0, alignItems: 'center', paddingHorizontal: space.md },
   floaterCard: { width: '100%', maxWidth: layout.maxContent },
   empty: { gap: space.sm, alignItems: 'center' },
+  launch: { flex: 1 },
+  launchLogo: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  launchCopy: {
+    position: 'absolute',
+    left: space.md,
+    right: space.md,
+    bottom: '18%',
+    alignItems: 'center',
+    gap: space.xs,
+  },
   progress: { flexDirection: 'row', gap: space.xxs },
   progressDot: { flex: 1, height: 8, borderRadius: 4, borderWidth: stroke.inner },
   avatar: {

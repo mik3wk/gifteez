@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { t } from '../i18n';
 import { MergeScreen } from '../screens/MergeScreen';
 import { AddPersonScreen, PersonScreen } from '../screens/PersonScreen';
@@ -13,13 +14,14 @@ import { StartupScreen } from '../screens/StartupScreen';
 import { GifteezProvider, useGifteez } from '../state/GifteezContext';
 import { listenForReminderOpens } from '../platform/reminders';
 import { type as appType } from '../theme/tokens';
-import { ConfettiBurst } from '../ui/motion';
+import { ConfettiBurst, useReduceMotion } from '../ui/motion';
 import { Body, BrandedLoading, Button, ConfirmHost, Notice, OfflineBanner, Screen, Title } from '../ui/ui';
 import type { AppEnv } from '../config/env';
 import type { RootStack } from './navigation';
 
 const Stack = createNativeStackNavigator<RootStack>();
 const navigationRef = createNavigationContainerRef<RootStack>();
+const tabOptions = { headerShown: false, animation: 'none' as const, gestureEnabled: false };
 
 export function ReadyApp({ env }: { env: AppEnv }) {
   return (
@@ -31,7 +33,11 @@ export function ReadyApp({ env }: { env: AppEnv }) {
 
 function Navigator() {
   const gifteez = useGifteez();
+  const reduceMotion = useReduceMotion();
   const [holdBrand, setHoldBrand] = useState(true);
+  const [logoMounted, setLogoMounted] = useState(true);
+  const logoOpacity = useSharedValue(1);
+  const logoStyle = useAnimatedStyle(() => ({ opacity: logoOpacity.value }));
   useEffect(() => {
     const timer = setTimeout(() => setHoldBrand(false), 900);
     return () => clearTimeout(timer);
@@ -87,24 +93,31 @@ function Navigator() {
       navigationRef.navigate('Person', { personId });
     }
   }), []);
-  if (!gifteez.ready || holdBrand) {
-    return (
-      <Screen centered>
-        <BrandedLoading />
-      </Screen>
-    );
-  }
-  if (gifteez.startupFailure) {
-    return (
-      <StartupScreen
-        kind={gifteez.startupFailure}
-        detail={gifteez.startupDetail ?? ''}
-        onRetry={gifteez.retryStartup}
-      />
-    );
-  }
+  const coverBoot = !gifteez.ready || holdBrand;
+  const showFailure = !coverBoot && Boolean(gifteez.startupFailure);
+  const showNav = !coverBoot && !gifteez.startupFailure;
+  useEffect(() => {
+    if (coverBoot) {
+      return undefined;
+    }
+    if (!showNav || reduceMotion) {
+      setLogoMounted(false);
+      return undefined;
+    }
+    logoOpacity.value = withTiming(0, { duration: 320 });
+    const timer = setTimeout(() => setLogoMounted(false), 340);
+    return () => clearTimeout(timer);
+  }, [coverBoot, logoOpacity, reduceMotion, showNav]);
   return (
-    <View style={styles.fill}>
+    <View style={[styles.fill, { backgroundColor: gifteez.colors.background }]}>
+      {showFailure ? (
+        <StartupScreen
+          kind={gifteez.startupFailure ?? 'unknown'}
+          detail={gifteez.startupDetail ?? ''}
+          onRetry={gifteez.retryStartup}
+        />
+      ) : null}
+      {showNav ? (
       <NavigationContainer
         ref={navigationRef}
         theme={theme}
@@ -125,13 +138,13 @@ function Navigator() {
         }}>
           {gifteez.snapshot.profile.onboarded ? (
             <>
-              <Stack.Screen name="People" component={PeopleScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="People" component={PeopleScreen} options={tabOptions} />
               <Stack.Screen name="Person" component={PersonScreen} options={{ title: t('person.ideas') }} />
               <Stack.Screen name="SamePerson" component={MergeScreen} options={{ title: t('merge.title') }} />
               <Stack.Screen name="AddPerson" component={AddPersonScreen} options={{ title: t('person.addTitle') }} />
-              <Stack.Screen name="Fairness" component={FairnessScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Group" component={GroupScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="Fairness" component={FairnessScreen} options={tabOptions} />
+              <Stack.Screen name="Group" component={GroupScreen} options={tabOptions} />
+              <Stack.Screen name="Settings" component={SettingsScreen} options={tabOptions} />
               <Stack.Screen name="Join" component={JoinScreen} options={{ title: t('join.title') }} />
               <Stack.Screen name="JoinConfirm" component={JoinConfirmScreen} options={{ title: t('join.title') }} />
             </>
@@ -144,10 +157,18 @@ function Navigator() {
           )}
         </Stack.Navigator>
       </NavigationContainer>
-      {gifteez.offline ? <OfflineBanner text={t('sync.offlineBanner')} /> : null}
-      {gifteez.error ? (
+      ) : null}
+      {logoMounted ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.cover, { backgroundColor: gifteez.colors.background }, logoStyle]}>
+          <BrandedLoading />
+        </Animated.View>
+      ) : null}
+      {showNav && gifteez.offline ? <OfflineBanner text={t('sync.offlineBanner')} /> : null}
+      {showNav && gifteez.error ? (
         <Notice text={gifteez.error} tone="danger" onClose={gifteez.clearError} />
-      ) : gifteez.notice ? (
+      ) : showNav && gifteez.notice ? (
         <Notice
           text={gifteez.notice}
           art={gifteez.noticeArt ?? undefined}
@@ -156,13 +177,13 @@ function Navigator() {
           onAction={gifteez.canUndo ? () => { gifteez.runUndo().catch(() => undefined); } : undefined}
         />
       ) : null}
-      {gifteez.confetti > 0 ? (
+      {showNav && gifteez.confetti > 0 ? (
         <View pointerEvents="none" style={styles.cover}>
           <ConfettiBurst key={gifteez.confetti} />
         </View>
       ) : null}
-      <ConfirmHost />
-      {gifteez.recoveryCode ? (
+      {showNav ? <ConfirmHost /> : null}
+      {showNav && gifteez.recoveryCode ? (
         <View style={styles.cover}>
           <Screen>
             <Title>{t('groupCreate.recoveryTitle')}</Title>

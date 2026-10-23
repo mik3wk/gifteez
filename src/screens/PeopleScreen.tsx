@@ -1,10 +1,11 @@
 import React, { useLayoutEffect, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStack } from '../app/navigation';
-import { daysUntil, groupCurrency, sortPeople, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
+import { openTab, type RootStack } from '../app/navigation';
+import { daysUntil, groupCurrency, occurrenceYear, sortPeople, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
+import type { Occasion, OccasionState } from '../domain/types';
 import { isOneTimeOccasion, occasionLabel } from '../domain/occasions';
-import { isHiddenFromViewer } from '../domain/visibility';
+import { isHiddenFromViewer, isPersonLocked } from '../domain/visibility';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { groupHue } from '../theme/skins';
@@ -14,6 +15,7 @@ import { useGroupLabel } from '../ui/heading';
 import { SessionEntrance } from '../ui/motion';
 import { AccountSheet, AppHeader, Banner, EmptyState, HeroCard, PersonRow, Screen, SectionHeader, StatRow, StatTile } from '../ui/ui';
 import { DuplicateOffers } from './mergeUi';
+import { summaryPrimaryLabel } from './personSummary';
 
 export function PeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
@@ -48,6 +50,18 @@ export function PeopleScreen() {
   const greeting = snapshot.profile.displayName.trim()
     ? t('people.greeting', { name: snapshot.profile.displayName.trim() })
     : undefined;
+  const nextHero = next && nextPerson ? heroState(next.occasion, snapshot.states, today) : undefined;
+  const heroLabel = next && nextPerson
+    ? summaryPrimaryLabel({
+      hidden: isHiddenFromViewer(nextPerson, snapshot.profile.uid),
+      locked: isPersonLocked(snapshot.group?.lockedPersonIds, nextPerson.id),
+      hasOccasion: true,
+      purchased: nextHero?.status === 'purchased',
+      claimedByMe: Boolean(nextHero?.claimedBy && nextHero.claimedBy === snapshot.profile.uid),
+      claimedByOther: Boolean(nextHero?.claimedBy && nextHero.claimedBy !== snapshot.profile.uid),
+      savedIdea: Boolean(nextHero?.savedIdea),
+    })
+    : null;
 
   return (
     <Screen tab="people">
@@ -77,7 +91,7 @@ export function PeopleScreen() {
           figure={daysUntil(next.date, today) === 0 ? t('people.today') : String(daysUntil(next.date, today))}
           unit={daysUntil(next.date, today) === 0 ? undefined : t('people.daysUnit', { count: daysUntil(next.date, today) })}
           detail={heroDetail(nextPerson.id, nextPerson.budgetCents, snapshot.gifts, year, snapshot.group)}
-          action={t('people.findGift')}
+          action={heroLabel}
           art={occasionLook(next.occasion.type).art}
           initials={nextPerson.name}
           hue={groupHue(nextPerson.name.length, scheme)}
@@ -95,7 +109,7 @@ export function PeopleScreen() {
           label={t('people.statFairness')}
           icon="scale"
           tint="lilac"
-          onPress={() => navigation.navigate('Fairness')}
+          onPress={() => openTab(navigation, 'Fairness')}
         />
       </StatRow>
       {people.length === 0 ? (
@@ -157,6 +171,10 @@ function heroDetail(
     return t('people.heroOpen', { used: money(spent) });
   }
   return t('people.heroSpent', { used: money(spent), budget: money(budgetCents) });
+}
+
+function heroState(occasion: Occasion, states: OccasionState[], today: Date): OccasionState | undefined {
+  return states.find(item => item.occasionId === occasion.id && item.year === occurrenceYear(occasion, today) && !item.deleted);
 }
 
 function statusKey(status: string): string {
