@@ -1521,7 +1521,7 @@ const styles = StyleSheet.create({
   bar: { height: 10, marginHorizontal: 1 },
   chip: { borderWidth: stroke.inner, borderRadius: 12, minHeight: 32, paddingHorizontal: space.xs, paddingVertical: space.xxs, justifyContent: 'center' },
   chipPress: { minHeight: touch.minTarget, flexDirection: 'row', alignItems: 'center', gap: space.xxs },
-  chipBlock: { minHeight: touch.minTarget, alignItems: 'flex-start' },
+  chipBlock: { minHeight: touch.minTarget, alignItems: 'center' },
   blockChip: { alignSelf: 'stretch' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.xs },
   heroCard: { overflow: 'visible' },
