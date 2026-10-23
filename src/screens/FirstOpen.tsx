@@ -3,6 +3,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { describeIncomingLink } from '../app/incomingLink';
 import { t } from '../i18n';
+import { haptic } from '../platform/haptics';
 import { useGifteez } from '../state/GifteezContext';
 import { Body, Button, Field, Screen, Title } from '../ui/ui';
 import type { RootStack } from '../app/navigation';
@@ -44,6 +45,7 @@ export function FirstOpenScreen() {
           const id = await addPerson({ name: trimmed, budget: '', tags: [] });
           if (id) {
             openPerson(id);
+            haptic('success');
           }
         }}
       />

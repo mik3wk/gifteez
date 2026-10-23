@@ -1,9 +1,7 @@
-import type { OccasionType } from './types';
-
 export type CatalogIdea = {
   text: string;
   tags: string[];
-  occasions: OccasionType[] | 'any';
+  occasions: string[] | 'any';
 };
 
 export const INTEREST_TAGS = [
@@ -82,11 +80,23 @@ export const CATALOG: CatalogIdea[] = [
   { text: 'A hot-chocolate or soup kit for a cold night', tags: ['cozy', 'foodie'], occasions: ['christmas'] },
   { text: 'A nice bottle of olive oil, honey, or hot sauce', tags: ['foodie', 'cooking'], occasions: 'any' },
   { text: 'A dessert from a bakery they like', tags: ['foodie'], occasions: 'any' },
-  { text: 'A framed photo from a day you shared', tags: ['home'], occasions: ['wedding', 'birthday', 'christmas'] },
+  { text: 'A framed photo from a day you shared', tags: ['home'], occasions: ['wedding', 'birthday', 'christmas', 'anniversary', 'mothers-day', 'fathers-day'] },
+  { text: 'Flowers or a card that says why they matter', tags: ['experiences'], occasions: ['valentines', 'anniversary', 'mothers-day', 'thank-you', 'teacher'] },
+  { text: 'A meal out, just the two of you', tags: ['foodie', 'experiences'], occasions: ['anniversary', 'valentines', 'just-because'] },
+  { text: 'Something small for the new place: a plant, a bowl, a key hook', tags: ['home'], occasions: ['housewarming', 'wedding'] },
+  { text: 'A soft keepsake for the new baby, plus a note for the parents', tags: ['kids'], occasions: ['birth', 'baby-shower'] },
+  { text: 'A card and a practical help, like a meal or a ride', tags: ['experiences'], occasions: ['sympathy', 'get-well'] },
+  { text: 'A book or pen for the next chapter', tags: ['books'], occasions: ['graduation', 'promotion', 'retirement'] },
   { text: 'A contribution toward a registry item they still need', tags: ['home'], occasions: ['wedding'] },
   { text: 'A nice set of glasses or a cake server', tags: ['home', 'wedding'], occasions: ['wedding'] },
   { text: 'A letter about a favorite memory, plus one small useful thing', tags: ['experiences'], occasions: 'any' },
   { text: 'Seeds or bulbs timed for their garden', tags: ['plants', 'outdoors'], occasions: ['birthday'] },
   { text: 'A puzzle you can leave on a table together', tags: ['games', 'cozy'], occasions: ['christmas'] },
   { text: 'Ornaments or a shared decoration you pick together', tags: ['home'], occasions: ['christmas'] },
+  { text: 'A small treat bag or a pumpkin to carve together', tags: ['kids', 'foodie'], occasions: ['halloween'] },
+  { text: 'Flowers or a brunch for the day', tags: ['experiences', 'foodie'], occasions: ['easter', 'mothers-day'] },
+  { text: 'A candle, a game, and something sweet for the first night', tags: ['cozy', 'games'], occasions: ['hanukkah'] },
+  { text: 'Sweets or a light for the festival', tags: ['foodie'], occasions: ['diwali', 'eid-fitr', 'eid-adha', 'lunar-new-year'] },
+  { text: 'A small surprise from a shared wish list', tags: ['games'], occasions: ['secret-santa', 'christmas'] },
+  { text: 'A card and a favorite treat to start the year', tags: ['foodie'], occasions: ['new-year'] },
 ];

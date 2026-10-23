@@ -1,4 +1,5 @@
 import { hashToUint } from '../crypto/crypto';
+import { isOneTimeOccasion, nextOccasionDate, occasionLabel, planOccasion } from './occasions';
 import { DEFAULT_FREE_PEOPLE, lockedPersonIds } from '../../functions/src/peopleCap';
 import {
   dirtyKey,
@@ -12,7 +13,6 @@ import {
   type Member,
   type Occasion,
   type OccasionState,
-  type OccasionType,
   type Person,
   type RemoteRecord,
 } from './types';
@@ -79,9 +79,7 @@ export function nextOccurrence(month: number, day: number, today: Date): Date {
   return dateInYear(month, day, year + 1);
 }
 
-export function isOneTimeOccasion(occasion: Pick<Occasion, 'type'>): boolean {
-  return occasion.type === 'wedding';
-}
+export { isOneTimeOccasion, nextOccasionDate, occasionLabel };
 
 export function occurrenceYear(occasion: Occasion, today: Date): number {
   if (isOneTimeOccasion(occasion)) {
@@ -90,7 +88,7 @@ export function occurrenceYear(occasion: Occasion, today: Date): number {
     }
     return today.getFullYear();
   }
-  return nextOccurrence(occasion.month, occasion.day, today).getFullYear();
+  return nextOccasionDate(occasion, today)?.getFullYear() ?? today.getFullYear();
 }
 
 export function stateId(occasionId: string, year: number): string {
@@ -115,15 +113,9 @@ export function upcomingOccasion(
   const mine = occasions.filter(item => item.personId === personId && !item.deleted);
   let best: { occasion: Occasion; date: Date } | null = null;
   mine.forEach(occasion => {
-    let date: Date;
-    if (isOneTimeOccasion(occasion)) {
-      const year = occasion.year != null && occasion.year > 0 ? occasion.year : today.getFullYear();
-      date = dateInYear(occasion.month, occasion.day, year);
-      if (startOfDay(date).getTime() < startOfDay(today).getTime()) {
-        return;
-      }
-    } else {
-      date = nextOccurrence(occasion.month, occasion.day, today);
+    const date = nextOccasionDate(occasion, today);
+    if (!date) {
+      return;
     }
     if (!best || date.getTime() < best.date.getTime()) {
       best = { occasion, date };
@@ -1022,11 +1014,12 @@ function replace<K extends 'people' | 'occasions' | 'states' | 'gifts' | 'ideas'
   return { ...snapshot, [key]: next };
 }
 
-export function defaultOccasionDate(type: OccasionType, today: Date): { month: number; day: number } {
-  if (type === 'christmas') {
-    return { month: 12, day: 25 };
+export function defaultOccasionDate(type: string, today: Date): { month: number; day: number } | null {
+  const planned = planOccasion({ type, today });
+  if (planned === 'need-date' || planned === 'need-name') {
+    return null;
   }
-  return { month: today.getMonth() + 1, day: today.getDate() };
+  return { month: planned.month, day: planned.day };
 }
 
 export function bannerDue(profile: AppSnapshot['profile'], now: number, afterDays: number): boolean {
@@ -1279,7 +1272,7 @@ function renderExportBundle(
     const next = upcomingOccasion(person.id, bundle.occasions, today);
     const spent = yearSpentCents(person.id, bundle.gifts, today.getFullYear());
     const budget = person.budgetCents == null ? 'no budget' : money(person.budgetCents);
-    lines.push(`${person.name} — ${next ? next.occasion.type : 'no occasion'} — ${money(spent)} of ${budget}`);
+    lines.push(`${person.name} — ${next ? occasionLabel(next.occasion) : 'no occasion'} — ${money(spent)} of ${budget}`);
     bundle.gifts
       .filter(gift => gift.personId === person.id && !gift.deleted)
       .forEach(gift => {

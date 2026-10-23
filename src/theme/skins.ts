@@ -137,12 +137,33 @@ const DARK: Pick<ThemeColors, 'background' | 'surface' | 'text' | 'muted' | 'bor
   banner: '#24352C',
 };
 
-/** Light skins stay as authored. Dark mode keeps the accent and swaps the paper colors. */
+function mixChannel(parts: Array<[string, number]>, index: number): string {
+  const value = parts.reduce((sum, [hex, weight]) => {
+    return sum + parseInt(hex.slice(1 + index * 2, 3 + index * 2), 16) * weight;
+  }, 0);
+  return Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0');
+}
+
+/** A dark seasonal band: the holiday hue stays, and light text still clears it. */
+export function seasonalDarkBanner(banner: string, accent: string): string {
+  const parts: Array<[string, number]> = [
+    [DARK.background, 0.62],
+    [banner, 0.22],
+    [accent, 0.16],
+  ];
+  return `#${mixChannel(parts, 0)}${mixChannel(parts, 1)}${mixChannel(parts, 2)}`.toUpperCase();
+}
+
+/** Light skins stay as authored. Dark mode keeps the accent and a seasonal banner. */
 export function withColorScheme(colors: ThemeColors, scheme: 'light' | 'dark' | null | undefined): ThemeColors {
   if (scheme !== 'dark') {
     return colors;
   }
-  return { ...colors, ...DARK };
+  return {
+    ...colors,
+    ...DARK,
+    banner: seasonalDarkBanner(colors.banner, colors.accent),
+  };
 }
 
 export function contrastRatio(foreground: string, background: string): number {

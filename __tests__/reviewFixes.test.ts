@@ -39,6 +39,10 @@ test('every skin keeps text on the background and on the accent at 4.5:1', () =>
     expect(contrastRatio(dark.text, dark.background)).toBeGreaterThanOrEqual(MIN_CONTRAST);
     expect(contrastRatio(dark.muted, dark.background)).toBeGreaterThanOrEqual(MIN_CONTRAST);
     expect(contrastRatio(dark.accentText, dark.accent)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    expect(contrastRatio(dark.text, dark.banner)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    expect(contrastRatio(dark.banner, dark.background)).toBeGreaterThan(1.8);
+    expect(dark.banner).not.toBe(dark.background);
     expect(withColorScheme(colors, 'light')).toBe(colors);
   }
+  expect(withColorScheme(BUNDLED_SKINS.fall, 'dark').banner).not.toBe(withColorScheme(BUNDLED_SKINS.winter, 'dark').banner);
 });

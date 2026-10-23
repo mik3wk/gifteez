@@ -1,4 +1,4 @@
-import { dateInYear, isOneTimeOccasion, nextOccurrence } from './logic';
+import { nextOccasionDate, occasionLabel } from './logic';
 import type { Occasion, Person } from './types';
 
 export type ReminderKind = 'week' | 'day';
@@ -8,6 +8,7 @@ export type ReminderSlot = {
   at: number;
   kind: ReminderKind;
   personName: string;
+  occasionName: string;
   occasionType: Occasion['type'];
   occasionId: string;
 };
@@ -37,15 +38,9 @@ export function planReminders(input: {
     if (!person) {
       return;
     }
-    let when: Date;
-    if (isOneTimeOccasion(occasion)) {
-      const year = occasion.year && occasion.year > 0 ? occasion.year : input.now.getFullYear();
-      when = dateInYear(occasion.month, occasion.day, year);
-      if (when.getTime() < new Date(input.now.getFullYear(), input.now.getMonth(), input.now.getDate()).getTime()) {
-        return;
-      }
-    } else {
-      when = nextOccurrence(occasion.month, occasion.day, input.now);
+    const when = nextOccasionDate(occasion, input.now);
+    if (!when) {
+      return;
     }
     const year = when.getFullYear();
     const candidates: Array<{ kind: ReminderKind; at: Date }> = [
@@ -61,6 +56,7 @@ export function planReminders(input: {
         at: candidate.at.getTime(),
         kind: candidate.kind,
         personName: person.name,
+        occasionName: occasionLabel(occasion),
         occasionType: occasion.type,
         occasionId: occasion.id,
       });

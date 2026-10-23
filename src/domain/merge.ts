@@ -328,7 +328,8 @@ export function applyMerge(input: {
           !item.deleted &&
           item.type === occasion.type &&
           item.month === occasion.month &&
-          item.day === occasion.day,
+          item.day === occasion.day &&
+          (occasion.type !== 'custom' || item.label === occasion.label),
       );
       if (!host) {
         host = {
@@ -338,6 +339,8 @@ export function applyMerge(input: {
           month: occasion.month,
           day: occasion.day,
           ...(occasion.year != null ? { year: occasion.year } : {}),
+          ...(occasion.label ? { label: occasion.label } : {}),
+          ...(typeof occasion.recurs === 'boolean' ? { recurs: occasion.recurs } : {}),
           updatedAt: input.now,
         };
         target.occasions = [...target.occasions, host];

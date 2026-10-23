@@ -1,4 +1,5 @@
-export type OccasionType = 'birthday' | 'christmas' | 'wedding';
+/** Preset id, or `custom`. Older lists only stored birthday, christmas, and wedding. */
+export type OccasionType = string;
 export type GiftStatus = 'not-started' | 'idea-saved' | 'purchased';
 export type IdeaSource = 'on-device' | 'cloud';
 
@@ -23,6 +24,10 @@ export type Occasion = {
   month: number;
   day: number;
   year?: number;
+  /** Set when the occasion is custom. Older records omit it. */
+  label?: string;
+  /** Yearly when true. Omitted on older records: weddings stay one-time, everything else repeats. */
+  recurs?: boolean;
   updatedAt: number;
   deleted?: boolean;
 };

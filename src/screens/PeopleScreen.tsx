@@ -5,8 +5,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
 import { groupCurrency, statusFor, upcomingOccasion } from '../domain/logic';
 import { sortPeople } from '../domain/logic';
+import { isOneTimeOccasion, occasionLabel } from '../domain/occasions';
 import { isHiddenFromViewer } from '../domain/visibility';
-import { deviceLocale, formatDate, formatMoney, t } from '../i18n';
+import { deviceLocale, formatDate, formatLongDate, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { DuplicateOffers } from './mergeUi';
 import { SkinBanner } from '../ui/art';
@@ -77,7 +78,7 @@ export function PeopleScreen() {
             onPress={() => navigation.navigate('Person', { personId: person.id })}>
               <Text style={[styles.name, { color: colors.text }]}>{person.name}</Text>
               <Text style={[styles.meta, { color: colors.muted }]}>
-                {next ? `${t(`person.${next.occasion.type}`)} · ${formatDate(next.date)}` : t('people.noOccasion')}
+                {next ? `${occasionLabel(next.occasion)} · ${isOneTimeOccasion(next.occasion) ? formatLongDate(next.date) : formatDate(next.date)}` : t('people.noOccasion')}
               </Text>
               <Text style={[styles.meta, { color: colors.text }]}>{budget}</Text>
               {status ? <Text style={[styles.meta, { color: colors.accent }]}>{t(statusKey(status))}</Text> : null}

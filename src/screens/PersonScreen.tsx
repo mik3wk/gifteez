@@ -8,13 +8,15 @@ import { INTEREST_TAGS } from '../domain/catalog';
 import { buyerLabel, claimerName, claimWarningUid, isMyPurchase, spendByMember, visibleGifts } from '../domain/claims';
 import { ideaCacheId } from '../domain/ideas';
 import { canEditSharedGift } from '../domain/edits';
-import { allTimeSpentCents, groupCurrency, occurrenceYear, parseBudget, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
+import { allTimeSpentCents, groupCurrency, isRealMonthDay, occurrenceYear, parseBudget, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
+import { dateIsEstimated, isOneTimeOccasion, nextOccasionDate, occasionLabel, occasionNeedsDate, presetFor } from '../domain/occasions';
 import { isHiddenFromViewer, isPersonLocked } from '../domain/visibility';
 import { peopleOnOtherLists } from '../domain/merge';
-import { deviceLocale, formatLongDate, formatMoney, t, todayIso } from '../i18n';
+import type { Occasion } from '../domain/types';
+import { deviceLocale, formatDate, formatLongDate, formatMoney, t, todayIso } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
+import { OccasionPicker } from '../ui/OccasionPicker';
 import { Body, Button, Card, Field, Heading, Screen, Title } from '../ui/ui';
-import type { OccasionType } from '../domain/types';
 
 export function AddPersonScreen() {
   const navigation = useNavigation();
@@ -54,14 +56,10 @@ export function AddPersonScreen() {
 export function PersonScreen() {
   const route = useRoute<RouteProp<RootStack, 'Person'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, colors, focusPerson, savePerson, removePerson, addOccasion, saveIdeaFor, logGift, vote, refreshIdeas, cloudIdeas, cloudRemaining, claimOccasion, unclaimOccasion, updateGift, deleteGift, updateOccasion, deleteOccasion, linkRecipient, undoMerge } = useGifteez();
+  const { snapshot, colors, focusPerson, savePerson, removePerson, saveIdeaFor, logGift, vote, refreshIdeas, cloudIdeas, cloudRemaining, updateGift, deleteGift, linkRecipient, undoMerge } = useGifteez();
   const person = snapshot.people.find(item => item.id === route.params.personId && !item.deleted);
   const [budget, setBudget] = useState(person?.budgetCents == null ? '' : String(person.budgetCents / 100));
   const [name, setName] = useState(person?.name ?? '');
-  const [type, setType] = useState<OccasionType>('birthday');
-  const [month, setMonth] = useState('');
-  const [day, setDay] = useState('');
-  const [year, setYear] = useState('');
   const [gift, setGift] = useState('');
   const [price, setPrice] = useState('');
   const [date, setDate] = useState(todayIso());
@@ -196,77 +194,20 @@ export function PersonScreen() {
         />
       ) : null}
       <Heading>{t('person.occasions')}</Heading>
-      {snapshot.occasions.filter(item => item.personId === person.id && !item.deleted).map(occasion => {
-        const status = statusFor(occasion, snapshot.states, new Date());
-        const state = snapshot.states.find(item => item.occasionId === occasion.id && item.year === occurrenceYear(occasion, new Date()) && !item.deleted);
-        return (
-          <Card key={occasion.id}>
-            <Text style={[styles.name, { color: colors.text }]}>{t(`person.${occasion.type}`)} · {occasion.month}/{occasion.day}</Text>
-            {hidden ? null : <Text style={{ color: colors.accent }}>{t(status === 'idea-saved' ? 'person.statusIdea' : status === 'purchased' ? 'person.statusPurchased' : 'person.statusNotStarted')}</Text>}
-            {!hidden && state?.savedIdea ? <Text style={{ color: colors.text }}>{state.savedIdea}</Text> : null}
-            {!hidden && !locked ? (
-              <Button
-                label={t('person.updateOccasion')}
-                accessibilityLabel={t('person.updateOccasionLabel', { occasion: t(`person.${occasion.type}`) })}
-                tone="secondary"
-                onPress={() => updateOccasion(occasion.id, Number(month) || occasion.month, Number(day) || occasion.day, Number(year) || undefined)}
-              />
-            ) : null}
-            {!hidden && !locked ? (
-              <Button
-                label={t('person.deleteOccasion')}
-                accessibilityLabel={t('person.deleteOccasionLabel', { occasion: t(`person.${occasion.type}`) })}
-                tone="danger"
-                onPress={() => deleteOccasion(occasion.id)}
-              />
-            ) : null}
-            {hidden || locked ? null : state?.claimedBy ? (
-              <Text accessibilityLabel={t('person.claimedBy', { name: claimerName(state.claimedBy, snapshot.members) })} style={{ color: colors.text }}>
-                {t('person.claimedBy', { name: claimerName(state.claimedBy, snapshot.members) })}
-              </Text>
-            ) : null}
-            {!hidden && !locked && state?.claimedBy && snapshot.profile.uid && (state.claimedBy === snapshot.profile.uid || snapshot.group?.ownerId === snapshot.profile.uid) ? (
-              <Button
-                label={t('person.unclaim')}
-                accessibilityLabel={t('person.unclaimLabel', { occasion: t(`person.${occasion.type}`) })}
-                tone="secondary"
-                onPress={() => unclaimOccasion(occasion.id)}
-              />
-            ) : null}
-            {!hidden && !locked && !state?.claimedBy ? (
-              <Button
-                label={t('person.claim')}
-                accessibilityLabel={t('person.claimLabel', { occasion: t(`person.${occasion.type}`) })}
-                tone="secondary"
-                onPress={() => claimOccasion(occasion.id)}
-              />
-            ) : null}
-            {hidden || locked ? null : <Button label={t('person.purchase')} tone="secondary" onPress={() => { setBuying(occasion.id); setGift(state?.savedIdea ?? ''); setEditingGift(null); }} />}
-          </Card>
-        );
-      })}
-      <View style={styles.row}>
-        {(['birthday', 'christmas', 'wedding'] as OccasionType[]).map(item => (
-          <Button key={item} label={t(`person.${item}`)} tone={type === item ? 'primary' : 'secondary'} onPress={() => setType(item)} />
-        ))}
-      </View>
-      {type !== 'christmas' ? (
-        <View style={styles.row}>
-          <View style={styles.flex}>
-            <Field label={t('person.month')} value={month} onChangeText={setMonth} keyboardType="number-pad" />
-          </View>
-          <View style={styles.flex}>
-            <Field label={t('person.day')} value={day} onChangeText={setDay} keyboardType="number-pad" />
-          </View>
-        </View>
-      ) : null}
-      <Field label={t('person.year')} value={year} onChangeText={setYear} keyboardType="number-pad" />
-      {locked ? null : (
-        <Button
-          label={t('person.addOccasion')}
-          onPress={() => addOccasion(person.id, type, Number(month) || undefined, Number(day) || undefined, Number(year) || undefined)}
+      {snapshot.occasions.filter(item => item.personId === person.id && !item.deleted).map(occasion => (
+        <OccasionCard
+          key={occasion.id}
+          occasion={occasion}
+          hidden={hidden}
+          locked={locked}
+          onPurchase={idea => {
+            setBuying(occasion.id);
+            setGift(idea);
+            setEditingGift(null);
+          }}
         />
-      )}
+      ))}
+      {locked ? null : <OccasionPicker personId={person.id} />}
       <ReminderOffer />
       <Heading>{t('person.details')}</Heading>
       <Field label={t('person.name')} value={name} onChangeText={setName} />
@@ -364,6 +305,124 @@ export function PersonScreen() {
       ) : null}
       <Button label={t('person.delete')} tone="danger" onPress={() => removePerson(person.id)} />
     </Screen>
+  );
+}
+
+function OccasionCard({
+  occasion,
+  hidden,
+  locked,
+  onPurchase,
+}: {
+  occasion: Occasion;
+  hidden: boolean;
+  locked: boolean;
+  onPurchase: (idea: string) => void;
+}) {
+  const { snapshot, colors, updateOccasion, deleteOccasion, claimOccasion, unclaimOccasion } = useGifteez();
+  const [editing, setEditing] = useState(false);
+  const [month, setMonth] = useState(occasion.month ? String(occasion.month) : '');
+  const [day, setDay] = useState(occasion.day ? String(occasion.day) : '');
+  const [year, setYear] = useState(occasion.year ? String(occasion.year) : '');
+  const [dateError, setDateError] = useState('');
+  const label = occasionLabel(occasion);
+  const today = new Date();
+  const next = nextOccasionDate(occasion, today);
+  const when = next
+    ? (isOneTimeOccasion(occasion) ? formatLongDate(next) : formatDate(next))
+    : occasion.year
+      ? formatLongDate(new Date(occasion.year, occasion.month - 1, occasion.day))
+      : `${occasion.month}/${occasion.day}`;
+  const status = statusFor(occasion, snapshot.states, today);
+  const state = snapshot.states.find(item => item.occasionId === occasion.id && item.year === occurrenceYear(occasion, today) && !item.deleted);
+  const estimated = dateIsEstimated(occasion, (next ?? today).getFullYear());
+  const canEdit = occasionNeedsDate(occasion.type) || estimated;
+  const note = presetFor(occasion.type)?.note;
+  return (
+    <Card>
+      <Text style={[styles.name, { color: colors.text }]}>{label} · {when}</Text>
+      {note ? <Text style={{ color: colors.muted }}>{note}</Text> : null}
+      {estimated ? <Text style={{ color: colors.muted }}>{t('person.dateEstimated')}</Text> : null}
+      {hidden ? null : <Text style={{ color: colors.accent }}>{t(status === 'idea-saved' ? 'person.statusIdea' : status === 'purchased' ? 'person.statusPurchased' : 'person.statusNotStarted')}</Text>}
+      {!hidden && state?.savedIdea ? <Text style={{ color: colors.text }}>{state.savedIdea}</Text> : null}
+      {!hidden && !locked && canEdit && editing ? (
+        <>
+          <View style={styles.row}>
+            <View style={styles.flex}>
+              <Field
+                label={t('person.month')}
+                value={month}
+                error={dateError}
+                onChangeText={value => {
+                  setMonth(value);
+                  setDateError('');
+                }}
+                keyboardType="number-pad"
+              />
+            </View>
+            <View style={styles.flex}>
+              <Field label={t('person.day')} value={day} onChangeText={setDay} keyboardType="number-pad" />
+            </View>
+          </View>
+          <Field label={t('person.year')} value={year} onChangeText={setYear} keyboardType="number-pad" />
+          <Button
+            label={t('person.updateOccasion')}
+            accessibilityLabel={t('person.updateOccasionLabel', { occasion: label })}
+            onPress={() => {
+              const monthNum = Number(month);
+              const dayNum = Number(day);
+              if (!isRealMonthDay(monthNum, dayNum)) {
+                setDateError(t('errors.date'));
+                return;
+              }
+              const yearNum = Number(year);
+              updateOccasion(occasion.id, monthNum, dayNum, yearNum > 0 ? yearNum : undefined);
+              setEditing(false);
+            }}
+          />
+        </>
+      ) : null}
+      {!hidden && !locked && canEdit && !editing ? (
+        <Button
+          label={t('person.updateOccasion')}
+          accessibilityLabel={t('person.updateOccasionLabel', { occasion: label })}
+          tone="secondary"
+          onPress={() => setEditing(true)}
+        />
+      ) : null}
+      {!hidden && !locked ? (
+        <Button
+          label={t('person.deleteOccasion')}
+          accessibilityLabel={t('person.deleteOccasionLabel', { occasion: label })}
+          tone="danger"
+          onPress={() => deleteOccasion(occasion.id)}
+        />
+      ) : null}
+      {hidden || locked ? null : state?.claimedBy ? (
+        <Text accessibilityLabel={t('person.claimedBy', { name: claimerName(state.claimedBy, snapshot.members) })} style={{ color: colors.text }}>
+          {t('person.claimedBy', { name: claimerName(state.claimedBy, snapshot.members) })}
+        </Text>
+      ) : null}
+      {!hidden && !locked && state?.claimedBy && snapshot.profile.uid && (state.claimedBy === snapshot.profile.uid || snapshot.group?.ownerId === snapshot.profile.uid) ? (
+        <Button
+          label={t('person.unclaim')}
+          accessibilityLabel={t('person.unclaimLabel', { occasion: label })}
+          tone="secondary"
+          onPress={() => unclaimOccasion(occasion.id)}
+        />
+      ) : null}
+      {!hidden && !locked && !state?.claimedBy ? (
+        <Button
+          label={t('person.claim')}
+          accessibilityLabel={t('person.claimLabel', { occasion: label })}
+          tone="secondary"
+          onPress={() => claimOccasion(occasion.id)}
+        />
+      ) : null}
+      {hidden || locked ? null : (
+        <Button label={t('person.purchase')} tone="secondary" onPress={() => onPurchase(state?.savedIdea ?? '')} />
+      )}
+    </Card>
   );
 }
 

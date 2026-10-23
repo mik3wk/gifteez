@@ -32,7 +32,6 @@ import {
   bannerDue,
   canStartAnotherList,
   createGroup,
-  defaultOccasionDate,
   clearClaimsForUid,
   exportAccount,
   groupCurrency,
@@ -109,6 +108,8 @@ import { importContacts, sweepBirthdays } from '../platform/importers';
 import { buyUnlock, connectStore, finishOwned, listenToPurchases, loadOwned, purchaseProof, type StoreProduct } from '../platform/iap';
 import { applyReminderPlan, requestReminderPermission } from '../platform/reminders';
 import { deleteSecret, loadSecret, saveSecret } from '../platform/secure';
+import { occasionLabel, planOccasion, presetFor } from '../domain/occasions';
+import { haptic } from '../platform/haptics';
 import { colorsFor, parseSkin, resolveSkin, withColorScheme, type SkinId, type ThemeColors } from '../theme/skins';
 
 const COLLECTIONS = ['people', 'occasions', 'states', 'gifts', 'ideas', 'members'] as const;
@@ -146,7 +147,14 @@ type GifteezApi = {
   addPerson: (input: { name: string; budget: string; tags: string[]; imported?: boolean }) => Promise<string | null>;
   savePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags'>>) => Promise<void>;
   removePerson: (id: string) => Promise<void>;
-  addOccasion: (personId: string, type: OccasionType, month?: number, day?: number, year?: number) => Promise<void>;
+  addOccasion: (
+    personId: string,
+    type: OccasionType,
+    month?: number,
+    day?: number,
+    year?: number,
+    extra?: { label?: string; recurs?: boolean },
+  ) => Promise<void>;
   saveIdeaFor: (occasionId: string, idea: string) => Promise<void>;
   logGift: (occasionId: string, title: string, price: string, date: string) => Promise<void>;
   updateGift: (giftId: string, title: string, price: string, date: string, privateGift: boolean) => Promise<void>;
@@ -238,6 +246,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     const key = `errors.${code}`;
     const message = t(key, vars);
     setError(message === key ? t('errors.generic') : message);
+    haptic('error');
   }, []);
 
   const sync = useCallback(async (source?: AppSnapshot) => {
@@ -405,10 +414,16 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           if (result.verified) {
             await commit(withAccountUnlock(snapshotRef.current, true));
             await finishOwned(purchase);
+            haptic('success');
           }
         })
         .catch(() => fail('notConfigured'));
-    }, message => setError(message));
+    }, message => {
+      setError(message);
+      if (message) {
+        haptic('error');
+      }
+    });
     return stop;
   }, [commit, env, fail]);
 
@@ -601,6 +616,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       const normalized = normalizeUsPhone(phone);
       if (!phoneAllowed(normalized, env.phoneRegions)) {
         setError(t('groupCreate.smsRegion'));
+        haptic('error');
         return;
       }
       try {
@@ -651,14 +667,18 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       if (!outcome.ok) {
         if (outcome.failure === 'invalid-link') {
           setError(t('join.invalid'));
+          haptic('error');
         } else if (outcome.failure === 'full') {
           fail('full', { count: env.groupMaxMembers });
         } else if (outcome.failure === 'invalid') {
           setError(t('join.failedInvalid'));
+          haptic('error');
         } else if (outcome.failure === 'offline') {
           setError(t('join.failedOffline'));
+          haptic('error');
         } else {
           setError(t('join.failedUnknown'));
+          haptic('error');
         }
         return false;
       }
@@ -667,6 +687,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       } catch {
         await deleteSecret(groupKeyAccount(outcome.groupId));
         setError(t('join.failedUnknown'));
+        haptic('error');
         return false;
       }
       try {
@@ -756,26 +777,45 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return;
       }
       await commit(result.snapshot);
+      haptic('warning');
       sync().catch(() => undefined);
     },
-    addOccasion: async (personId, type, month, day, year) => {
-      const today = new Date();
-      const fallback = defaultOccasionDate(type, today);
-      const occasion: Occasion = {
-        id: randomId(),
-        personId,
+    addOccasion: async (personId, type, month, day, year, extra) => {
+      const planned = planOccasion({
         type,
-        month: month || fallback.month,
-        day: day || fallback.day,
+        month,
+        day,
         year,
-        updatedAt: Date.now(),
-      };
-      if (!isRealMonthDay(occasion.month, occasion.day)) {
+        label: extra?.label,
+        recurs: extra?.recurs,
+        today: new Date(),
+      });
+      if (planned === 'need-date') {
+        fail('date');
+        return;
+      }
+      if (planned === 'need-name') {
+        fail('occasionName');
+        return;
+      }
+      if (!isRealMonthDay(planned.month, planned.day)) {
         fail('invalid');
         return;
       }
+      const occasion: Occasion = {
+        id: randomId(),
+        personId,
+        type: type === 'custom' || !presetFor(type) ? 'custom' : type,
+        month: planned.month,
+        day: planned.day,
+        ...(planned.year ? { year: planned.year } : {}),
+        ...(planned.label ? { label: planned.label } : {}),
+        recurs: planned.recurs,
+        updatedAt: Date.now(),
+      };
       const next = addOccasion(snapshotRef.current, occasion);
       await commit(next);
+      haptic('success');
       scheduleReminders(snapshotRef.current).catch(() => undefined);
       sync().catch(() => undefined);
     },
@@ -785,6 +825,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return;
       }
       await commit(saveIdea({ snapshot: snapshotRef.current, occasion, idea, today: new Date(), now: Date.now() }));
+      haptic('success');
       sync().catch(() => undefined);
     },
     logGift: async (occasionId, title, price, date) => {
@@ -826,6 +867,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       if (warningUid) {
         setNotice(t('purchase.claimedWarning', { name: claimerName(warningUid, snapshotRef.current.members) }));
       }
+      haptic('success');
       sync().catch(() => undefined);
     },
     claimOccasion: async occasionId => {
@@ -846,6 +888,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return;
       }
       await commit(result.snapshot);
+      haptic('success');
       sync().catch(() => undefined);
     },
     unclaimOccasion: async occasionId => {
@@ -950,7 +993,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           personId,
           name: person.name,
           tags: person.tags,
-          occasion: occasion?.occasion.type ?? null,
+          occasion: occasion && occasion.occasion.type !== 'custom' ? occasion.occasion.type : null,
           feedback: next.feedback,
           salt: 0,
         });
@@ -982,7 +1025,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         personId,
         name: person.name,
         tags: person.tags,
-        occasion: occasion?.occasion.type ?? null,
+        occasion: occasion && occasion.occasion.type !== 'custom' ? occasion.occasion.type : null,
         feedback: snapshotRef.current.feedback,
         salt,
       });
@@ -1013,7 +1056,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           refresh: Boolean(existing),
           prompt: {
             name: person.name,
-            occasion: occasion?.occasion.type ?? null,
+            occasion: occasion ? occasionLabel(occasion.occasion) : null,
             tags: person.tags,
             budgetCents: person.budgetCents,
             year: occasion?.date.getFullYear() ?? new Date().getFullYear(),
@@ -1075,6 +1118,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       const remaining = current.group.memberIds.filter(id => id !== uid);
       if (current.group.ownerId === uid && remaining.length > 0) {
         setError(t('groupScreen.ownerStays'));
+        haptic('error');
         return;
       }
       const groupId = current.group.id;
@@ -1100,6 +1144,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         };
       }
       await commit(next);
+      haptic('warning');
       sync().catch(() => undefined);
     },
     removeGroupMember: async uid => {
@@ -1119,6 +1164,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         }
       }
       await commit(result.snapshot);
+      haptic('warning');
       sync().catch(() => undefined);
     },
     transferOwnership: async uid => {
@@ -1159,6 +1205,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         await callFunction(env, 'deleteAccount', {});
         await deleteCurrentUser();
         await commit(emptySnapshot(Date.now()));
+        haptic('warning');
       } catch {
         fail('auth');
       }
@@ -1207,6 +1254,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return;
       }
       await commit(result.snapshot);
+      haptic('warning');
       sync().catch(() => undefined);
     },
     updateOccasion: async (occasionId, month, day, year) => {
@@ -1216,6 +1264,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return;
       }
       await commit(result.snapshot);
+      haptic('success');
       scheduleReminders(snapshotRef.current).catch(() => undefined);
       sync().catch(() => undefined);
     },
@@ -1226,6 +1275,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return;
       }
       await commit(result.snapshot);
+      haptic('warning');
       scheduleReminders(snapshotRef.current).catch(() => undefined);
       sync().catch(() => undefined);
     },
@@ -1291,6 +1341,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         await buyUnlock(env.iapProductId);
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : t('settings.storeMissing'));
+        haptic('error');
       }
     },
     restorePurchases: async () => {
@@ -1298,6 +1349,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         const owned = await loadOwned(env.iapProductId);
         if (owned.length === 0) {
           setError(t('settings.storeMissing'));
+          haptic('error');
           return;
         }
         for (const purchase of owned) {
@@ -1309,12 +1361,14 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           if (paid.verified) {
             await commit(withAccountUnlock(snapshotRef.current, true));
             await finishOwned(purchase);
+            haptic('success');
             return;
           }
         }
         fail('notConfigured');
       } catch {
         setError(t('settings.storeMissing'));
+        haptic('error');
       }
     },
     importText: async text => {

@@ -54,7 +54,9 @@ export async function applyReminderPlan(slots: ReminderSlot[]): Promise<void> {
       }
     }
     for (const slot of slots) {
-      const when = slot.kind === 'week' ? t('reminders.week', { name: slot.personName }) : t('reminders.day', { name: slot.personName });
+      const when = slot.kind === 'week'
+        ? t('reminders.week', { name: slot.personName, occasion: slot.occasionName })
+        : t('reminders.day', { name: slot.personName, occasion: slot.occasionName });
       await loaded.api.createTriggerNotification(
         {
           id: slot.id,
