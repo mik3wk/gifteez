@@ -133,6 +133,10 @@ function rewriteEntitlements(xml, domain) {
   return xml.replace(/<string>applinks:[^<]*<\/string>/, `<string>applinks:${domain}</string>`);
 }
 
+function keepExisting(file) {
+  return fs.existsSync(file);
+}
+
 function writeFirebaseFiles(env, root) {
   const projectId = env.FIREBASE_PROJECT_ID || 'your-project-id';
   const sender = env.FIREBASE_MESSAGING_SENDER_ID || '000000000000';
@@ -162,10 +166,16 @@ function writeFirebaseFiles(env, root) {
     configuration_version: '1',
   };
 
-  fs.writeFileSync(
-    path.join(root, 'android/app/google-services.json'),
-    `${JSON.stringify(googleServices, null, 2)}\n`,
-  );
+  const androidPath = path.join(root, 'android/app/google-services.json');
+  const iosPath = path.join(root, 'ios/Gifteez/GoogleService-Info.plist');
+  const rcPath = path.join(root, '.firebaserc');
+  const kept = [];
+  if (keepExisting(androidPath)) {
+    kept.push(androidPath);
+  } else {
+    fs.mkdirSync(path.dirname(androidPath), { recursive: true });
+    fs.writeFileSync(androidPath, `${JSON.stringify(googleServices, null, 2)}\n`);
+  }
 
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -198,11 +208,18 @@ function writeFirebaseFiles(env, root) {
 </dict>
 </plist>
 `;
-  fs.writeFileSync(path.join(root, 'ios/Gifteez/GoogleService-Info.plist'), plist);
-  fs.writeFileSync(
-    path.join(root, '.firebaserc'),
-    `${JSON.stringify({ projects: { default: projectId } }, null, 2)}\n`,
-  );
+  if (keepExisting(iosPath)) {
+    kept.push(iosPath);
+  } else {
+    fs.mkdirSync(path.dirname(iosPath), { recursive: true });
+    fs.writeFileSync(iosPath, plist);
+  }
+  if (keepExisting(rcPath)) {
+    kept.push(rcPath);
+  } else {
+    fs.writeFileSync(rcPath, `${JSON.stringify({ projects: { default: projectId } }, null, 2)}\n`);
+  }
+  return kept;
 }
 
 function writeInviteHosting(env, root) {
@@ -227,9 +244,13 @@ function main() {
     ? path.join(root, '.env')
     : path.join(root, '.env.example');
   const env = parseEnv(fs.readFileSync(envPath, 'utf8'));
-  writeFirebaseFiles(env, root);
+  const kept = writeFirebaseFiles(env, root);
   const domain = writeInviteHosting(env, root);
-  console.log(`Firebase config written from ${path.basename(envPath)} for project ${env.FIREBASE_PROJECT_ID || 'your-project-id'}.`);
+  if (kept.length > 0) {
+    console.log(`Left existing Firebase config alone: ${kept.map(file => path.relative(root, file)).join(', ')}.`);
+  } else {
+    console.log(`Firebase config written from ${path.basename(envPath)} for project ${env.FIREBASE_PROJECT_ID || 'your-project-id'}.`);
+  }
   console.log(`Invite links use https://${domain}/join. Hosting files were written under hosting/.`);
 }
 
@@ -250,4 +271,5 @@ module.exports = {
   renderJoinPage,
   rewriteAndroidHost,
   rewriteEntitlements,
+  writeFirebaseFiles,
 };
