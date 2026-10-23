@@ -2,7 +2,6 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { Appearance, AppState } from 'react-native';
 import type { AppEnv } from '../config/env';
 import {
-  buildAppInviteUrl,
   buildInviteUrl,
   generateRecoveryCode,
   keyFromString,
@@ -666,6 +665,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     sendEmail: async email => {
       await sendMagicLink(env, email.trim());
       await commit(withProfile(snapshotRef.current, { pendingEmail: email.trim() }));
+      showNotice(t('groupCreate.linkSent'));
     },
     finishEmail: async link => {
       const email = snapshotRef.current.profile.pendingEmail;
@@ -1194,10 +1194,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         inviteId,
         groupKey,
       });
-      const appLink = buildAppInviteUrl({ groupId: current.group.id, inviteId, groupKey });
       const label = groupDisplayName(current.group.name, memberNames(snapshotRef.current.members));
-      const marker = groupMarker(current.group.id);
-      return t('groupScreen.shareText', { marker: marker.emoji, name: label, links: `${httpsLink}\n${appLink}` });
+      return t('groupScreen.shareText', { name: label, link: httpsLink });
     },
     leave: async () => {
       const current = snapshotRef.current;
@@ -1509,7 +1507,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       return addImported(rows);
     },
-  }), [addImported, canUndo, clearResumePerson, cloudRemaining, colors, commit, duplicateOffers, env, error, fail, noteSync, notice, offerUndo, offline, onNavigate, ready, recoveryCode, resumePersonId, runUndo, skinId, snapshot, startupDetail, startupFailure, storeProduct, storeReady, sync]);
+  }), [addImported, canUndo, clearResumePerson, cloudRemaining, colors, commit, duplicateOffers, env, error, fail, noteSync, notice, offerUndo, offline, onNavigate, ready, recoveryCode, resumePersonId, runUndo, showNotice, skinId, snapshot, startupDetail, startupFailure, storeProduct, storeReady, sync]);
 
   return <GifteezContext.Provider value={api}>{children}</GifteezContext.Provider>;
 }

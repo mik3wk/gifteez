@@ -12,20 +12,9 @@ import { PeopleScreen } from '../screens/PeopleScreen';
 import { StartupScreen } from '../screens/StartupScreen';
 import { GifteezProvider, useGifteez } from '../state/GifteezContext';
 import { listenForReminderOpens } from '../platform/reminders';
-import { Body, Button, Notice, OfflineBanner, Screen, Title } from '../ui/ui';
+import { Body, BrandedLoading, Button, ConfirmHost, Notice, OfflineBanner, Screen, Title } from '../ui/ui';
 import type { AppEnv } from '../config/env';
 import type { RootStack } from './navigation';
-
-function GiftMark() {
-  const { colors } = useGifteez();
-  return (
-    <View accessibilityElementsHidden style={styles.gift}>
-      <View style={[styles.giftBox, { backgroundColor: colors.surface, borderColor: colors.accent }]} />
-      <View style={[styles.giftRibbon, { backgroundColor: colors.accentForeground }]} />
-      <View style={[styles.giftBand, { backgroundColor: colors.accentForeground }]} />
-    </View>
-  );
-}
 
 const Stack = createNativeStackNavigator<RootStack>();
 const navigationRef = createNavigationContainerRef<RootStack>();
@@ -94,9 +83,7 @@ function Navigator() {
   if (!gifteez.ready) {
     return (
       <Screen centered>
-        <GiftMark />
-        <Title>{t('appName')}</Title>
-        <Body>{t('common.loading')}</Body>
+        <BrandedLoading />
       </Screen>
     );
   }
@@ -110,22 +97,28 @@ function Navigator() {
     );
   }
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.fill}>
       <NavigationContainer
         ref={navigationRef}
         theme={theme}
         onReady={() => flushLink.current()}
         onStateChange={() => gifteez.onNavigate()}>
-        <Stack.Navigator screenOptions={{ headerShadowVisible: false, headerTintColor: gifteez.colors.text, contentStyle: { backgroundColor: gifteez.colors.background } }}>
+        <Stack.Navigator screenOptions={{
+          headerShadowVisible: false,
+          headerTintColor: gifteez.colors.text,
+          headerTitleAlign: 'center',
+          headerBackButtonDisplayMode: 'minimal',
+          contentStyle: { backgroundColor: gifteez.colors.background },
+        }}>
           {gifteez.snapshot.profile.onboarded ? (
             <>
-              <Stack.Screen name="People" component={PeopleScreen} options={{ title: t('people.title') }} />
+              <Stack.Screen name="People" component={PeopleScreen} options={{ headerShown: false }} />
               <Stack.Screen name="Person" component={PersonScreen} options={{ title: t('person.ideas') }} />
               <Stack.Screen name="SamePerson" component={MergeScreen} options={{ title: t('merge.title') }} />
               <Stack.Screen name="AddPerson" component={AddPersonScreen} options={{ title: t('person.addTitle') }} />
-              <Stack.Screen name="Fairness" component={FairnessScreen} options={{ title: t('fairness.title') }} />
-              <Stack.Screen name="Group" component={GroupScreen} options={{ title: t('groupScreen.title') }} />
-              <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: t('settings.title') }} />
+              <Stack.Screen name="Fairness" component={FairnessScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="Group" component={GroupScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: false }} />
               <Stack.Screen name="Join" component={JoinScreen} options={{ title: t('join.title') }} />
               <Stack.Screen name="JoinConfirm" component={JoinConfirmScreen} options={{ title: t('join.title') }} />
             </>
@@ -149,8 +142,9 @@ function Navigator() {
           onAction={gifteez.canUndo ? () => { gifteez.runUndo().catch(() => undefined); } : undefined}
         />
       ) : null}
+      <ConfirmHost />
       {gifteez.recoveryCode ? (
-        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}>
+        <View style={styles.cover}>
           <Screen>
             <Title>{t('groupCreate.recoveryTitle')}</Title>
             <Body>{t('groupCreate.recoveryBody')}</Body>
@@ -166,8 +160,6 @@ function Navigator() {
 }
 
 const styles = StyleSheet.create({
-  gift: { width: 88, height: 88, alignItems: 'center', justifyContent: 'center' },
-  giftBox: { width: 72, height: 56, borderRadius: 12, borderWidth: 3 },
-  giftRibbon: { position: 'absolute', width: 10, height: 70, borderRadius: 4 },
-  giftBand: { position: 'absolute', top: 28, width: 78, height: 12, borderRadius: 4 },
+  fill: { flex: 1 },
+  cover: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
 });

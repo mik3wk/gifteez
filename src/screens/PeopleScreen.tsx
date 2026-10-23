@@ -1,27 +1,32 @@
 import React, { useLayoutEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
-import { groupCurrency, statusFor, upcomingOccasion } from '../domain/logic';
-import { sortPeople } from '../domain/logic';
+import { daysUntil, groupCurrency, sortPeople, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
 import { isOneTimeOccasion, occasionLabel } from '../domain/occasions';
 import { isHiddenFromViewer } from '../domain/visibility';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
-import { DuplicateOffers } from './mergeUi';
+import { groupHue } from '../theme/skins';
+import { useTheme } from '../theme/useTheme';
+import { occasionLook } from '../theme/tokens';
 import { SkinBanner } from '../ui/art';
-import { useGroupHeading } from '../ui/heading';
-import { AccountSheet, Banner, Button, EmptyState, Row, Screen, Title } from '../ui/ui';
-import { yearSpentCents } from '../domain/logic';
+import { useGroupLabel } from '../ui/heading';
+import { AccountSheet, AppHeader, Banner, EmptyState, HeroCard, PersonRow, Screen, SectionHeader, StatRow, StatTile } from '../ui/ui';
+import { DuplicateOffers } from './mergeUi';
 
 export function PeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, showBanner, dismissBanner, colors, skinId, duplicateOffers, dismissDuplicateOffer, resumePersonId, clearResumePerson } = useGifteez();
-  const heading = useGroupHeading();
+  const { snapshot, showBanner, dismissBanner, skinId, duplicateOffers, dismissDuplicateOffer, resumePersonId, clearResumePerson } = useGifteez();
+  const { scheme } = useTheme();
+  const heading = useGroupLabel();
   const [upgrade, setUpgrade] = useState(false);
-  const people = sortPeople(snapshot.people, snapshot.occasions, new Date());
-  const year = new Date().getFullYear();
+  const today = new Date();
+  const people = sortPeople(snapshot.people, snapshot.occasions, today);
+  const year = today.getFullYear();
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerRight: undefined });
+  }, [navigation]);
   useLayoutEffect(() => {
     if (!resumePersonId) {
       return;
@@ -30,11 +35,24 @@ export function PeopleScreen() {
     clearResumePerson();
     navigation.navigate('Person', { personId });
   }, [clearResumePerson, navigation, resumePersonId]);
+
+  const nextPerson = people.find(person => upcomingOccasion(person.id, snapshot.occasions, today));
+  const next = nextPerson ? upcomingOccasion(nextPerson.id, snapshot.occasions, today) : null;
+  const upcomingCount = people.filter(person => {
+    const item = upcomingOccasion(person.id, snapshot.occasions, today);
+    return item != null && daysUntil(item.date, today) <= 120;
+  }).length;
+  const spentValues = people.map(person => yearSpentCents(person.id, snapshot.gifts, year));
+  const spread = spentValues.length === 0 ? 0 : Math.max(...spentValues) - Math.min(...spentValues);
+  const balanced = spread === 0 || (Math.max(...spentValues) > 0 && spread <= Math.max(...spentValues) * 0.25);
+  const greeting = snapshot.profile.displayName.trim()
+    ? t('people.greeting', { name: snapshot.profile.displayName.trim() })
+    : undefined;
+
   return (
-    <Screen
-      footer={people.length > 0 ? <Button label={t('people.add')} accessibilityLabel={t('people.add')} onPress={() => navigation.navigate('AddPerson')} /> : undefined}>
+    <Screen tab="people">
+      <AppHeader title={heading.label} greeting={greeting} />
       <SkinBanner skinId={skinId} />
-      <Title>{people.length === 0 ? t('people.title') : `${heading.emoji} ${heading.label}`}</Title>
       <DuplicateOffers
         offers={duplicateOffers}
         onReview={offer => navigation.navigate('SamePerson', {
@@ -52,16 +70,36 @@ export function PeopleScreen() {
           onDismiss={dismissBanner}
         />
       ) : null}
-      {people.length === 0 ? (
-        <EmptyState
-          kind="people"
-          text={t('people.empty')}
-          action={t('people.add')}
-          onAction={() => navigation.navigate('AddPerson')}
+      {next && nextPerson ? (
+        <HeroCard
+          kicker={t('people.nextUp')}
+          title={t('people.nextTitle', { name: nextPerson.name, occasion: occasionLabel(next.occasion) })}
+          figure={daysUntil(next.date, today) === 0 ? t('people.today') : String(daysUntil(next.date, today))}
+          unit={daysUntil(next.date, today) === 0 ? undefined : t('people.daysUnit', { count: daysUntil(next.date, today) })}
+          detail={heroDetail(nextPerson.id, nextPerson.budgetCents, snapshot.gifts, year, snapshot.group)}
+          action={t('people.findGift')}
+          art={occasionLook(next.occasion.type).art}
+          onAction={() => navigation.navigate('Person', { personId: nextPerson.id })}
         />
       ) : null}
+      <StatRow>
+        <StatTile value={String(people.length)} label={t('people.statPeople')} icon="people" tint="pink" />
+        <StatTile value={String(upcomingCount)} label={t('people.statUpcoming')} icon="calendar" tint="teal" />
+        <StatTile
+          value={balanced ? t('people.fairnessBalanced') : t('people.fairnessCheck')}
+          label={t('people.statFairness')}
+          icon="scale"
+          tint="lilac"
+          onPress={() => navigation.navigate('Fairness')}
+        />
+      </StatRow>
+      {people.length === 0 ? (
+        <EmptyState kind="people" text={t('people.empty')} action={t('people.add')} onAction={() => navigation.navigate('AddPerson')} />
+      ) : (
+        <SectionHeader title={t('people.title')} action={t('people.addShort')} onAction={() => navigation.navigate('AddPerson')} />
+      )}
       {people.map(person => {
-        const next = upcomingOccasion(person.id, snapshot.occasions, new Date());
+        const item = upcomingOccasion(person.id, snapshot.occasions, today);
         const hidden = isHiddenFromViewer(person, snapshot.profile.uid);
         const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(snapshot.group));
         const spent = yearSpentCents(person.id, snapshot.gifts, year);
@@ -70,30 +108,49 @@ export function PeopleScreen() {
           : person.budgetCents == null
             ? t('people.spent', { used: money(spent) })
             : t('people.budgetLeft', { used: money(spent), budget: money(person.budgetCents) });
-        const status = hidden || !next ? null : statusFor(next.occasion, snapshot.states, new Date());
+        const status = hidden || !item ? null : statusFor(item.occasion, snapshot.states, today);
+        const when = item
+          ? `${occasionLabel(item.occasion)} ${isOneTimeOccasion(item.occasion) ? formatLongDate(item.date) : formatDate(item.date)}`
+          : t('people.noOccasion');
+        const days = item ? daysUntil(item.date, today) : null;
+        const trailing = days == null ? undefined : days === 0 ? t('people.today') : t('people.inDays', { count: days });
+        const statusText = status ? t(statusKey(status)) : '';
+        const progress = hidden || person.budgetCents == null || person.budgetCents <= 0 ? null : spent / person.budgetCents;
         return (
-          <Row
+          <PersonRow
             key={person.id}
-            accessibilityLabel={person.name}
-            onPress={() => navigation.navigate('Person', { personId: person.id })}>
-              <Text style={[styles.name, { color: colors.text }]}>{person.name}</Text>
-              <Text style={[styles.meta, { color: colors.muted }]}>
-                {next ? `${occasionLabel(next.occasion)} · ${isOneTimeOccasion(next.occasion) ? formatLongDate(next.date) : formatDate(next.date)}` : t('people.noOccasion')}
-              </Text>
-              <Text style={[styles.meta, { color: colors.text }]}>{budget}</Text>
-              {status ? <Text style={[styles.meta, { color: colors.accentForeground }]}>{t(statusKey(status))}</Text> : null}
-              {person.imported && !person.opened ? <Text style={[styles.meta, { color: colors.muted }]}>{t('people.imported')}</Text> : null}
-          </Row>
+            name={person.name}
+            initials={person.name}
+            hue={groupHue(person.name.length, scheme)}
+            occasionId={item?.occasion.type}
+            occasionLabel={item ? occasionLabel(item.occasion) : undefined}
+            trailing={trailing}
+            budget={budget}
+            progress={progress}
+            note={person.imported && !person.opened ? t('people.imported') : t('people.noOccasion')}
+            accessibilityLabel={[person.name, when, budget, statusText].filter(Boolean).join(', ')}
+            onPress={() => navigation.navigate('Person', { personId: person.id })}
+          />
         );
       })}
-      <View style={styles.actions}>
-        <Button flex label={t('people.fairness')} tone="ghost" onPress={() => navigation.navigate('Fairness')} />
-        <Button flex label={t('people.group')} tone="ghost" onPress={() => navigation.navigate('Group')} />
-        <Button flex label={t('people.settings')} tone="ghost" onPress={() => navigation.navigate('Settings')} />
-      </View>
       <AccountSheet visible={upgrade} allowName={false} showCreate={false} onClose={() => setUpgrade(false)} />
     </Screen>
   );
+}
+
+function heroDetail(
+  personId: string,
+  budgetCents: number | null,
+  gifts: Parameters<typeof yearSpentCents>[1],
+  year: number,
+  group: Parameters<typeof groupCurrency>[0],
+): string {
+  const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(group));
+  const spent = yearSpentCents(personId, gifts, year);
+  if (budgetCents == null) {
+    return t('people.heroOpen', { used: money(spent) });
+  }
+  return t('people.heroSpent', { used: money(spent), budget: money(budgetCents) });
 }
 
 function statusKey(status: string): string {
@@ -105,9 +162,3 @@ function statusKey(status: string): string {
   }
   return 'person.statusNotStarted';
 }
-
-const styles = StyleSheet.create({
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  name: { fontSize: 20, fontWeight: '700', flexShrink: 1 },
-  meta: { fontSize: 15, flexShrink: 1 },
-});

@@ -1,9 +1,8 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { View } from 'react-native';
 import type { DuplicateHint } from '../domain/merge';
 import { t } from '../i18n';
-import { useGifteez } from '../state/GifteezContext';
-import { Body, Button, Card, Title } from '../ui/ui';
+import { Body, Button, Card, CheckRow, Heading } from '../ui/ui';
 
 export function MergeChecklist({
   gifts,
@@ -14,29 +13,21 @@ export function MergeChecklist({
   checked: Record<string, boolean>;
   onToggle: (id: string) => void;
 }) {
-  const { colors } = useGifteez();
   if (gifts.length === 0) {
     return null;
   }
   return (
     <View>
-      <Title accessibilityLabel={t('merge.gifts')}>{t('merge.gifts')}</Title>
+      <Heading>{t('merge.gifts')}</Heading>
       <Body>{t('merge.giftHint')}</Body>
-      {gifts.map(gift => {
-        const on = checked[gift.id] !== false;
-        return (
-          <Pressable
-            key={gift.id}
-            accessibilityRole="checkbox"
-            accessibilityLabel={t('merge.giftLabel', { title: gift.title })}
-            accessibilityState={{ checked: on }}
-            onPress={() => onToggle(gift.id)}
-            style={({ pressed }) => [styles.row, { opacity: pressed ? 0.7 : 1 }]}>
-            <View style={[styles.box, { borderColor: colors.border, backgroundColor: on ? colors.accent : colors.surface }]} />
-            <Text style={[styles.name, { color: colors.text }]}>{gift.title}</Text>
-          </Pressable>
-        );
-      })}
+      {gifts.map(gift => (
+        <CheckRow
+          key={gift.id}
+          label={t('merge.giftLabel', { title: gift.title })}
+          checked={checked[gift.id] !== false}
+          onPress={() => onToggle(gift.id)}
+        />
+      ))}
     </View>
   );
 }
@@ -55,7 +46,7 @@ export function DuplicateOffers({
   }
   return (
     <View>
-      <Title accessibilityLabel={t('merge.offerTitle')}>{t('merge.offerTitle')}</Title>
+      <Heading>{t('merge.offerTitle')}</Heading>
       {offers.map(offer => {
         const list = offer.sourceListName.trim() || t('merge.otherList');
         return (
@@ -64,12 +55,13 @@ export function DuplicateOffers({
             <Button
               label={t('merge.offerReview')}
               accessibilityLabel={t('merge.offerReviewLabel', { source: offer.sourceName, target: offer.targetName })}
+              tone="secondary"
               onPress={() => onReview(offer)}
             />
             <Button
               label={t('merge.offerDismiss')}
               accessibilityLabel={t('merge.offerDismissLabel', { source: offer.sourceName, target: offer.targetName })}
-              tone="secondary"
+              tone="ghost"
               onPress={() => onDismiss(offer)}
             />
           </Card>
@@ -78,9 +70,3 @@ export function DuplicateOffers({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44, paddingVertical: 8 },
-  box: { width: 22, height: 22, borderWidth: 1, borderRadius: 4 },
-  name: { fontSize: 16, flexShrink: 1 },
-});

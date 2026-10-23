@@ -3,23 +3,32 @@ import enUS from './en-US.json';
 
 type Vars = Record<string, string | number>;
 
-export function t(key: string, vars?: Vars): string {
+function lookup(key: string): string | null {
   const parts = key.split('.');
   let node: unknown = enUS;
   for (const part of parts) {
     if (node && typeof node === 'object' && part in node) {
       node = (node as Record<string, unknown>)[part];
     } else {
-      return key;
+      return null;
     }
   }
-  if (typeof node !== 'string') {
+  return typeof node === 'string' ? node : null;
+}
+
+export function t(key: string, vars?: Vars): string {
+  let chosen = lookup(key);
+  if (vars && typeof vars.count === 'number') {
+    const category = new Intl.PluralRules(deviceLocale()).select(Number(vars.count));
+    chosen = lookup(`${key}_${category}`) ?? lookup(`${key}_other`) ?? chosen;
+  }
+  if (chosen == null) {
     return key;
   }
   if (!vars) {
-    return node;
+    return chosen;
   }
-  return node.replace(/\{(\w+)\}/g, (_, name: string) => String(vars[name] ?? `{${name}}`));
+  return chosen.replace(/\{(\w+)\}/g, (_, name: string) => String(vars[name] ?? `{${name}}`));
 }
 
 export function deviceLocale(): string {
@@ -34,19 +43,27 @@ export function deviceLocale(): string {
   return NativeModules.I18nManager?.localeIdentifier || 'en-US';
 }
 
+const CURRENCIES: Array<[RegExp, string]> = [
+  [/en-gb|-gb\b|gb$/, 'GBP'],
+  [/en-au|-au\b/, 'AUD'],
+  [/en-ca|-ca\b/, 'CAD'],
+  [/es-mx|-mx\b/, 'MXN'],
+  [/es-ar|-ar\b/, 'ARS'],
+  [/pt-br|-br\b/, 'BRL'],
+  [/en-in|-in\b|\bhi\b/, 'INR'],
+  [/ja/, 'JPY'],
+  [/ko/, 'KRW'],
+  [/zh-tw|zh-hant|-tw\b/, 'TWD'],
+  [/zh|zh-cn|zh-hans/, 'CNY'],
+  [/^(de|fr|it|nl|es|pt)\b/, 'EUR'],
+];
+
 export function currencyForLocale(locale: string): string {
-  const lower = locale.toLowerCase();
-  if (lower.includes('gb')) {
-    return 'GBP';
-  }
-  if (lower.includes('au')) {
-    return 'AUD';
-  }
-  if (lower.includes('-ca') || lower.endsWith('ca')) {
-    return 'CAD';
-  }
-  if (lower.startsWith('es') || lower.includes('-mx')) {
-    return 'USD';
+  const lower = locale.toLowerCase().replace(/_/g, '-');
+  for (const [pattern, code] of CURRENCIES) {
+    if (pattern.test(lower)) {
+      return code;
+    }
   }
   return 'USD';
 }

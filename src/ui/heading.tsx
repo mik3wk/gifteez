@@ -3,12 +3,14 @@ import { useNavigation } from '@react-navigation/native';
 import { groupDisplayName, groupMarker, memberNames } from '../domain/logic';
 import { t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
+import { useTheme } from '../theme/useTheme';
 
 export function useGroupLabel(): { label: string; emoji: string; color: string } {
-  const { snapshot, colors } = useGifteez();
+  const { snapshot } = useGifteez();
+  const { colors } = useTheme();
   const group = snapshot.group;
   if (!group) {
-    return { label: t('people.title'), emoji: '🎁', color: colors.accentForeground };
+    return { label: t('people.title'), emoji: '🎁', color: colors.text };
   }
   const marker = groupMarker(group.id);
   return {
@@ -22,7 +24,7 @@ export function useGroupHeading(): { label: string; emoji: string; color: string
   const navigation = useNavigation();
   const heading = useGroupLabel();
   useLayoutEffect(() => {
-    navigation.setOptions({ title: `${heading.emoji} ${heading.label}` });
+    navigation.setOptions({ title: heading.label });
   }, [navigation, heading.emoji, heading.label]);
   return heading;
 }

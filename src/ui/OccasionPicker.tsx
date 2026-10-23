@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { isRealMonthDay } from '../domain/logic';
 import {
   nextOccasionDate,
@@ -13,15 +12,18 @@ import {
 import type { Occasion } from '../domain/types';
 import { formatDate, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
-import { Body, Button, Field } from './ui';
+import { DateField } from './DateField';
+import { Body, Button, Chip, Cluster, Field, Heading, Select, Stack, Toggle } from './ui';
 
 const GROUPS: OccasionPreset['group'][] = ['holiday', 'celebration', 'life'];
 
 export function OccasionPicker({ personId }: { personId: string }) {
-  const { addOccasion, colors } = useGifteez();
+  const { addOccasion } = useGifteez();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState('birthday');
+  const [selected, setSelected] = useState('');
+  const [pickedDate, setPickedDate] = useState('');
+  const [rememberYear, setRememberYear] = useState(false);
   const [customName, setCustomName] = useState('');
   const [month, setMonth] = useState('');
   const [day, setDay] = useState('');
@@ -31,9 +33,10 @@ export function OccasionPicker({ personId }: { personId: string }) {
   const [nameError, setNameError] = useState('');
 
   const q = query.trim().toLowerCase();
-  const needsDate = occasionNeedsDate(selected);
+  const picked = selected !== '';
   const preset = presetFor(selected);
-  const asksRecurrence = selected === 'custom' || !preset || preset.rule.kind === 'ask';
+  const needsDate = picked && occasionNeedsDate(selected);
+  const asksRecurrence = picked && (selected === 'custom' || !preset || preset.rule.kind === 'ask');
   const filtered = OCCASION_PRESETS.filter(item => occasionLabel({ type: item.id }).toLowerCase().includes(q));
   const planned = planOccasion({
     type: selected,
@@ -55,7 +58,8 @@ export function OccasionPicker({ personId }: { personId: string }) {
   }
 
   return (
-    <View style={styles.block}>
+    <Stack>
+      <Heading>{t('person.addOccasionHeading')}</Heading>
       <Field
         label={t('person.searchOccasions')}
         value={query}
@@ -64,18 +68,19 @@ export function OccasionPicker({ personId }: { personId: string }) {
       />
       {q ? (
         filtered.length === 0 ? <Body>{t('person.noOccasionMatch')}</Body> : (
-          <View style={styles.list}>
-            {filtered.map(item => (
-              <Choice key={item.id} label={occasionLabel({ type: item.id })} selected={selected === item.id} onPress={() => choose(item.id)} />
-            ))}
-          </View>
+          <Select
+            label={t('person.searchOccasions')}
+            value={selected}
+            options={filtered.map(item => ({ id: item.id, label: occasionLabel({ type: item.id }) }))}
+            onChange={choose}
+          />
         )
       ) : (
-        <View style={styles.chips}>
+        <Cluster>
           {OCCASION_PRESETS.filter(item => item.featured).map(item => (
-            <Choice key={item.id} label={occasionLabel({ type: item.id })} selected={selected === item.id} onPress={() => choose(item.id)} chip />
+            <Chip key={item.id} label={occasionLabel({ type: item.id })} selected={selected === item.id} onPress={() => choose(item.id)} />
           ))}
-        </View>
+        </Cluster>
       )}
       {q ? null : (
         <Button
@@ -90,16 +95,18 @@ export function OccasionPicker({ personId }: { personId: string }) {
           return null;
         }
         return (
-          <View key={group} style={styles.list}>
-            <Text style={[styles.group, { color: colors.muted }]}>{t(`occasions.groups.${group}`)}</Text>
-            {items.map(item => (
-              <Choice key={item.id} label={occasionLabel({ type: item.id })} selected={selected === item.id} onPress={() => choose(item.id)} />
-            ))}
-          </View>
+          <Stack key={group}>
+            <Select
+              label={t(`occasions.groups.${group}`)}
+              value={selected}
+              options={items.map(item => ({ id: item.id, label: occasionLabel({ type: item.id }) }))}
+              onChange={choose}
+            />
+          </Stack>
         );
       }) : null}
 {!q || filtered.length === 0 || t('occasions.custom').toLowerCase().includes(q) ? (
-        <Choice label={t('occasions.custom')} selected={selected === 'custom'} onPress={() => choose('custom')} />
+        <Chip block label={t('occasions.custom')} selected={selected === 'custom'} onPress={() => choose('custom')} />
       ) : null}
       {selected === 'custom' ? (
         <Field
@@ -114,45 +121,30 @@ export function OccasionPicker({ personId }: { personId: string }) {
       ) : null}
       {needsDate ? (
         <>
-          <View style={styles.dates}>
-            <View style={styles.flex}>
-              <Field
-                label={t('person.month')}
-                value={month}
-                error={dateError}
-                onChangeText={value => {
-                  setMonth(value);
-                  setDateError('');
-                }}
-                keyboardType="number-pad"
-              />
-            </View>
-            <View style={styles.flex}>
-              <Field label={t('person.day')} value={day} onChangeText={setDay} keyboardType="number-pad" />
-            </View>
-          </View>
-          <Field label={t('person.year')} value={year} onChangeText={setYear} keyboardType="number-pad" />
+          <DateField
+            label={t('person.updateOccasion')}
+            value={pickedDate}
+            error={dateError}
+            onChange={iso => {
+              setPickedDate(iso);
+              const [yearText, monthText, dayText] = iso.split('-');
+              setYear(yearText ?? '');
+              setMonth(String(Number(monthText)));
+              setDay(String(Number(dayText)));
+              setDateError('');
+            }}
+          />
+          <Toggle label={t('person.year')} value={rememberYear} onValueChange={setRememberYear} />
         </>
       ) : null}
       {asksRecurrence ? (
-        <Pressable
-          accessibilityRole="switch"
-          accessibilityLabel={t('person.everyYear')}
-          accessibilityState={{ checked: everyYear }}
-          onPress={() => setEveryYear(value => !value)}
-          style={({ pressed }) => [
-            styles.choice,
-            { borderColor: colors.border, backgroundColor: everyYear ? colors.accent : colors.surface, opacity: pressed ? 0.72 : 1 },
-          ]}>
-          <Text style={{ color: everyYear ? colors.accentText : colors.text }}>
-            {everyYear ? t('person.everyYear') : t('person.oneTime')}
-          </Text>
-        </Pressable>
+        <Toggle label={t('person.everyYear')} value={everyYear} onValueChange={setEveryYear} />
       ) : null}
-      {preset?.note ? <Body>{preset.note}</Body> : null}
+      {preset?.note ? <Body>{t(preset.note)}</Body> : null}
       {!needsDate && preview ? <Body>{preview}</Body> : null}
       <Button
         label={t('person.addOccasion')}
+        disabled={!picked}
         onPress={() => {
           if (selected === 'custom' && !customName.trim()) {
             setNameError(t('person.nameNeeded'));
@@ -170,7 +162,7 @@ export function OccasionPicker({ personId }: { personId: string }) {
             selected,
             needsDate ? monthNum : undefined,
             needsDate ? dayNum : undefined,
-            needsDate && yearNum > 0 ? yearNum : undefined,
+            needsDate && rememberYear && yearNum > 0 ? yearNum : undefined,
             {
               label: selected === 'custom' ? customName.trim() : undefined,
               recurs: asksRecurrence ? everyYear : true,
@@ -178,7 +170,7 @@ export function OccasionPicker({ personId }: { personId: string }) {
           );
         }}
       />
-    </View>
+    </Stack>
   );
 }
 
@@ -204,58 +196,3 @@ function previewLabel(
   const next = nextOccasionDate(draft, new Date());
   return next ? formatDate(next) : '';
 }
-
-function Choice({
-  label,
-  selected,
-  onPress,
-  chip,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-  chip?: boolean;
-}) {
-  const { colors } = useGifteez();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        chip ? styles.chip : styles.choice,
-        {
-          borderColor: selected ? colors.accent : colors.border,
-          backgroundColor: selected ? colors.accent : colors.surface,
-          opacity: pressed ? 0.72 : 1,
-        },
-      ]}>
-      <Text style={{ color: selected ? colors.accentText : colors.text }}>{label}</Text>
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  block: { gap: 8 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  list: { gap: 8 },
-  group: { fontSize: 13, fontWeight: '700', marginTop: 4 },
-  choice: {
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    justifyContent: 'center',
-  },
-  chip: {
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dates: { flexDirection: 'row', gap: 8 },
-  flex: { flexGrow: 1, flexBasis: 120 },
-});

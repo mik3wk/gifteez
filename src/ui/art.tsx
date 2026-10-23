@@ -1,7 +1,8 @@
 import React from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { t } from '../i18n';
-import { useGifteez } from '../state/GifteezContext';
+import { useTheme } from '../theme/useTheme';
+import { stroke } from '../theme/tokens';
 
 const SKINS = {
   base: require('../assets/skins/base.png'),
@@ -11,30 +12,21 @@ const SKINS = {
   summer: require('../assets/skins/summer.png'),
 };
 
-const EMPTY = {
-  people: require('../assets/empty-people.png'),
-  fairness: require('../assets/empty-fairness.png'),
-};
-
+/** Seasonal art sits on the banner color. Step 2 replaces the bitmap with a sticker illustration. */
 export function SkinBanner({ skinId }: { skinId: string }) {
-  const { colors } = useGifteez();
+  const { colors, radius } = useTheme();
   const source = SKINS[skinId as keyof typeof SKINS] ?? SKINS.base;
   return (
     <View
       accessibilityRole="image"
       accessibilityLabel={t('people.seasonBanner')}
-      style={[styles.frame, { backgroundColor: colors.banner, borderColor: colors.border, borderWidth: StyleSheet.hairlineWidth }]}>
-      <Image source={source} style={styles.banner} resizeMode="cover" accessibilityIgnoresInvertColors />
+      style={[styles.frame, { backgroundColor: colors.banner, borderColor: colors.outline, borderRadius: radius.card }]}>
+      <Image source={source} style={styles.banner} resizeMode="contain" accessibilityIgnoresInvertColors />
     </View>
   );
 }
 
-export function EmptyArt({ kind }: { kind: 'people' | 'fairness' }) {
-  return <Image source={EMPTY[kind]} style={styles.empty} resizeMode="contain" accessibilityIgnoresInvertColors />;
-}
-
 const styles = StyleSheet.create({
-  frame: { borderRadius: 16, overflow: 'hidden' },
-  banner: { width: '100%', height: 96, borderRadius: 12 },
-  empty: { width: '100%', height: 160 },
+  frame: { borderWidth: stroke.card, overflow: 'hidden', minHeight: 96, justifyContent: 'center' },
+  banner: { width: '100%', height: 96 },
 });

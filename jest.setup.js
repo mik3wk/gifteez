@@ -5,6 +5,19 @@ jest.mock('react-native-haptic-feedback', () => ({
   default: { trigger: jest.fn() },
 }));
 
+jest.mock('react-native-svg', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const Mock = ({ children }) => React.createElement(View, null, children);
+  return { __esModule: true, default: Mock, Path: Mock };
+});
+
+jest.mock('@react-native-community/datetimepicker', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return props => React.createElement(View, props);
+});
+
 jest.mock('react-native-get-random-values', () => {
   const { webcrypto } = require('crypto');
   if (typeof global.crypto !== 'object' || global.crypto == null) {
