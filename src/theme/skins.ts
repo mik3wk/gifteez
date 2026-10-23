@@ -1,3 +1,5 @@
+import { sticker } from './tokens';
+
 export type SkinId = 'base' | 'fall' | 'winter' | 'spring' | 'summer';
 
 export type ThemeColors = {
@@ -21,6 +23,32 @@ export type ResolvedColors = ThemeColors & {
   onAccent: string;
   onDanger: string;
   onSuccess: string;
+  primary: string;
+  onPrimary: string;
+  primaryText: string;
+  secondary: string;
+  onSecondary: string;
+  highlight: string;
+  onHighlight: string;
+  warning: string;
+  info: string;
+  onWarning: string;
+  onInfo: string;
+  ink: string;
+  onInk: string;
+  button: string;
+  onButton: string;
+  pink: string;
+  onPink: string;
+  teal: string;
+  onTeal: string;
+  sunshine: string;
+  onSunshine: string;
+  lilac: string;
+  onLilac: string;
+  surfaceAlt: string;
+  outline: string;
+  shadow: string;
 };
 
 export const COLOR_KEYS: (keyof ThemeColors)[] = [
@@ -36,44 +64,32 @@ export const COLOR_KEYS: (keyof ThemeColors)[] = [
   'banner',
 ];
 
-export const BUNDLED_SKINS: Record<'base' | 'fall' | 'winter', ThemeColors> = {
-  base: {
-    background: '#F6F1E7',
-    surface: '#FFFCF7',
-    text: '#1F2A24',
-    muted: '#5E6A62',
-    accent: '#1F6B4A',
-    accentText: '#F6F1E7',
-    border: '#E2D8C8',
-    danger: '#9C3B2E',
-    success: '#1F6B4A',
-    banner: '#E7F0EA',
-  },
-  fall: {
-    background: '#F3E6D4',
-    surface: '#FFF8EF',
-    text: '#2C2118',
-    muted: '#6E5844',
-    accent: '#A24C22',
-    accentText: '#FFF8EF',
-    border: '#E4CDB4',
-    danger: '#9C3B2E',
-    success: '#6B8F3C',
-    banner: '#F8E2CC',
-  },
-  winter: {
-    background: '#F3F6F8',
-    surface: '#FFFFFF',
-    text: '#1C2A33',
-    muted: '#5C6E7A',
-    accent: '#1E4D6B',
-    accentText: '#F3F6F8',
-    border: '#D5E0E7',
-    danger: '#8E3A3A',
-    success: '#2F6F62',
-    banner: '#E4EEF4',
-  },
+const PAPER: Pick<ThemeColors, 'background' | 'surface' | 'text' | 'muted' | 'border' | 'danger' | 'success'> = {
+  background: sticker.light.background,
+  surface: sticker.light.surface,
+  text: sticker.light.text,
+  muted: sticker.light.muted,
+  border: sticker.light.ink,
+  danger: sticker.light.danger,
+  success: sticker.light.success,
 };
+
+export const BUNDLED_SKINS: Record<'base' | 'fall' | 'winter', ThemeColors> = {
+  base: { ...PAPER, accent: sticker.light.pink, accentText: sticker.light.ink, banner: '#FFE4EF' },
+  fall: { ...PAPER, accent: '#FF7A1A', accentText: sticker.light.ink, banner: '#FFE8D2' },
+  winter: { ...PAPER, accent: sticker.light.teal, accentText: sticker.light.ink, banner: '#E5F5EC' },
+};
+
+/** Dots beside list names. Text stays colors.text. */
+export const groupHues = {
+  light: [sticker.light.pink, sticker.light.teal, sticker.light.lilac, sticker.light.sunshine, '#FF7A1A', '#F9A8D4', '#86EFAC', '#FDBA74'],
+  dark: [sticker.dark.pink, sticker.dark.teal, sticker.dark.lilac, sticker.dark.sunshine, '#FDBA74', '#F9A8D4', '#86EFAC', '#FDE68A'],
+};
+
+export function groupHue(index: number, scheme: 'light' | 'dark' | null | undefined): string {
+  const list = scheme === 'dark' ? groupHues.dark : groupHues.light;
+  return list[Math.abs(index) % list.length];
+}
 
 export function skinForDate(date: Date): SkinId {
   const monthDay = (date.getMonth() + 1) * 100 + date.getDate();
@@ -138,13 +154,27 @@ function relativeLuminance(hex: string): number {
 }
 
 /** WCAG contrast ratio. 4.5 is the minimum for normal text. */
-const DARK: Pick<ThemeColors, 'background' | 'surface' | 'text' | 'muted' | 'border' | 'banner'> = {
-  background: '#141816',
-  surface: '#1E2622',
-  text: '#F6F1E7',
-  muted: '#C5D0C8',
-  border: '#314038',
-  banner: '#24352C',
+const DARK: Pick<ThemeColors, 'background' | 'surface' | 'text' | 'muted' | 'border'> = {
+  background: sticker.dark.background,
+  surface: sticker.dark.surface,
+  text: sticker.dark.text,
+  muted: sticker.dark.muted,
+  border: '#DED7D3',
+};
+
+const DARK_ROLE = {
+  accentText: sticker.dark.onFill,
+  danger: sticker.dark.danger,
+  success: sticker.dark.success,
+};
+
+/** Bright fills for dark mode, keyed by the light accent. Banners stay distinct and readable. */
+const DARK_FILLS: Record<string, Pick<ThemeColors, 'accent' | 'accentText' | 'danger' | 'success' | 'banner'>> = {
+  '#FF4F8B': { ...DARK_ROLE, accent: sticker.dark.pink, banner: '#6A3A4E' },
+  '#FF7A1A': { ...DARK_ROLE, accent: '#FDBA74', banner: '#6B442C' },
+  '#00B8A9': { ...DARK_ROLE, accent: sticker.dark.teal, banner: '#245C4A' },
+  '#B8A4FF': { ...DARK_ROLE, accent: sticker.dark.lilac, banner: '#5A4480' },
+  '#FFD23F': { ...DARK_ROLE, accent: sticker.dark.sunshine, banner: '#6A5420' },
 };
 
 function mixChannel(parts: Array<[string, number]>, index: number): string {
@@ -225,8 +255,23 @@ function strongerBorder(border: string, surface: string, ink: string): string {
 }
 
 export function resolveColors(colors: ThemeColors): ResolvedColors {
-  const text = readable(colors.text, [colors.background, colors.surface]);
+  const text = readable(colors.text, [colors.background, colors.surface, colors.banner]);
   const muted = readable(colors.muted, [colors.background, colors.surface]);
+  const night = relativeLuminance(colors.background) < 0.2;
+  const brand = night ? sticker.dark : sticker.light;
+  const warningFill = brand.warning;
+  const infoFill = brand.info;
+  const secondaryFill = brand.teal;
+  const highlightFill = brand.sunshine;
+  const onAccent = onFill(colors.accent, [colors.accentText, text, '#FFFFFF']);
+  const button = night ? sticker.dark.text : sticker.light.ink;
+  const onButton = night ? sticker.dark.onFill : '#FFFFFF';
+  const ink = night ? mixHex(sticker.dark.surface, sticker.dark.text, 0.85) : sticker.light.ink;
+  const pink = brand.pink;
+  const teal = brand.teal;
+  const sunshine = brand.sunshine;
+  const lilac = brand.lilac;
+  const onBright = night ? sticker.dark.onFill : sticker.light.ink;
   return {
     ...colors,
     text,
@@ -234,21 +279,50 @@ export function resolveColors(colors: ThemeColors): ResolvedColors {
     accentForeground: readable(colors.accent, [colors.background, colors.surface]),
     dangerText: readable(colors.danger, [colors.background, colors.surface]),
     borderStrong: strongerBorder(colors.border, colors.surface, text),
-    onAccent: onFill(colors.accent, [colors.accentText, '#FFFFFF', text]),
-    onDanger: onFill(colors.danger, [colors.accentText, '#FFFFFF', text]),
-    onSuccess: onFill(colors.success, [colors.accentText, '#FFFFFF', text]),
+    onAccent,
+    onDanger: onFill(colors.danger, [colors.accentText, '#FFFFFF', text, onBright]),
+    onSuccess: onFill(colors.success, [colors.accentText, '#FFFFFF', text, onBright]),
+    primary: button,
+    onPrimary: onButton,
+    primaryText: readable(button, [colors.background, colors.surface]),
+    secondary: secondaryFill,
+    onSecondary: onFill(secondaryFill, [onBright, text, '#FFFFFF']),
+    highlight: highlightFill,
+    onHighlight: onFill(highlightFill, [onBright, text, '#FFFFFF']),
+    warning: readable(warningFill, [colors.background, colors.surface]),
+    info: readable(infoFill, [colors.background, colors.surface]),
+    onWarning: onFill(warningFill, [onBright, text, '#FFFFFF']),
+    onInfo: onFill(infoFill, ['#FFFFFF', text, onBright]),
+    ink,
+    onInk: onButton,
+    button,
+    onButton,
+    pink,
+    onPink: onFill(pink, [onBright, text, '#FFFFFF']),
+    teal,
+    onTeal: onFill(teal, [onBright, text, '#FFFFFF']),
+    sunshine,
+    onSunshine: onFill(sunshine, [onBright, text, '#FFFFFF']),
+    lilac,
+    onLilac: onFill(lilac, [onBright, text, '#FFFFFF']),
+    surfaceAlt: night ? sticker.dark.surfaceAlt : sticker.light.surfaceAlt,
+    outline: strongerBorder(ink, colors.surface, text),
+    shadow: night ? '#000000' : sticker.light.ink,
   };
 }
 
-/** Light skins keep their fills. Dark mode swaps the paper and keeps a seasonal banner. */
+/** Light skins keep their fills. Dark mode uses plum paper and a brighter seasonal accent. */
 export function withColorScheme(colors: ThemeColors, scheme: 'light' | 'dark' | null | undefined): ResolvedColors {
   if (scheme !== 'dark') {
     return resolveColors(colors);
   }
+  const fills = DARK_FILLS[colors.accent.toUpperCase()];
   return resolveColors({
     ...colors,
     ...DARK,
-    banner: seasonalDarkBanner(colors.banner, colors.accent),
+    ...(fills ?? {
+      banner: seasonalDarkBanner(colors.banner, colors.accent),
+    }),
   });
 }
 

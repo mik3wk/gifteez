@@ -1,4 +1,5 @@
 import { hashToUint } from '../crypto/crypto';
+import { groupHues } from '../theme/skins';
 import { isOneTimeOccasion, nextOccasionDate, occasionLabel, planOccasion } from './occasions';
 import { DEFAULT_FREE_PEOPLE, lockedPersonIds } from '../../functions/src/peopleCap';
 import {
@@ -122,6 +123,13 @@ export function upcomingOccasion(
     }
   });
   return best;
+}
+
+/** Whole days from today until date. Today is 0. */
+export function daysUntil(date: Date, today: Date): number {
+  const start = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  const end = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  return Math.round((end - start) / 86400000);
 }
 
 export function sortPeople(people: Person[], occasions: Occasion[], today: Date): Person[] {
@@ -337,11 +345,10 @@ export function withProfile(snapshot: AppSnapshot, patch: Partial<AppSnapshot['p
 }
 
 const GROUP_EMOJIS = ['🎁', '🎀', '🌟', '🎄', '🍂', '🎂', '💐', '🧸'];
-const GROUP_COLORS = ['#1F6B4A', '#C4622D', '#1E4D6B', '#8E4A8A', '#9C3B2E', '#2F6F62', '#A37B2C', '#3E5C8A'];
 
-export function groupMarker(groupId: string): { emoji: string; color: string } {
+export function groupMarker(groupId: string): { emoji: string; color: string; index: number } {
   const index = hashToUint(groupId || 'gifteez') % GROUP_EMOJIS.length;
-  return { emoji: GROUP_EMOJIS[index], color: GROUP_COLORS[index] };
+  return { emoji: GROUP_EMOJIS[index], color: groupHues.light[index], index };
 }
 
 export function memberNames(members: Member[]): string[] {

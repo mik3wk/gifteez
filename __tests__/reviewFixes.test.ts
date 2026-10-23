@@ -1,5 +1,7 @@
+import { OCCASION_PRESETS } from '../src/domain/occasions';
 import { classifyStartupError, startupCause } from '../src/domain/startup';
 import { BUNDLED_SKINS, contrastRatio, withColorScheme, type ThemeColors } from '../src/theme/skins';
+import { occasionLook } from '../src/theme/tokens';
 
 const MIN_CONTRAST = 4.5;
 const MIN_BOUNDARY = 3;
@@ -48,6 +50,16 @@ test('every skin and scheme keeps text and boundaries readable', () => {
       expect(contrastRatio(resolved.dangerText, resolved.surface)).toBeGreaterThanOrEqual(MIN_CONTRAST);
       expect(contrastRatio(resolved.onDanger, resolved.danger)).toBeGreaterThanOrEqual(MIN_CONTRAST);
       expect(contrastRatio(resolved.onSuccess, resolved.success)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.warning, resolved.surface)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.info, resolved.surface)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.onSecondary, resolved.secondary)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.onButton, resolved.button)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.onPink, resolved.pink)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.onTeal, resolved.teal)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.onSunshine, resolved.sunshine)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.onLilac, resolved.lilac)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.text, resolved.surfaceAlt)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.outline, resolved.surface)).toBeGreaterThanOrEqual(MIN_BOUNDARY);
       expect(contrastRatio(resolved.borderStrong, resolved.surface)).toBeGreaterThanOrEqual(MIN_BOUNDARY);
       expect(contrastRatio(resolved.text, resolved.banner)).toBeGreaterThanOrEqual(MIN_CONTRAST);
       expect(resolved.banner).not.toBe(resolved.background);
@@ -56,4 +68,12 @@ test('every skin and scheme keeps text and boundaries readable', () => {
     expect(contrastRatio(dark.banner, dark.background)).toBeGreaterThan(1.8);
   }
   expect(withColorScheme(BUNDLED_SKINS.fall, 'dark').banner).not.toBe(withColorScheme(BUNDLED_SKINS.winter, 'dark').banner);
+});
+
+test('every occasion preset has a sticker skin', () => {
+  OCCASION_PRESETS.forEach(preset => {
+    expect(occasionLook(preset.id).art).toBeTruthy();
+    expect(occasionLook(preset.id).emoji).toBeTruthy();
+  });
+  expect(occasionLook('not-a-real-occasion').art).toBe('gift');
 });

@@ -1,4 +1,5 @@
 module.exports = {
+  assets: ['./assets/fonts'],
   project: {
     ios: {
       // CLI 20 defaults this to true and then runs pod install with
