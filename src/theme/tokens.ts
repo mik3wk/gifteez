@@ -199,7 +199,7 @@ export function occasionLook(id: string): OccasionLook {
 
 export type EmptyArtName = 'people' | 'fairness' | 'occasions' | 'ideas' | 'group' | 'error' | 'offline';
 
-/** Static celebration art. Confetti motion is a later step and is not part of this set. */
+/** Toast art for claim, save, and purchase. Confetti is a separate burst. */
 export type CelebrateName = 'claim' | 'save-idea' | 'purchase';
 
 export const EMPTY_LOOK: Record<EmptyArtName, { art: ArtName; emoji: string }> = {

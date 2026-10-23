@@ -128,6 +128,7 @@ type GifteezApi = {
   skinId: string;
   notice: string | null;
   noticeArt: CelebrateName | null;
+  confetti: number;
   error: string | null;
   startupFailure: StartupFailure | null;
   startupDetail: string | null;
@@ -169,7 +170,7 @@ type GifteezApi = {
   deleteOccasion: (occasionId: string) => Promise<void>;
   linkRecipient: (personId: string, linkedUid: string) => Promise<void>;
   undoMerge: () => Promise<void>;
-  claimOccasion: (occasionId: string) => Promise<void>;
+  claimOccasion: (occasionId: string) => Promise<boolean>;
   unclaimOccasion: (occasionId: string) => Promise<void>;
   mergePeople: (input: {
     targetPersonId: string;
@@ -220,6 +221,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const [bootId, setBootId] = useState(0);
   const [notice, setNoticeState] = useState<string | null>(null);
   const [noticeArt, setNoticeArt] = useState<CelebrateName | null>(null);
+  const [confetti, setConfetti] = useState(0);
   const setNotice = useCallback((message: string | null, art: CelebrateName | null = null) => {
     setNoticeArt(message ? art : null);
     setNoticeState(message);
@@ -560,6 +562,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     skinId,
     notice,
     noticeArt,
+    confetti,
     error,
     offline,
     canUndo,
@@ -834,6 +837,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         fail('invalid');
         return null;
       }
+      const hadPeople = snapshotRef.current.people.some(person => !person.deleted);
       const now = Date.now();
       const person: Person = {
         id: randomId(),
@@ -851,6 +855,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return null;
       }
       await commit(result.snapshot);
+      if (!hadPeople && !person.imported) {
+        setConfetti(count => count + 1);
+      }
       sync().catch(() => undefined);
       return person.id;
     },
@@ -975,7 +982,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       const uid = snapshotRef.current.profile.uid;
       if (!uid) {
         fail('auth');
-        return;
+        return false;
       }
       const result = claimOccasionSnapshot({
         snapshot: snapshotRef.current,
@@ -986,12 +993,13 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       });
       if (!result.ok) {
         fail(result.error);
-        return;
+        return false;
       }
       await commit(result.snapshot);
       showNotice(t('person.claimedToast'), false, 'claim');
       haptic('success');
       sync().catch(() => undefined);
+      return true;
     },
     unclaimOccasion: async occasionId => {
       const uid = snapshotRef.current.profile.uid;
@@ -1519,7 +1527,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       return addImported(rows);
     },
-  }), [addImported, canUndo, clearResumePerson, cloudRemaining, colors, commit, duplicateOffers, env, error, fail, noteSync, notice, noticeArt, offerUndo, offline, onNavigate, ready, recoveryCode, resumePersonId, runUndo, setNotice, showNotice, skinId, snapshot, startupDetail, startupFailure, storeProduct, storeReady, sync]);
+  }), [addImported, canUndo, clearResumePerson, cloudRemaining, colors, commit, confetti, duplicateOffers, env, error, fail, noteSync, notice, noticeArt, offerUndo, offline, onNavigate, ready, recoveryCode, resumePersonId, runUndo, setNotice, showNotice, skinId, snapshot, startupDetail, startupFailure, storeProduct, storeReady, sync]);
 
   return <GifteezContext.Provider value={api}>{children}</GifteezContext.Provider>;
 }

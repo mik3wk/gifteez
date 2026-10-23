@@ -13,6 +13,7 @@ import { useGifteez } from '../state/GifteezContext';
 import { groupHue } from '../theme/skins';
 import { useTheme } from '../theme/useTheme';
 import { useGroupLabel } from '../ui/heading';
+import { Unwrap } from '../ui/motion';
 import { Icon } from '../ui/icons';
 import {
   AccountSheet,
@@ -313,6 +314,9 @@ export function JoinConfirmView({
 }) {
   return (
     <Screen>
+      <Unwrap>
+        <GroupAvatar size={96} />
+      </Unwrap>
       {model.color ? <HueDot color={model.color} /> : null}
       <Title accessibilityLabel={model.question}>{model.question}</Title>
       <Button

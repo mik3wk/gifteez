@@ -17,6 +17,7 @@ import { useGifteez } from '../state/GifteezContext';
 import { occasionLook } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { DateField } from '../ui/DateField';
+import { HeartPop, Moment, Shimmer } from '../ui/motion';
 import { OccasionPicker } from '../ui/OccasionPicker';
 import { ArtRow, ArtSlot, Body, Button, Caption, Card, Chip, Cluster, confirmDestructive, EmptyState, Field, HeaderTextButton, Heading, IconButton, OccasionChip, Screen, Segment, Sheet, Title, Toggle } from '../ui/ui';
 
@@ -79,6 +80,7 @@ export function PersonScreen() {
   const [section, setSection] = useState<'ideas' | 'occasions' | 'history'>('ideas');
   const [editingDetails, setEditingDetails] = useState(false);
   const [addingOccasion, setAddingOccasion] = useState(false);
+  const [wrappedId, setWrappedId] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState('');
 
   useEffect(() => {
@@ -159,7 +161,7 @@ export function PersonScreen() {
       />
       {section !== 'ideas' || hidden || locked ? null : <Heading>{t('person.ideas')}</Heading>}
       {section !== 'ideas' || hidden || locked ? null : <Body>{t('person.ideasHint')}</Body>}
-      {section !== 'ideas' || hidden || locked || !findingIdeas || ideas.length > 0 ? null : <Body>{t('person.ideasLoading')}</Body>}
+      {section !== 'ideas' || hidden || locked || !findingIdeas || ideas.length > 0 ? null : <Shimmer label={t('person.ideasLoading')} />}
       {section !== 'ideas' || hidden || locked || findingIdeas || ideas.length > 0 || (cloud?.ideas ?? []).length > 0 ? null : (
         <EmptyState kind="ideas" text={t('person.ideasEmpty')} />
       )}
@@ -231,6 +233,8 @@ export function PersonScreen() {
           occasion={occasion}
           hidden={hidden}
           locked={locked}
+          wrap={wrappedId === occasion.id}
+          onWrapDone={() => setWrappedId(current => current === occasion.id ? null : current)}
           onPurchase={idea => {
             setBuying(occasion.id);
             setGift(idea);
@@ -420,6 +424,7 @@ export function PersonScreen() {
             }
             const ok = await logGift(buying, gift, price, date);
             if (ok) {
+              setWrappedId(buying);
               setBuying(null);
             }
           }}
@@ -472,15 +477,20 @@ function OccasionCard({
   occasion,
   hidden,
   locked,
+  wrap,
+  onWrapDone,
   onPurchase,
 }: {
   occasion: Occasion;
   hidden: boolean;
   locked: boolean;
+  wrap?: boolean;
+  onWrapDone?: () => void;
   onPurchase: (idea: string) => void;
 }) {
   const { snapshot, updateOccasion, deleteOccasion, claimOccasion, unclaimOccasion } = useGifteez();
   const [editing, setEditing] = useState(false);
+  const [claimed, setClaimed] = useState(false);
   const [month, setMonth] = useState(occasion.month ? String(occasion.month) : '');
   const [day, setDay] = useState(occasion.day ? String(occasion.day) : '');
   const [year, setYear] = useState(occasion.year ? String(occasion.year) : '');
@@ -587,7 +597,13 @@ function OccasionCard({
           label={t('person.claim')}
           accessibilityLabel={t('person.claimLabel', { occasion: label })}
           tone="secondary"
-          onPress={() => claimOccasion(occasion.id)}
+          onPress={() => {
+            claimOccasion(occasion.id).then(ok => {
+              if (ok) {
+                setClaimed(true);
+              }
+            }).catch(() => undefined);
+          }}
         />
       ) : null}
       {hidden || locked ? null : (
@@ -606,6 +622,18 @@ function OccasionCard({
             );
             if (ok) {
               await deleteOccasion(occasion.id);
+            }
+          }}
+        />
+      ) : null}
+      {wrap || claimed ? (
+        <Moment
+          kind={wrap ? 'wrap' : 'claim'}
+          name={wrap ? 'purchase' : 'claim'}
+          onDone={() => {
+            setClaimed(false);
+            if (wrap) {
+              onWrapDone?.();
             }
           }}
         />
@@ -750,13 +778,15 @@ function IdeaRow({
       <Cluster>
         <Button label={t('person.thumbsUp')} tone="secondary" onPress={onUp} />
         <Button label={t('person.thumbsDown')} tone="secondary" onPress={onDown} />
-        <IconButton
-          label={saved ? t('person.savedMark') : t('person.saveIdea')}
-          name="heart"
-          color={saved ? colors.pink : colors.text}
-          filled={Boolean(saved)}
-          onPress={onSave}
-        />
+        <HeartPop saved={Boolean(saved)}>
+          <IconButton
+            label={saved ? t('person.savedMark') : t('person.saveIdea')}
+            name="heart"
+            color={saved ? colors.pink : colors.text}
+            filled={Boolean(saved)}
+            onPress={onSave}
+          />
+        </HeartPop>
       </Cluster>
     </Card>
   );

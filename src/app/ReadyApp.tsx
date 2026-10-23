@@ -13,6 +13,7 @@ import { StartupScreen } from '../screens/StartupScreen';
 import { GifteezProvider, useGifteez } from '../state/GifteezContext';
 import { listenForReminderOpens } from '../platform/reminders';
 import { type as appType } from '../theme/tokens';
+import { ConfettiBurst } from '../ui/motion';
 import { Body, BrandedLoading, Button, ConfirmHost, Notice, OfflineBanner, Screen, Title } from '../ui/ui';
 import type { AppEnv } from '../config/env';
 import type { RootStack } from './navigation';
@@ -149,6 +150,11 @@ function Navigator() {
           action={gifteez.canUndo ? t('common.undo') : undefined}
           onAction={gifteez.canUndo ? () => { gifteez.runUndo().catch(() => undefined); } : undefined}
         />
+      ) : null}
+      {gifteez.confetti > 0 ? (
+        <View pointerEvents="none" style={styles.cover}>
+          <ConfettiBurst key={gifteez.confetti} />
+        </View>
       ) : null}
       <ConfirmHost />
       {gifteez.recoveryCode ? (

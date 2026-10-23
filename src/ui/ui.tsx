@@ -1,6 +1,5 @@
 import React, { useContext, useEffect, useState } from 'react';
 import {
-  AccessibilityInfo,
   ActivityIndicator,
   Alert,
   Image,
@@ -27,22 +26,14 @@ import { formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { useTheme } from '../theme/useTheme';
 import { iconOnSurface, layout, occasionLook, scrim, shadowOffset, space, sticker, stroke, touch, type ArtName, type CelebrateName, type ChipTint, type EmptyArtName } from '../theme/tokens';
+import Animated from 'react-native-reanimated';
 import { artSource, GROUP_AVATAR } from './art';
 import { Icon, type IconName } from './icons';
+import { Bob, CelebrateArt, Settle, useReduceMotion, useStickerMotion } from './motion';
 
 /** A stack header already includes the status bar, so a second top inset doubles the gap. */
 export function screenTopInset(headerHeight: number | undefined, topInset: number): number {
   return headerHeight ? 0 : topInset;
-}
-
-function useReduceMotion(): boolean {
-  const [reduce, setReduce] = useState(false);
-  useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled().then(setReduce).catch(() => undefined);
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduce);
-    return () => subscription.remove();
-  }, []);
-  return reduce;
 }
 
 function StickerBox({
@@ -65,24 +56,25 @@ function StickerBox({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
-  const reduce = useReduceMotion();
-  const shift = Boolean(pressed) && !reduce && shadow;
+  const { face, shade } = useStickerMotion(Boolean(pressed), shadow);
   return (
     <View style={[styles.stickerWrap, style]}>
-      {shadow && !shift ? (
-        <View pointerEvents="none" style={[styles.stickerShadow, { backgroundColor: colors.shadow, borderRadius: radius }]} />
+      {shadow ? (
+        <Animated.View pointerEvents="none" style={[styles.stickerShadow, { backgroundColor: colors.shadow, borderRadius: radius }, shade]} />
       ) : null}
-      <View
-        style={{
-          backgroundColor: fill,
-          borderColor: colors.outline,
-          borderWidth,
-          borderStyle: dashed ? 'dashed' : 'solid',
-          borderRadius: radius,
-          transform: shift ? [{ translateX: shadowOffset }, { translateY: shadowOffset }] : [],
-        }}>
+      <Animated.View
+        style={[
+          face,
+          {
+            backgroundColor: fill,
+            borderColor: colors.outline,
+            borderWidth,
+            borderStyle: dashed ? 'dashed' : 'solid',
+            borderRadius: radius,
+          },
+        ]}>
         {children}
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -373,12 +365,10 @@ export function Button({
           dashed={quiet && !ghost}
           shadow={!ghost && !quiet}>
           <View style={styles.buttonInner}>
-            {working ? <ActivityIndicator color={text} /> : (
-              <View style={styles.buttonRow}>
-                {icon ? <Icon name={icon} color={text} size={18} /> : null}
-                <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: text, textAlign: 'center' }]}>{label}</Text>
-              </View>
-            )}
+            <View style={styles.buttonRow}>
+              {working ? <ActivityIndicator color={text} size="small" /> : icon ? <Icon name={icon} color={text} size={18} /> : null}
+              <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: text, textAlign: 'center' }]}>{label}</Text>
+            </View>
           </View>
         </StickerBox>
       )}
@@ -548,13 +538,21 @@ export function Notice({
   return (
     <View
       pointerEvents="box-none"
-      accessibilityRole={tone === 'danger' ? 'alert' : 'none'}
+      accessibilityRole={tone === 'danger' ? 'alert' : undefined}
       accessibilityLiveRegion={tone === 'danger' ? 'assertive' : 'polite'}
-      style={[styles.notice, { bottom: insets.bottom + layout.tabBar + space.xs }]}>
+      style={[styles.floater, { bottom: insets.bottom + layout.tabBar + space.xs }]}>
+      <View style={styles.floaterCard}>
+      <Settle distance={20}>
       <StickerBox fill={colors.surface} radius={radius.card} borderWidth={stroke.card}>
         <View style={styles.pad}>
           <View style={styles.artRow}>
-            {art ? <ArtSlot name={art} size={72} /> : null}
+            {art ? (
+              <CelebrateArt
+                name={art}
+                kind={art === 'purchase' ? 'wrap' : art === 'claim' ? 'claim' : 'still'}
+                size={72}
+              />
+            ) : null}
             <View style={styles.personCopy}>
               <Caption tone={tone === 'danger' ? 'danger' : 'text'}>{text}</Caption>
               <Cluster>
@@ -565,6 +563,8 @@ export function Notice({
           </View>
         </View>
       </StickerBox>
+      </Settle>
+      </View>
     </View>
   );
 }
@@ -573,7 +573,9 @@ export function OfflineBanner({ text }: { text: string }) {
   const { colors, radius } = useTheme();
   const insets = useSafeAreaInsets();
   return (
-    <View accessibilityLiveRegion="polite" pointerEvents="none" style={[styles.offline, { top: insets.top + space.xs }]}>
+    <View accessibilityLiveRegion="polite" pointerEvents="none" style={[styles.floater, { top: insets.top + space.xs }]}>
+      <View style={styles.floaterCard}>
+      <Settle distance={12}>
       <StickerBox fill={colors.surface} radius={radius.card} borderWidth={stroke.inner}>
         <View style={styles.pad}>
           <View style={styles.artRow}>
@@ -584,6 +586,8 @@ export function OfflineBanner({ text }: { text: string }) {
           </View>
         </View>
       </StickerBox>
+      </Settle>
+      </View>
     </View>
   );
 }
@@ -686,7 +690,9 @@ export function EmptyState({
 export function BrandedLoading() {
   return (
     <View style={styles.empty}>
-      <ArtSlot name="gift" size={120} />
+      <Bob>
+        <ArtSlot name="gift" size={120} />
+      </Bob>
       <Title>{t('appName')}</Title>
       <Body>{t('common.loading')}</Body>
     </View>
@@ -737,10 +743,11 @@ export function OccasionChip({
   const look = occasionLook(occasionId);
   const fill = colors[look.chip];
   const ink = colors[`on${look.chip[0].toUpperCase()}${look.chip.slice(1)}` as 'onPink'];
-  const text = trailing ? `${look.emoji} ${label} ${trailing}` : `${look.emoji} ${label}`;
+  const words = trailing ? `${label} ${trailing}` : label;
+  const text = `${look.emoji} ${words}`;
   return (
     <View style={[styles.chip, { backgroundColor: fill, borderColor: colors.outline, alignSelf: 'flex-start' }]}>
-      <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: ink }]}>{text}</Text>
+      <Text accessibilityLabel={words} maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: ink }]}>{text}</Text>
     </View>
   );
 }
@@ -1047,12 +1054,15 @@ export function Sheet({
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const reduce = useReduceMotion();
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType={reduce ? 'fade' : 'slide'} presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top }]}>
         <IconButton label={t('common.close')} name="close" onPress={onClose} />
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled">
-          <View style={styles.column}>{children}</View>
+          <Settle distance={10}>
+            <View style={styles.column}>{children}</View>
+          </Settle>
         </ScrollView>
       </View>
     </Modal>
@@ -1270,7 +1280,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: space.md, flexGrow: 1, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
   column: { gap: space.sm },
   centered: { justifyContent: 'center' },
-  footer: { paddingHorizontal: space.md, paddingTop: space.xs },
+  footer: { paddingHorizontal: space.md, paddingTop: space.xs, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
   stack: { gap: space.sm },
   cluster: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, alignItems: 'center' },
   split: { flexDirection: 'row', gap: space.xs },
@@ -1291,8 +1301,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     paddingVertical: space.xs,
   },
-  notice: { position: 'absolute', left: space.md, right: space.md },
-  offline: { position: 'absolute', left: space.md, right: space.md },
+  floater: { position: 'absolute', left: 0, right: 0, alignItems: 'center', paddingHorizontal: space.md },
+  floaterCard: { width: '100%', maxWidth: layout.maxContent },
   empty: { gap: space.sm, alignItems: 'center' },
   progress: { flexDirection: 'row', gap: space.xxs },
   progressDot: { flex: 1, height: 8, borderRadius: 4, borderWidth: stroke.inner },
