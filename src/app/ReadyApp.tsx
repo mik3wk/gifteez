@@ -77,7 +77,8 @@ function Navigator() {
   }, [gifteez.ready]);
   if (!gifteez.ready) {
     return (
-      <Screen>
+      <Screen centered>
+        <Title>{t('appName')}</Title>
         <Body>{t('common.loading')}</Body>
       </Screen>
     );
@@ -117,7 +118,7 @@ function Navigator() {
         </Stack.Navigator>
       </NavigationContainer>
       {gifteez.notice ? <Notice text={gifteez.notice} onClose={gifteez.clearNotice} /> : null}
-      {gifteez.error ? <Notice text={gifteez.error} onClose={gifteez.clearError} /> : null}
+      {gifteez.error ? <Notice text={gifteez.error} tone="danger" onClose={gifteez.clearError} /> : null}
       {gifteez.recoveryCode ? (
         <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}>
           <Screen>
@@ -126,6 +127,7 @@ function Navigator() {
             <Title>{gifteez.recoveryCode}</Title>
             <Body>{t('groupCreate.showLater')}</Body>
             <Button label={t('groupCreate.savedCode')} onPress={gifteez.acknowledgeRecovery} />
+            <Button label={t('groupCreate.later')} tone="secondary" onPress={gifteez.acknowledgeRecovery} />
           </Screen>
         </View>
       ) : null}

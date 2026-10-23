@@ -14,7 +14,7 @@ export function StartupScreen({
 }) {
   const title = t('startup.title');
   return (
-    <Screen>
+    <Screen centered>
       <Title accessibilityLabel={title}>{title}</Title>
       <Body>{t(`startup.${kind}`)}</Body>
       <Body>{detail}</Body>

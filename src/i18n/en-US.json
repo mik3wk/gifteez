@@ -16,9 +16,22 @@
     "retryLabel": "Retry starting Gifteez"
   },
   "firstOpen": {
+    "lead": "Gifteez is a shared list for the people you buy gifts for.",
     "sentence": "Gifteez helps you remember gifts for the people you love, and keep the spending fair.",
-    "start": "Start",
-    "join": "Join",
+    "progress": "Step {step} of {total}",
+    "skipIntro": "Skip the intro",
+    "pointPeople": "People and dates",
+    "pointPeopleBody": "Keep birthdays, holidays, and other occasions for each person.",
+    "pointIdeas": "Gift ideas",
+    "pointIdeasBody": "Ideas are made on this phone. You can ask for more when you want them.",
+    "pointShare": "One list for the family",
+    "pointShareBody": "Invite the people who shop with you. Everyone works from the same list.",
+    "pointClaim": "No duplicate gifts",
+    "pointClaimBody": "Claim an occasion so someone else knows you are already getting it.",
+    "chooseTitle": "How do you want to begin?",
+    "chooseBody": "Start a list of your own, or join one with an invite from someone else.",
+    "start": "Start a list",
+    "join": "Join a list",
     "pasteInvite": "Paste an invite",
     "pasteHint": "If you copied an invite before installing, paste it here. Gifteez does not read the clipboard on its own.",
     "pasteContinue": "Continue with invite",
@@ -30,8 +43,10 @@
     "name": "Your name",
     "listName": "List name (optional)",
     "listNameHint": "Leave this blank and the list is named from the people in it, like Mike, Sam & Jo.",
-    "secureTitle": "Save this group to your email",
-    "secureBody": "Optional. A magic link keeps your list if you get a new phone. You can skip and do this later.",
+    "secureTitle": "Save this list to your email",
+    "secureBody": "Optional. You can skip this and add an email later from Settings.",
+    "emailWhy": "There is no password. Gifteez emails you a link, and opening that link on this phone signs you in. That is how the same list follows you to a new phone.",
+    "recoveryWhy": "Next, Gifteez shows a recovery code. Write it down. It unlocks the list on a new phone after you sign in, and Gifteez cannot read it or reset it.",
     "email": "Email",
     "sendLink": "Email me a link",
     "useSms": "Use a text message instead",
@@ -46,9 +61,10 @@
     "pasteLink": "Paste the sign-in link",
     "finishLink": "Finish sign-in",
     "smsRegion": "Text messages are limited to US numbers at launch.",
-    "recoveryTitle": "Save this recovery code",
-    "recoveryBody": "Write these words down. They unlock your list on a new phone after you sign in. Gifteez cannot read them.",
-    "savedCode": "I saved the code",
+    "recoveryTitle": "Write down this recovery code",
+    "recoveryBody": "These words unlock your list on a new phone after you sign in with your email link. Gifteez cannot read them, and they cannot be reset. You can also open this code later from the group screen on this phone.",
+    "savedCode": "I wrote it down",
+    "later": "I'll open it later on this phone",
     "showLater": "You can view this code again on this phone from the group screen."
   },
   "people": {
@@ -183,7 +199,8 @@
     "all": "{amount} all time",
     "left": "{amount} left in the budget",
     "noBudget": "No budget set",
-    "empty": "Add people to compare spending."
+    "empty": "Add people to compare spending.",
+    "emptyAction": "Add a person"
   },
   "groupScreen": {
     "title": "Group",
@@ -284,6 +301,8 @@
     "notConfigured": "The server is not set up to confirm purchases yet.",
     "full": "This list already has {count} members, the most a list can have.",
     "invalid": "Check the fields and try again.",
+    "name": "Enter a name.",
+    "email": "Enter an email address.",
     "claimed": "Someone else already said they would get this.",
     "forbidden": "Only the person who claimed this, or the list owner, can unclaim it.",
     "price": "Enter a price of zero or more.",
@@ -297,6 +316,7 @@
     "week": "{name} is in a week"
   },
   "common": {
+    "back": "Back",
     "cancel": "Cancel",
     "close": "Close",
     "continue": "Continue",

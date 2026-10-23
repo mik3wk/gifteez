@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { Appearance, AppState } from 'react-native';
 import type { AppEnv } from '../config/env';
 import {
   buildAppInviteUrl,
@@ -109,7 +109,7 @@ import { importContacts, sweepBirthdays } from '../platform/importers';
 import { buyUnlock, connectStore, finishOwned, listenToPurchases, loadOwned, purchaseProof, type StoreProduct } from '../platform/iap';
 import { applyReminderPlan, requestReminderPermission } from '../platform/reminders';
 import { deleteSecret, loadSecret, saveSecret } from '../platform/secure';
-import { colorsFor, parseSkin, resolveSkin, type SkinId, type ThemeColors } from '../theme/skins';
+import { colorsFor, parseSkin, resolveSkin, withColorScheme, type SkinId, type ThemeColors } from '../theme/skins';
 
 const COLLECTIONS = ['people', 'occasions', 'states', 'gifts', 'ideas', 'members'] as const;
 
@@ -207,7 +207,12 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const [startupDetail, setStartupDetail] = useState<string | null>(null);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [skinId, setSkinId] = useState<SkinId>('base');
-  const [colors, setColors] = useState<ThemeColors>(colorsFor('base', {}).colors);
+  const [colors, setColors] = useState<ThemeColors>(() => withColorScheme(colorsFor('base', {}).colors, Appearance.getColorScheme()));
+  const paletteRef = useRef<ThemeColors>(colorsFor('base', {}).colors);
+  const paint = useCallback((next: ThemeColors) => {
+    paletteRef.current = next;
+    setColors(withColorScheme(next, Appearance.getColorScheme()));
+  }, []);
   const [downloaded, setDownloaded] = useState<Partial<Record<SkinId, ThemeColors>>>({});
   const [storeProduct, setStoreProduct] = useState<StoreProduct | null>(null);
   const [storeReady, setStoreReady] = useState(false);
@@ -319,7 +324,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         const resolved = resolveSkin({ remoteValue: skinValue, today: new Date(), downloaded: downloadedRef.current });
         if (!cancelled) {
           setSkinId(resolved.id);
-          setColors(resolved.colors);
+          paint(resolved.colors);
         }
         if (resolved.id === 'spring' || resolved.id === 'summer') {
           try {
@@ -329,11 +334,11 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
               const again = resolveSkin({ remoteValue: skinValue, today: new Date(), downloaded: withDownload });
               setDownloaded(withDownload);
               setSkinId(again.id);
-              setColors(again.colors);
+              paint(again.colors);
             }
           } catch {
             setSkinId('base');
-            setColors(colorsFor('base', {}).colors);
+            paint(colorsFor('base', {}).colors);
           }
         }
         const store = await connectStore(env.iapProductId);
@@ -373,12 +378,16 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     const timer = setInterval(() => {
       sync().catch(() => undefined);
     }, 30000);
+    const appearance = Appearance.addChangeListener(({ colorScheme }) => {
+      setColors(withColorScheme(paletteRef.current, colorScheme));
+    });
     return () => {
       cancelled = true;
       sub.remove();
+      appearance.remove();
       clearInterval(timer);
     };
-  }, [bootId, commit, env, sync]);
+  }, [bootId, commit, env, paint, sync]);
 
   useEffect(() => {
     const stop = listenToPurchases(purchase => {

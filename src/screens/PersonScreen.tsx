@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -13,7 +13,7 @@ import { isHiddenFromViewer, isPersonLocked } from '../domain/visibility';
 import { peopleOnOtherLists } from '../domain/merge';
 import { deviceLocale, formatLongDate, formatMoney, t, todayIso } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
-import { Body, Button, Card, Field, Screen, Title } from '../ui/ui';
+import { Body, Button, Card, Field, Heading, Screen, Title } from '../ui/ui';
 import type { OccasionType } from '../domain/types';
 
 export function AddPersonScreen() {
@@ -22,15 +22,28 @@ export function AddPersonScreen() {
   const [name, setName] = useState('');
   const [budget, setBudget] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+  const [nameError, setNameError] = useState('');
   return (
     <Screen>
       <Title>{t('person.addTitle')}</Title>
-      <Field label={t('person.name')} value={name} onChangeText={setName} />
+      <Field
+        label={t('person.name')}
+        value={name}
+        error={nameError}
+        onChangeText={value => {
+          setName(value);
+          setNameError('');
+        }}
+      />
       <Field label={t('person.budget')} value={budget} onChangeText={setBudget} keyboardType="decimal-pad" />
       <TagPicker tags={tags} onChange={setTags} />
       <Button
         label={t('person.save')}
         onPress={async () => {
+          if (!name.trim()) {
+            setNameError(t('errors.name'));
+            return;
+          }
           const id = await addPerson({ name, budget, tags });
           if (id) {
             (navigation as { navigate: (name: string, params: { personId: string }) => void }).navigate('Person', { personId: id });
@@ -67,10 +80,17 @@ export function PersonScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params.personId]);
 
+  useLayoutEffect(() => {
+    if (person?.name) {
+      navigation.setOptions({ title: person.name });
+    }
+  }, [navigation, person?.name]);
+
   if (!person) {
     return (
       <Screen>
         <Body>{t('errors.generic')}</Body>
+        <Button label={t('common.back')} onPress={() => navigation.goBack()} />
       </Screen>
     );
   }
@@ -114,7 +134,7 @@ export function PersonScreen() {
       ) : null}
       <Body>{t('person.tagsHint')}</Body>
       <TagPicker tags={person.tags} onChange={tags => savePerson(person.id, { tags })} />
-      <Title>{t('person.occasions')}</Title>
+      <Heading>{t('person.occasions')}</Heading>
       {snapshot.occasions.filter(item => item.personId === person.id && !item.deleted).map(occasion => {
         const status = statusFor(occasion, snapshot.states, new Date());
         const state = snapshot.states.find(item => item.occasionId === occasion.id && item.year === occurrenceYear(occasion, new Date()) && !item.deleted);
@@ -186,7 +206,7 @@ export function PersonScreen() {
           onPress={() => addOccasion(person.id, type, Number(month) || undefined, Number(day) || undefined, Number(year) || undefined)}
         />
       )}
-      {hidden || locked ? null : <Title>{t('person.ideas')}</Title>}
+      {hidden || locked ? null : <Heading>{t('person.ideas')}</Heading>}
       {hidden || locked ? null : <Body>{t('person.ideasHint')}</Body>}
       {hidden || locked ? null : (onDevice?.ideas ?? []).map(idea => (
         <IdeaRow key={idea} idea={idea} onUp={() => vote(person.id, idea, 'up')} onDown={() => vote(person.id, idea, 'down')} onSave={() => next && saveIdeaFor(next.occasion.id, idea)} />
@@ -198,7 +218,7 @@ export function PersonScreen() {
       {hidden || locked ? null : (cloud?.ideas ?? []).map(idea => (
         <IdeaRow key={`cloud-${idea}`} idea={idea} onUp={() => vote(person.id, idea, 'up')} onDown={() => vote(person.id, idea, 'down')} onSave={() => next && saveIdeaFor(next.occasion.id, idea)} />
       ))}
-      {hidden ? null : <Title>{t('person.history')}</Title>}
+      {hidden ? null : <Heading>{t('person.history')}</Heading>}
       {hidden ? null : (
         <Button
           label={mineOnly ? t('person.allPurchases') : t('person.myPurchases')}
@@ -245,7 +265,7 @@ export function PersonScreen() {
       })}
       {snapshot.profile.uid === snapshot.group?.ownerId ? (
         <Card>
-          <Title>{t('person.linkTitle')}</Title>
+          <Heading>{t('person.linkTitle')}</Heading>
           <Body>{t('person.linkHint')}</Body>
           {snapshot.members.filter(member => !member.deleted && member.uid !== snapshot.profile.uid).map(member => (
             <Button
@@ -263,7 +283,7 @@ export function PersonScreen() {
       ) : null}
       {!hidden && !locked && buying ? (
         <Card>
-          <Title>{t('purchase.title')}</Title>
+          <Heading>{t('purchase.title')}</Heading>
           <PurchaseWarning occasionId={buying} date={date} />
           <Field label={t('purchase.gift')} value={gift} onChangeText={setGift} />
           <Field label={t('purchase.price')} value={price} onChangeText={setPrice} keyboardType="decimal-pad" />
@@ -273,7 +293,7 @@ export function PersonScreen() {
       ) : null}
       {editingGift ? (
         <Card>
-          <Title>{t('person.editGift')}</Title>
+          <Heading>{t('person.editGift')}</Heading>
           <Field label={t('purchase.gift')} value={gift} onChangeText={setGift} />
           <Field label={t('purchase.price')} value={price} onChangeText={setPrice} keyboardType="decimal-pad" />
           <Field label={t('purchase.date')} value={date} onChangeText={setDate} />
@@ -379,8 +399,14 @@ function TagPicker({ tags, onChange }: { tags: string[]; onChange: (tags: string
         return (
           <Pressable
             key={tag}
+            accessibilityRole="button"
+            accessibilityLabel={tag}
+            accessibilityState={{ selected }}
             onPress={() => onChange(selected ? tags.filter(item => item !== tag) : [...tags, tag])}
-            style={[styles.tag, { borderColor: colors.border, backgroundColor: selected ? colors.accent : colors.surface }]}>
+            style={({ pressed }) => [
+              styles.tag,
+              { borderColor: colors.border, backgroundColor: selected ? colors.accent : colors.surface, opacity: pressed ? 0.7 : 1 },
+            ]}>
             <Text style={{ color: selected ? colors.accentText : colors.text }}>{tag}</Text>
           </Pressable>
         );
@@ -407,6 +433,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   flex: { flexGrow: 1, flexBasis: 120 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  tag: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  tag: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   name: { fontSize: 16, flexShrink: 1 },
 });

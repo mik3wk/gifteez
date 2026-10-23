@@ -31,7 +31,7 @@ export function MergeChecklist({
             accessibilityLabel={t('merge.giftLabel', { title: gift.title })}
             accessibilityState={{ checked: on }}
             onPress={() => onToggle(gift.id)}
-            style={styles.row}>
+            style={({ pressed }) => [styles.row, { opacity: pressed ? 0.7 : 1 }]}>
             <View style={[styles.box, { borderColor: colors.border, backgroundColor: on ? colors.accent : colors.surface }]} />
             <Text style={[styles.name, { color: colors.text }]}>{gift.title}</Text>
           </Pressable>
@@ -80,7 +80,7 @@ export function DuplicateOffers({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44, paddingVertical: 8 },
   box: { width: 22, height: 22, borderWidth: 1, borderRadius: 4 },
   name: { fontSize: 16, flexShrink: 1 },
 });

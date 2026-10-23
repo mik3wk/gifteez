@@ -211,7 +211,7 @@ test('skins follow the date and fall back when a download is missing', () => {
 });
 
 test('strings and money come from resources', () => {
-  expect(t('firstOpen.start')).toBe('Start');
+  expect(t('firstOpen.start')).toBe('Start a list');
   expect(t('people.budgetLeft', { used: '$1', budget: '$2' })).toContain('$1');
   expect(formatMoney(999, 'en-US')).toBe('$9.99');
   expect(formatDate(new Date(2026, 11, 25), 'en-US')).toContain('25');

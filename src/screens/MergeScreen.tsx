@@ -23,7 +23,9 @@ export function MergeScreen() {
   if (!target) {
     return (
       <Screen>
+        <Title>{t('errors.generic')}</Title>
         <Body>{t('errors.generic')}</Body>
+        <Button label={t('common.back')} onPress={() => navigation.goBack()} />
       </Screen>
     );
   }

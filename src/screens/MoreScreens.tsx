@@ -1,22 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { Share, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { joinConfirmModel, type JoinPreview } from '../app/incomingLink';
+import { describeIncomingLink, joinConfirmModel, type JoinPreview } from '../app/incomingLink';
 import type { RootStack } from '../app/navigation';
 import { getEnv } from '../config/env';
 import { accountUnlocked, canStartAnotherList, fairnessRows, groupCurrency, groupDisplayName, groupMarker } from '../domain/logic';
 import { isHiddenFromViewer } from '../domain/visibility';
 import { deviceLocale, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
-import { EmptyArt } from '../ui/art';
-import { useGroupHeading } from '../ui/heading';
-import { AccountSheet, Body, Button, Card, Field, Screen, Title, UnlockSheet } from '../ui/ui';
+import { useGroupLabel } from '../ui/heading';
+import { AccountSheet, Body, Button, Card, EmptyState, Field, Heading, Row, Screen, Title, UnlockSheet } from '../ui/ui';
 
 export function FairnessScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
   const { snapshot, colors } = useGifteez();
-  useGroupHeading();
+  const heading = useGroupLabel();
   const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(snapshot.group));
   const rows = fairnessRows(snapshot, new Date()).filter(row => {
     const person = snapshot.people.find(item => item.id === row.personId);
@@ -26,12 +26,15 @@ export function FairnessScreen() {
   return (
     <Screen>
       <Title>{t('fairness.title')}</Title>
+      <Body>{`${heading.emoji} ${heading.label}`}</Body>
       <Body>{t('fairness.intro')}</Body>
       {rows.length === 0 ? (
-        <>
-          <EmptyArt kind="fairness" />
-          <Body>{t('fairness.empty')}</Body>
-        </>
+        <EmptyState
+          kind="fairness"
+          text={t('fairness.empty')}
+          action={t('fairness.emptyAction')}
+          onAction={() => navigation.navigate('AddPerson')}
+        />
       ) : null}
       {rows.map(row => (
         <Card key={row.personId}>
@@ -53,7 +56,7 @@ export function FairnessScreen() {
 
 export function GroupScreen() {
   const { snapshot, shareInvite, leave, removeGroupMember, renameList, showRecovery, switchGroup, startGroup, colors, transferOwnership, setListCurrency } = useGifteez();
-  const heading = useGroupHeading();
+  const heading = useGroupLabel();
   const groupName = snapshot.group?.name ?? '';
   const groupId = snapshot.group?.id;
   const storedCurrency = groupCurrency(snapshot.group);
@@ -71,19 +74,17 @@ export function GroupScreen() {
   return (
     <Screen>
       <Title>{`${heading.emoji} ${heading.label}`}</Title>
-      <Title>{t('groupScreen.lists')}</Title>
+      <Heading>{t('groupScreen.lists')}</Heading>
       {snapshot.roster.map(item => {
         const marker = groupMarker(item.id);
         const label = groupDisplayName(item.name, item.memberNames);
         const active = item.id === snapshot.group?.id;
         return (
-          <Pressable key={item.id} onPress={() => switchGroup(item.id)}>
-            <Card>
+          <Row key={item.id} accessibilityLabel={label} onPress={() => switchGroup(item.id)}>
               <Text style={[styles.name, { color: marker.color }]}>{`${marker.emoji} ${label}`}</Text>
               <Text style={{ color: colors.muted }}>{active ? t('groupScreen.current') : t('groupScreen.switchTo')}</Text>
               {item.stale ? <Text style={{ color: colors.muted }}>{t('groupScreen.notCurrent')}</Text> : null}
-            </Card>
-          </Pressable>
+          </Row>
         );
       })}
       <Button
@@ -119,7 +120,7 @@ export function GroupScreen() {
           }
         }}
       />
-      <Title>{t('groupScreen.members')}</Title>
+      <Heading>{t('groupScreen.members')}</Heading>
       {snapshot.members.filter(member => !member.deleted).map(member => (
         <Card key={member.uid}>
           <Text style={[styles.name, { color: colors.text }]}>
@@ -231,6 +232,7 @@ export function JoinConfirmView({
         label={t('join.confirmJoin')}
         accessibilityLabel={model.joinLabel}
         disabled={joining}
+        busy={joining}
         onPress={onJoin}
       />
       <Button
@@ -249,6 +251,8 @@ export function JoinScreen() {
   const [code, setCode] = useState('');
   const [email, setEmail] = useState('');
   const [emailLink, setEmailLink] = useState('');
+  const [linkError, setLinkError] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [preview, setPreview] = useState<{ label: string; emoji: string; color: string } | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -274,12 +278,49 @@ export function JoinScreen() {
           {t('join.preview', { name: `${preview.emoji} ${preview.label}` })}
         </Text>
       ) : null}
-      <Field label={t('join.placeholder')} value={link} onChangeText={setLink} />
-      <Button label={t('join.join')} onPress={() => joinFromLink(link)} />
-      <Title>{t('groupCreate.secondDevice')}</Title>
+      <Field
+        label={t('join.placeholder')}
+        value={link}
+        error={linkError}
+        onChangeText={value => {
+          setLink(value);
+          setLinkError('');
+        }}
+      />
+      <Button
+        label={t('join.join')}
+        onPress={() => {
+          if (describeIncomingLink(link.trim()) === 'ignore') {
+            setLinkError(t('join.invalid'));
+            return;
+          }
+          return joinFromLink(link);
+        }}
+      />
+      <Heading>{t('groupCreate.secondDevice')}</Heading>
       <Body>{t('join.needAccount')}</Body>
-      <Field label={t('groupCreate.email')} value={email} onChangeText={setEmail} keyboardType="email-address" />
-      <Button label={t('groupCreate.sendLink')} onPress={() => sendEmail(email)} />
+      <Body>{t('groupCreate.emailWhy')}</Body>
+      <Field
+        label={t('groupCreate.email')}
+        value={email}
+        error={emailError}
+        onChangeText={value => {
+          setEmail(value);
+          setEmailError('');
+        }}
+        keyboardType="email-address"
+      />
+      <Button
+        label={t('groupCreate.sendLink')}
+        disabled={!email.trim()}
+        onPress={() => {
+          if (!email.includes('@')) {
+            setEmailError(t('errors.email'));
+            return;
+          }
+          return sendEmail(email);
+        }}
+      />
       <Field label={t('groupCreate.pasteLink')} value={emailLink} onChangeText={setEmailLink} />
       <Button label={t('groupCreate.finishLink')} onPress={() => finishEmail(emailLink)} />
       <Field label={t('join.recovery')} value={code} onChangeText={setCode} />
@@ -323,7 +364,7 @@ export function SettingsScreen() {
     <Screen>
       <Title>{t('settings.title')}</Title>
       <Card>
-        <Title>{t('settings.account')}</Title>
+        <Heading>{t('settings.account')}</Heading>
         <Body>{snapshot.profile.upgraded ? t('settings.saved') : t('settings.anonymous')}</Body>
         <Text style={styles.name}>{snapshot.profile.displayName}</Text>
         {snapshot.profile.upgraded ? null : <Button label={t('settings.upgrade')} onPress={() => setUpgrade(true)} />}
@@ -350,7 +391,7 @@ export function SettingsScreen() {
         onPress={() => setReminders(snapshot.profile.reminders !== 'on')}
       />
       <Card>
-        <Title>{t('settings.unlock')}</Title>
+        <Heading>{t('settings.unlock')}</Heading>
         {accountUnlocked(snapshot) ? <Body>{t('settings.unlocked')}</Body> : (
           <>
             <Body>{t('settings.unlockPrice', { price: storeProduct?.displayPrice || messagePrice() })}</Body>

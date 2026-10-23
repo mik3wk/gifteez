@@ -1,5 +1,5 @@
 import { classifyStartupError, startupCause } from '../src/domain/startup';
-import { BUNDLED_SKINS, contrastRatio, type ThemeColors } from '../src/theme/skins';
+import { BUNDLED_SKINS, contrastRatio, withColorScheme, type ThemeColors } from '../src/theme/skins';
 
 const MIN_CONTRAST = 4.5;
 
@@ -35,5 +35,10 @@ test('every skin keeps text on the background and on the accent at 4.5:1', () =>
     expect(contrastRatio(colors.text, colors.background)).toBeGreaterThanOrEqual(MIN_CONTRAST);
     expect(contrastRatio(colors.accentText, colors.accent)).toBeGreaterThanOrEqual(MIN_CONTRAST);
     expect(name).toBeTruthy();
+    const dark = withColorScheme(colors, 'dark');
+    expect(contrastRatio(dark.text, dark.background)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    expect(contrastRatio(dark.muted, dark.background)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    expect(contrastRatio(dark.accentText, dark.accent)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    expect(withColorScheme(colors, 'light')).toBe(colors);
   }
 });

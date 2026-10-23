@@ -128,6 +128,23 @@ function relativeLuminance(hex: string): number {
 }
 
 /** WCAG contrast ratio. 4.5 is the minimum for normal text. */
+const DARK: Pick<ThemeColors, 'background' | 'surface' | 'text' | 'muted' | 'border' | 'banner'> = {
+  background: '#141816',
+  surface: '#1E2622',
+  text: '#F6F1E7',
+  muted: '#C5D0C8',
+  border: '#314038',
+  banner: '#24352C',
+};
+
+/** Light skins stay as authored. Dark mode keeps the accent and swaps the paper colors. */
+export function withColorScheme(colors: ThemeColors, scheme: 'light' | 'dark' | null | undefined): ThemeColors {
+  if (scheme !== 'dark') {
+    return colors;
+  }
+  return { ...colors, ...DARK };
+}
+
 export function contrastRatio(foreground: string, background: string): number {
   const first = relativeLuminance(foreground);
   const second = relativeLuminance(background);
