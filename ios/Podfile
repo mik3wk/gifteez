@@ -6,6 +6,11 @@
 # sets the flag, so set it before this file requires anything else.
 ENV['RCT_NEW_ARCH_ENABLED'] = '1'
 
+# Register the Firebase package `traits` attribute before anything opens the
+# Xcode project. Otherwise xcodeproj drops the key on the next save and the
+# Firestore trait goes back off. See ios/firebase_spm_traits.rb.
+require_relative 'firebase_spm_traits'
+
 # Resolve react_native_pods.rb with node to allow for hoisting
 require Pod::Executable.execute_command('node', ['-p',
   'require.resolve(
@@ -20,6 +25,11 @@ prepare_react_native_project!
 # Manager. SPM builds require dynamic frameworks; static linkage fails pod install.
 # The same linkage lets the Gifteez target import FirebaseCore. pod install adds
 # that SPM product to the app target (see post_integrate below).
+#
+# Firebase 13's Firestore product does not compile unless the package's Firestore
+# trait is on. ios/firebase_spm_traits.rb (required above) writes that trait onto
+# every firebase-ios-sdk package reference. Auth, App Check, Functions, Remote
+# Config, and Storage are not trait-gated in this SDK.
 use_frameworks! :linkage => :dynamic
 
 target 'Gifteez' do
@@ -38,11 +48,19 @@ target 'Gifteez' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+    # Pods.xcodeproj is saved after this hook. The Firestore product dependency
+    # lives on the RNFBFirestore pod, so the trait has to be on this project.
+    gifteez_enable_firebase_spm_traits_for_installer(installer)
+    gifteez_install_firebase_spm_traits_hook!(installer)
   end
 
   post_integrate do |installer|
     if defined?(rnfirebase_add_spm_core_to_app_target)
       rnfirebase_add_spm_core_to_app_target(installer)
     end
+    # The app target's firebase-ios-sdk reference is created just above. RNFB's
+    # own post_integrate wrapper runs after this block and is covered by the
+    # hook installed in post_install.
+    gifteez_enable_firebase_spm_traits_for_installer(installer)
   end
 end
