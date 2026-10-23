@@ -1,0 +1,4 @@
+// Build number (CFBundleVersion / CURRENT_PROJECT_VERSION).
+// Bump this file. Do not put the number back in project.pbxproj, where it sits
+// next to CODE_SIGN_ENTITLEMENTS.
+CURRENT_PROJECT_VERSION = 2

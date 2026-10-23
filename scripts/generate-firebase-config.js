@@ -137,6 +137,16 @@ function keepExisting(file) {
   return fs.existsSync(file);
 }
 
+function writeIfChanged(file, contents) {
+  const next = String(contents);
+  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === next) {
+    return false;
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, next);
+  return true;
+}
+
 function writeFirebaseFiles(env, root) {
   const projectId = env.FIREBASE_PROJECT_ID || 'your-project-id';
   const sender = env.FIREBASE_MESSAGING_SENDER_ID || '000000000000';
@@ -174,7 +184,7 @@ function writeFirebaseFiles(env, root) {
     kept.push(androidPath);
   } else {
     fs.mkdirSync(path.dirname(androidPath), { recursive: true });
-    fs.writeFileSync(androidPath, `${JSON.stringify(googleServices, null, 2)}\n`);
+    writeIfChanged(androidPath, `${JSON.stringify(googleServices, null, 2)}\n`);
   }
 
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
@@ -212,12 +222,12 @@ function writeFirebaseFiles(env, root) {
     kept.push(iosPath);
   } else {
     fs.mkdirSync(path.dirname(iosPath), { recursive: true });
-    fs.writeFileSync(iosPath, plist);
+    writeIfChanged(iosPath, plist);
   }
   if (keepExisting(rcPath)) {
     kept.push(rcPath);
   } else {
-    fs.writeFileSync(rcPath, `${JSON.stringify({ projects: { default: projectId } }, null, 2)}\n`);
+    writeIfChanged(rcPath, `${JSON.stringify({ projects: { default: projectId } }, null, 2)}\n`);
   }
   return kept;
 }
@@ -225,17 +235,21 @@ function writeFirebaseFiles(env, root) {
 function writeInviteHosting(env, root) {
   const domain = inviteDomain(env);
   const template = fs.readFileSync(path.join(root, 'hosting/join/index.template.html'), 'utf8');
-  fs.mkdirSync(path.join(root, 'hosting/.well-known'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'hosting/join'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'hosting/join/index.html'), renderJoinPage(template, env));
-  fs.writeFileSync(path.join(root, 'hosting/.well-known/apple-app-site-association'), renderAasa(env));
-  fs.writeFileSync(path.join(root, 'hosting/.well-known/assetlinks.json'), renderAssetLinks(env));
+  const written = [];
+  const put = (file, contents) => {
+    if (writeIfChanged(file, contents)) {
+      written.push(file);
+    }
+  };
+  put(path.join(root, 'hosting/join/index.html'), renderJoinPage(template, env));
+  put(path.join(root, 'hosting/.well-known/apple-app-site-association'), renderAasa(env));
+  put(path.join(root, 'hosting/.well-known/assetlinks.json'), renderAssetLinks(env));
 
   const manifestPath = path.join(root, 'android/app/src/main/AndroidManifest.xml');
-  fs.writeFileSync(manifestPath, rewriteAndroidHost(fs.readFileSync(manifestPath, 'utf8'), domain));
+  put(manifestPath, rewriteAndroidHost(fs.readFileSync(manifestPath, 'utf8'), domain));
   const entitlementsPath = path.join(root, 'ios/Gifteez/Gifteez.entitlements');
-  fs.writeFileSync(entitlementsPath, rewriteEntitlements(fs.readFileSync(entitlementsPath, 'utf8'), domain));
-  return domain;
+  put(entitlementsPath, rewriteEntitlements(fs.readFileSync(entitlementsPath, 'utf8'), domain));
+  return { domain, written };
 }
 
 function main() {
@@ -245,13 +259,17 @@ function main() {
     : path.join(root, '.env.example');
   const env = parseEnv(fs.readFileSync(envPath, 'utf8'));
   const kept = writeFirebaseFiles(env, root);
-  const domain = writeInviteHosting(env, root);
+  const { domain, written } = writeInviteHosting(env, root);
   if (kept.length > 0) {
     console.log(`Left existing Firebase config alone: ${kept.map(file => path.relative(root, file)).join(', ')}.`);
   } else {
     console.log(`Firebase config written from ${path.basename(envPath)} for project ${env.FIREBASE_PROJECT_ID || 'your-project-id'}.`);
   }
-  console.log(`Invite links use https://${domain}/join. Hosting files were written under hosting/.`);
+  if (written.length === 0) {
+    console.log(`Invite links use https://${domain}/join. Hosting and native files already matched.`);
+  } else {
+    console.log(`Invite links use https://${domain}/join. Updated ${written.map(file => path.relative(root, file)).join(', ')}.`);
+  }
 }
 
 if (require.main === module) {
@@ -271,5 +289,7 @@ module.exports = {
   renderJoinPage,
   rewriteAndroidHost,
   rewriteEntitlements,
+  writeIfChanged,
   writeFirebaseFiles,
+  writeInviteHosting,
 };
