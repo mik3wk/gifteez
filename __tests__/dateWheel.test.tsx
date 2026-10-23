@@ -55,6 +55,10 @@ test('scrolling the wheel selects the centered row, and a shorter month shortens
     renderer = ReactTestRenderer.create(render());
   });
   const [monthWheel, dayWheel] = wheels(renderer!);
+  expect(monthWheel.props.snapToInterval).toBe(ROW);
+  expect(dayWheel.props.snapToInterval).toBe(ROW);
+  expect(monthWheel.props.decelerationRate).toBe('fast');
+  expect(dayWheel.props.decelerationRate).toBe('fast');
   expect(monthWheel.props.contentOffset).toEqual({ x: 0, y: 9 * ROW });
   expect(dayWheel.props.contentOffset).toEqual({ x: 0, y: 22 * ROW });
   expect(selectedLabels(renderer!)).toEqual(expect.arrayContaining(['October', '23']));
@@ -75,6 +79,19 @@ test('scrolling the wheel selects the centered row, and a shorter month shortens
   expect(day).toBe('25');
   expect(selectedLabels(renderer!)).toEqual(expect.arrayContaining(['October', '25']));
   expect(selectedLabels(renderer!).includes('23')).toBe(false);
+
+  const parked = wheels(renderer!)[1];
+  const scrolled: Array<{ y: number; animated: boolean }> = [];
+  (parked.instance as { scrollTo: (options: { y: number; animated: boolean }) => void }).scrollTo = options => {
+    scrolled.push(options);
+  };
+  await ReactTestRenderer.act(() => {
+    parked.props.onScrollEndDrag({
+      nativeEvent: { contentOffset: { y: 24 * ROW + 7 }, velocity: { x: 0, y: 0 } },
+    });
+  });
+  expect(day).toBe('25');
+  expect(scrolled).toEqual([{ y: 24 * ROW, animated: true }]);
 
   await ReactTestRenderer.act(() => {
     wheels(renderer!)[1].props.onScrollEndDrag({

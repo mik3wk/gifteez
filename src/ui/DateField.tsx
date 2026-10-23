@@ -94,13 +94,16 @@ function Wheel({
   const fromScroll = useRef(false);
   const index = Math.max(0, items.findIndex(item => item.id === value));
   const offset = index * WHEEL_ROW;
+  function scrollToExact(y: number, animated: boolean) {
+    const node = list.current as { scrollTo?: (options: { y: number; animated: boolean }) => void } | null;
+    node?.scrollTo?.({ y, animated });
+  }
   useLayoutEffect(() => {
     if (fromScroll.current) {
       fromScroll.current = false;
       return;
     }
-    const node = list.current as { scrollTo?: (options: { y: number; animated: boolean }) => void } | null;
-    node?.scrollTo?.({ y: offset, animated: false });
+    scrollToExact(offset, false);
   }, [offset, items.length]);
   function selectCentered(offsetY: number) {
     const id = items[centeredIndex(offsetY, items.length)]?.id;
@@ -115,7 +118,10 @@ function Wheel({
     if (velocity !== 0) {
       return;
     }
-    selectCentered(event.nativeEvent.targetContentOffset?.y ?? event.nativeEvent.contentOffset.y);
+    const raw = event.nativeEvent.targetContentOffset?.y ?? event.nativeEvent.contentOffset.y;
+    const next = centeredIndex(raw, items.length);
+    scrollToExact(next * WHEEL_ROW, true);
+    selectCentered(raw);
   }
   return (
     <View style={styles.wheel}>
