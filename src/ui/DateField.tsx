@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, useState, type ComponentRef } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { formatDate, formatLongDate, t, todayIso } from '../i18n';
 import { useTheme } from '../theme/useTheme';
 import { space, stroke, touch } from '../theme/tokens';
+import { Icon } from './icons';
 import { Body, Caption, Toggle } from './ui';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -78,10 +79,24 @@ function Wheel({
   value: string;
   onChange: (id: string) => void;
 }) {
+  const { colors, radius, type, typeScale } = useTheme();
+  const list = useRef<ComponentRef<typeof ScrollView>>(null);
+  const index = Math.max(0, items.findIndex(item => item.id === value));
+  const offset = index * touch.minTarget;
+  useEffect(() => {
+    list.current?.scrollTo({ y: offset, animated: false });
+  }, [offset]);
   return (
     <View style={styles.wheel}>
       <Caption>{label}</Caption>
-      <ScrollView style={styles.wheelList} accessibilityLabel={label}>
+      <ScrollView
+        ref={list}
+        style={styles.wheelList}
+        accessibilityLabel={label}
+        contentOffset={{ x: 0, y: offset }}
+        snapToInterval={touch.minTarget}
+        decelerationRate="fast"
+        onLayout={() => list.current?.scrollTo({ y: offset, animated: false })}>
         {items.map(item => {
           const selected = item.id === value;
           return (
@@ -91,8 +106,17 @@ function Wheel({
               accessibilityLabel={item.label}
               accessibilityState={{ selected }}
               onPress={() => onChange(item.id)}
-              style={styles.wheelItem}>
-              <Body strong={selected}>{item.label}</Body>
+              style={[
+                styles.wheelItem,
+                selected ? { backgroundColor: colors.pink, borderRadius: radius.chip } : null,
+              ]}>
+              {selected ? <Icon name="check" color={colors.onPink} size={16} /> : null}
+              <Text
+                numberOfLines={1}
+                maxFontSizeMultiplier={typeScale.body}
+                style={[selected ? type.heading : type.body, styles.wheelLabel, { color: selected ? colors.onPink : colors.text }]}>
+                {item.label}
+              </Text>
             </Pressable>
           );
         })}
@@ -181,5 +205,12 @@ const styles = StyleSheet.create({
   wheels: { flexDirection: 'row', gap: space.xs },
   wheel: { flex: 1, gap: space.xxs },
   wheelList: { maxHeight: 160 },
-  wheelItem: { minHeight: touch.minTarget, justifyContent: 'center' },
+  wheelItem: {
+    minHeight: touch.minTarget,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xxs,
+    paddingHorizontal: space.xs,
+  },
+  wheelLabel: { flex: 1 },
 });
