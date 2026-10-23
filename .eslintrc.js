@@ -15,5 +15,9 @@ module.exports = {
       files: ['scripts/**/*.js', 'jest.config.js', 'babel.config.js', 'metro.config.js', 'react-native.config.js'],
       env: { node: true },
     },
+    {
+      files: ['jest.setup.js'],
+      env: { jest: true, node: true },
+    },
   ],
 };

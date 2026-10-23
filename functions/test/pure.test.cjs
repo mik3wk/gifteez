@@ -198,6 +198,14 @@ test('a free account cannot start a second list, a paid account can, and joining
   assert.match(ops, /needsRotation: true/);
 });
 
+test('index.js installs crypto.getRandomValues before the app loads', () => {
+  const index = fs.readFileSync(path.join(__dirname, '..', '..', 'index.js'), 'utf8');
+  const firstLine = index.split('\n').find(line => line.trim().length > 0);
+  assert.equal(firstLine, "import 'react-native-get-random-values';");
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'));
+  assert.match(pkg.dependencies['react-native-get-random-values'], /^\^2\./);
+});
+
 test('pod install enables the Firebase Firestore SwiftPM trait', () => {
   const podfile = fs.readFileSync(path.join(__dirname, '..', '..', 'ios', 'Podfile'), 'utf8');
   const helper = fs.readFileSync(path.join(__dirname, '..', '..', 'ios', 'firebase_spm_traits.rb'), 'utf8');
