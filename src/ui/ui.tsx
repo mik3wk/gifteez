@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { openTab, type RootStack } from '../app/navigation';
 import { getEnv } from '../config/env';
 import { formatMoney, t } from '../i18n';
+import { hideNativeSplash } from '../platform/splash';
 import { useGifteez } from '../state/GifteezContext';
 import { useTheme } from '../theme/useTheme';
 import { iconOnSurface, layout, occasionLook, scrim, shadowOffset, space, sticker, stroke, touch, type ArtName, type CelebrateName, type ChipTint, type EmptyArtName } from '../theme/tokens';
@@ -777,12 +778,25 @@ function LaunchCopy() {
 export function BrandedLoading() {
   const scheme = useColorScheme();
   const [showCopy, setShowCopy] = useState(false);
+  const splashHidden = useRef(false);
   useEffect(() => {
     const timer = setTimeout(() => setShowCopy(true), LAUNCH_COPY_DELAY);
     return () => clearTimeout(timer);
   }, []);
   return (
-    <View accessibilityRole="progressbar" accessibilityLabel={t('common.loading')} style={styles.launch}>
+    <View
+      accessibilityRole="progressbar"
+      accessibilityLabel={t('common.loading')}
+      onLayout={() => {
+        if (splashHidden.current) {
+          return;
+        }
+        splashHidden.current = true;
+        requestAnimationFrame(() => {
+          hideNativeSplash();
+        });
+      }}
+      style={styles.launch}>
       <View pointerEvents="none" style={styles.launchLogo}>
         <Image
           accessibilityElementsHidden

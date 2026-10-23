@@ -35,8 +35,31 @@ class SceneDelegate: RCTDefaultReactNativeFactoryDelegate, UIWindowSceneDelegate
       in: window,
       connectionOptions: connectionOptions
     )
+    installLaunchCover()
+  }
 
-   
+  /// Same SplashLogo and LaunchBackground as the storyboard, kept above the React
+  /// root until JS hides it after the loader's first frame. loadingView is removed
+  /// when the surface mounts, which is earlier than the first paint.
+  private func installLaunchCover() {
+    guard let window, Self.launchCover == nil else {
+      return
+    }
+    let cover = Self.launchLogo()
+    cover.frame = window.bounds
+    cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    cover.accessibilityElementsHidden = true
+    window.addSubview(cover)
+    cover.layoutIfNeeded()
+    Self.launchCover = cover
+    NotificationCenter.default.addObserver(
+      forName: Self.splashHide,
+      object: nil,
+      queue: nil
+    ) { _ in
+      Self.launchCover?.removeFromSuperview()
+      Self.launchCover = nil
+    }
   }
 
   func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
@@ -82,6 +105,9 @@ class SceneDelegate: RCTDefaultReactNativeFactoryDelegate, UIWindowSceneDelegate
     Bundle.main.url(forResource: "main", withExtension: "jsbundle")
     #endif
   }
+
+  private static let splashHide = Notification.Name("GifteezSplashHide")
+  private static var launchCover: UIView?
 
   /// Matches LaunchBackground.colorset so the window does not flash white or black.
   private static var launchBackground: UIColor {
