@@ -216,9 +216,19 @@ type ConfirmRequest = {
   confirmLabel: string;
   confirmAccessibilityLabel?: string;
   resolve: (value: boolean) => void;
+  settled?: boolean;
 };
 
 let confirmListener: ((request: ConfirmRequest | null) => void) | null = null;
+const sheetConfirmHosts: Array<(request: ConfirmRequest | null) => void> = [];
+
+function settleConfirm(request: ConfirmRequest, value: boolean) {
+  if (request.settled) {
+    return;
+  }
+  request.settled = true;
+  request.resolve(value);
+}
 
 export function confirmDestructive(
   title: string,
@@ -227,22 +237,20 @@ export function confirmDestructive(
   confirmAccessibilityLabel?: string,
 ): Promise<boolean> {
   return new Promise(resolve => {
-    if (!confirmListener) {
-      let settled = false;
-      const finish = (value: boolean) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        resolve(value);
-      };
-      Alert.alert(title, message, [
-        { text: t('common.cancel'), style: 'cancel', onPress: () => finish(false) },
-        { text: confirmLabel, style: 'destructive', onPress: () => finish(true) },
-      ], { cancelable: true, onDismiss: () => finish(false) });
+    const request: ConfirmRequest = { title, message, confirmLabel, confirmAccessibilityLabel, resolve };
+    const sheetHost = sheetConfirmHosts[sheetConfirmHosts.length - 1];
+    if (sheetHost) {
+      sheetHost(request);
       return;
     }
-    confirmListener({ title, message, confirmLabel, confirmAccessibilityLabel, resolve });
+    if (!confirmListener) {
+      Alert.alert(title, message, [
+        { text: t('common.cancel'), style: 'cancel', onPress: () => settleConfirm(request, false) },
+        { text: confirmLabel, style: 'destructive', onPress: () => settleConfirm(request, true) },
+      ], { cancelable: true, onDismiss: () => settleConfirm(request, false) });
+      return;
+    }
+    confirmListener(request);
   });
 }
 
@@ -253,6 +261,7 @@ export function ConfirmDialog({
   confirmAccessibilityLabel,
   onConfirm,
   onCancel,
+  nested,
 }: {
   title: string;
   message: string;
@@ -260,20 +269,28 @@ export function ConfirmDialog({
   confirmAccessibilityLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Inside an open sheet. A second Modal on iOS stays invisible and swallows every touch. */
+  nested?: boolean;
 }) {
+  const body = (
+    <View style={styles.modalFill} accessibilityViewIsModal>
+      <View style={[styles.scrimFill, { backgroundColor: scrim }]} />
+      <View style={styles.dialog}>
+        <Card>
+          <Heading>{title}</Heading>
+          <Body>{message}</Body>
+          <Button label={confirmLabel} accessibilityLabel={confirmAccessibilityLabel} tone="danger" onPress={onConfirm} />
+          <Button label={t('common.cancel')} tone="secondary" onPress={onCancel} />
+        </Card>
+      </View>
+    </View>
+  );
+  if (nested) {
+    return body;
+  }
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onCancel} statusBarTranslucent>
-      <View style={styles.modalFill} accessibilityViewIsModal>
-        <View style={[styles.scrimFill, { backgroundColor: scrim }]} />
-        <View style={styles.dialog}>
-          <Card>
-            <Heading>{title}</Heading>
-            <Body>{message}</Body>
-            <Button label={confirmLabel} accessibilityLabel={confirmAccessibilityLabel} tone="danger" onPress={onConfirm} />
-            <Button label={t('common.cancel')} tone="secondary" onPress={onCancel} />
-          </Card>
-        </View>
-      </View>
+      {body}
     </Modal>
   );
 }
@@ -292,7 +309,7 @@ export function ConfirmHost() {
     return null;
   }
   const finish = (value: boolean) => {
-    request.resolve(value);
+    settleConfirm(request, value);
     setRequest(null);
   };
   return (
@@ -1055,6 +1072,32 @@ export function Sheet({
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const reduce = useReduceMotion();
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+  useEffect(() => {
+    if (!visible) {
+      return undefined;
+    }
+    sheetConfirmHosts.push(setConfirm);
+    return () => {
+      const index = sheetConfirmHosts.lastIndexOf(setConfirm);
+      if (index >= 0) {
+        sheetConfirmHosts.splice(index, 1);
+      }
+      setConfirm(current => {
+        if (current) {
+          settleConfirm(current, false);
+        }
+        return null;
+      });
+    };
+  }, [visible]);
+  const finishConfirm = (value: boolean) => {
+    if (!confirm) {
+      return;
+    }
+    settleConfirm(confirm, value);
+    setConfirm(null);
+  };
   return (
     <Modal visible={visible} animationType={reduce ? 'fade' : 'slide'} presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -1064,6 +1107,19 @@ export function Sheet({
             <View style={styles.column}>{children}</View>
           </Settle>
         </ScrollView>
+        {confirm ? (
+          <View style={styles.sheetConfirm}>
+            <ConfirmDialog
+              title={confirm.title}
+              message={confirm.message}
+              confirmLabel={confirm.confirmLabel}
+              confirmAccessibilityLabel={confirm.confirmAccessibilityLabel}
+              onConfirm={() => finishConfirm(true)}
+              onCancel={() => finishConfirm(false)}
+              nested
+            />
+          </View>
+        ) : null}
       </View>
     </Modal>
   );
@@ -1345,6 +1401,7 @@ const styles = StyleSheet.create({
   segment: { flexDirection: 'row', borderWidth: stroke.inner, borderRadius: 999, padding: space.xxs, gap: space.xxs },
   segmentItem: { flex: 1, minHeight: touch.minTarget, borderRadius: 999, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.xxs },
   toggle: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: touch.minTarget },
+  sheetConfirm: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 8 },
   scrim: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center', padding: space.lg },
   scrimFill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: 0.45 },
   dialog: { width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
