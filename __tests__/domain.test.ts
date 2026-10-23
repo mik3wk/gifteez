@@ -33,7 +33,8 @@ import { suggestIdeas } from '../src/domain/ideas';
 import { colorsFor, parseSkin, skinForDate } from '../src/theme/skins';
 import { buildInviteUrl, keyToString, openJson, parseLink, randomKey, sealJson, unwrapKey, wrapKey } from '../src/crypto/crypto';
 import { formatDate, formatMoney, t } from '../src/i18n';
-import { canRefresh, claimSlot, emptyUsage, nextUsage } from '../functions/src/caps';
+import { canRefresh, emptyUsage, nextUsage } from '../functions/src/caps';
+import { decidePersonWrite } from '../functions/src/peopleCap';
 
 test('encrypts user content so the payload is not the plaintext', () => {
   const key = randomKey();
@@ -226,7 +227,14 @@ test('server caps are per person and per device, not per anonymous uid', () => {
   }
   expect(canRefresh({ usage, paid: false, now, limits, refresh: true, cacheHit: false }).ok).toBe(false);
   expect(canRefresh({ usage, paid: false, now, limits, refresh: false, cacheHit: true }).counted).toBe(false);
-  expect(claimSlot(5, false, 'add', 5).ok).toBe(false);
+  expect(decidePersonWrite({
+    entitled: false,
+    people: ['a', 'b', 'c', 'd', 'e'].map((id, index) => ({ id, createdAt: index })),
+    personId: 'f',
+    createdAt: 6,
+    deleted: false,
+    limit: 5,
+  }).ok).toBe(false);
 });
 
 test('names groups from members, and switching keeps the other list', () => {

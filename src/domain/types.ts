@@ -12,6 +12,8 @@ export type Person = {
   createdAt: number;
   updatedAt: number;
   deleted?: boolean;
+  /** Member who must not read this person's gifts, claims, or ideas. Plaintext on the server doc. */
+  linkedUid?: string;
 };
 
 export type Occasion = {
@@ -37,6 +39,8 @@ export type OccasionState = {
   claimedAt?: number;
   updatedAt: number;
   deleted?: boolean;
+  /** Local only. Sync writes this state under hidden/{uid}. Stripped before sealing. */
+  hiddenFrom?: string;
 };
 
 export type GiftRecord = {
@@ -51,6 +55,8 @@ export type GiftRecord = {
   boughtBy?: string;
   updatedAt: number;
   deleted?: boolean;
+  /** Local only. Sync writes this gift under hidden/{uid}. Stripped before sealing. */
+  hiddenFrom?: string;
 };
 
 /** A gift kept off the shared list. Sealed with the device key, never the group key. */
@@ -86,6 +92,7 @@ export type IdeaCacheEntry = {
   generatedAt: number;
   updatedAt: number;
   deleted?: boolean;
+  hiddenFrom?: string;
 };
 
 export type GroupMeta = {
@@ -96,6 +103,16 @@ export type GroupMeta = {
   peopleCount: number;
   entitled: boolean;
   updatedAt: number;
+  /** ISO currency for every amount on this list. Missing on older lists means USD. */
+  currency?: string;
+  /** Bumped when the group key rotates. Clients cannot write it. */
+  keyVersion?: number;
+  /** A member was removed. A remaining member rotates the key. */
+  needsRotation?: boolean;
+  /** People kept after a lapse. Readable, not writable, and never deleted automatically. */
+  lockedPersonIds?: string[];
+  /** This phone has no key, so the cached copy is not current. */
+  stale?: boolean;
 };
 
 export type GroupSummary = {
@@ -105,6 +122,7 @@ export type GroupSummary = {
   memberIds: string[];
   memberNames: string[];
   updatedAt: number;
+  stale?: boolean;
 };
 
 export type Member = {
@@ -127,9 +145,35 @@ export type Profile = {
   pendingEmail: string | null;
   pendingVerificationId: string | null;
   inviteId: string | null;
+  /** Per member, on this phone. Unset until the first occasion asks. */
+  reminders?: 'unset' | 'on' | 'off';
 };
 
 export type DirtyMap = Record<string, true>;
+
+export type MergeJournal = {
+  sourceGroupId: string;
+  sourcePersonId: string;
+  targetGroupId: string;
+  targetPersonId: string;
+  createdOccasionIds: string[];
+  createdStateIds: string[];
+  createdGiftIds: string[];
+  replacedStates: OccasionState[];
+  privateGiftIds: string[];
+  sourcePerson: Person;
+  sourceOccasions: Occasion[];
+  sourceStates: OccasionState[];
+  sourceGifts: GiftRecord[];
+  sourcePeopleCount: number;
+  sourceDeleted: boolean;
+};
+
+export type PendingMembership = {
+  action: 'leave' | 'remove';
+  groupId: string;
+  uid: string;
+};
 
 export type GroupArchive = {
   group: GroupMeta;
@@ -161,6 +205,10 @@ export type AppSnapshot = {
   entitlementPaid: boolean;
   /** Owned lists deleted offline. Sync calls releaseOwnedGroup so the free slot frees. */
   releasedGroupIds: string[];
+  /** Last merge, so it can be undone. Cleared after undo. */
+  mergeJournal?: MergeJournal | null;
+  /** Membership changes the server has not confirmed yet. */
+  pendingMembership?: PendingMembership[];
   dirty: DirtyMap;
 };
 
@@ -201,6 +249,8 @@ export function emptySnapshot(now: number): AppSnapshot {
     ideas: [],
     entitlementPaid: false,
     releasedGroupIds: [],
+    mergeJournal: null,
+    pendingMembership: [],
     dirty: {},
   };
 }

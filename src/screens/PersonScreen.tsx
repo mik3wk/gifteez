@@ -7,9 +7,11 @@ import type { RootStack } from '../app/navigation';
 import { INTEREST_TAGS } from '../domain/catalog';
 import { buyerLabel, claimerName, claimWarningUid, isMyPurchase, spendByMember, visibleGifts } from '../domain/claims';
 import { ideaCacheId } from '../domain/ideas';
-import { allTimeSpentCents, occurrenceYear, parseBudget, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
+import { canEditSharedGift } from '../domain/edits';
+import { allTimeSpentCents, groupCurrency, occurrenceYear, parseBudget, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
+import { isHiddenFromViewer, isPersonLocked } from '../domain/visibility';
 import { peopleOnOtherLists } from '../domain/merge';
-import { formatLongDate, formatMoney, t, todayIso } from '../i18n';
+import { deviceLocale, formatLongDate, formatMoney, t, todayIso } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { Body, Button, Card, Field, Screen, Title } from '../ui/ui';
 import type { OccasionType } from '../domain/types';
@@ -42,7 +44,7 @@ export function AddPersonScreen() {
 export function PersonScreen() {
   const route = useRoute<RouteProp<RootStack, 'Person'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, colors, focusPerson, savePerson, removePerson, addOccasion, saveIdeaFor, logGift, vote, refreshIdeas, cloudIdeas, cloudRemaining, claimOccasion, unclaimOccasion } = useGifteez();
+  const { snapshot, colors, focusPerson, savePerson, removePerson, addOccasion, saveIdeaFor, logGift, vote, refreshIdeas, cloudIdeas, cloudRemaining, claimOccasion, unclaimOccasion, updateGift, deleteGift, updateOccasion, deleteOccasion, linkRecipient, undoMerge } = useGifteez();
   const person = snapshot.people.find(item => item.id === route.params.personId && !item.deleted);
   const [budget, setBudget] = useState(person?.budgetCents == null ? '' : String(person.budgetCents / 100));
   const [name, setName] = useState(person?.name ?? '');
@@ -55,6 +57,7 @@ export function PersonScreen() {
   const [date, setDate] = useState(todayIso());
   const [buying, setBuying] = useState<string | null>(null);
   const [mineOnly, setMineOnly] = useState(false);
+  const [editingGift, setEditingGift] = useState<{ id: string; privateGift: boolean } | null>(null);
 
   useEffect(() => {
     if (person) {
@@ -71,6 +74,9 @@ export function PersonScreen() {
       </Screen>
     );
   }
+  const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(snapshot.group));
+  const hidden = isHiddenFromViewer(person, snapshot.profile.uid);
+  const locked = isPersonLocked(snapshot.group?.lockedPersonIds, person.id);
   const next = upcomingOccasion(person.id, snapshot.occasions, new Date());
   const occasionKey = next ? `${next.occasion.id}:${next.date.getFullYear()}` : 'general';
   const onDevice = snapshot.ideas.find(item => item.id === ideaCacheId(person.id, occasionKey, 'on-device') && !item.deleted);
@@ -85,6 +91,11 @@ export function PersonScreen() {
   return (
     <Screen>
       <Title>{person.name}</Title>
+      {hidden ? <Body>{t('person.hiddenRecipient')}</Body> : null}
+      {locked ? <Body>{t('person.readOnly')}</Body> : null}
+      {snapshot.mergeJournal?.targetPersonId === person.id ? (
+        <Button label={t('merge.undo')} accessibilityLabel={t('merge.undoLabel')} tone="secondary" onPress={() => undoMerge()} />
+      ) : null}
       {person.imported ? <Body>{t('person.openedImported')}</Body> : null}
       <Field label={t('person.name')} value={name} onChangeText={setName} />
       <Field label={t('person.budget')} value={budget} onChangeText={setBudget} keyboardType="decimal-pad" />
@@ -92,7 +103,7 @@ export function PersonScreen() {
         label={t('person.save')}
         onPress={() => savePerson(person.id, { name: name.trim() || person.name, budgetCents: budget.trim() ? parseBudget(budget) : null, tags: person.tags })}
       />
-      <SpendBreakdown personId={person.id} budgetCents={person.budgetCents} />
+      {hidden ? null : <SpendBreakdown personId={person.id} budgetCents={person.budgetCents} money={money} />}
       {peopleOnOtherLists(snapshot).length > 0 ? (
         <Button
           label={t('person.samePerson')}
@@ -110,14 +121,30 @@ export function PersonScreen() {
         return (
           <Card key={occasion.id}>
             <Text style={[styles.name, { color: colors.text }]}>{t(`person.${occasion.type}`)} · {occasion.month}/{occasion.day}</Text>
-            <Text style={{ color: colors.accent }}>{t(status === 'idea-saved' ? 'person.statusIdea' : status === 'purchased' ? 'person.statusPurchased' : 'person.statusNotStarted')}</Text>
-            {state?.savedIdea ? <Text style={{ color: colors.text }}>{state.savedIdea}</Text> : null}
-            {state?.claimedBy ? (
+            {hidden ? null : <Text style={{ color: colors.accent }}>{t(status === 'idea-saved' ? 'person.statusIdea' : status === 'purchased' ? 'person.statusPurchased' : 'person.statusNotStarted')}</Text>}
+            {!hidden && state?.savedIdea ? <Text style={{ color: colors.text }}>{state.savedIdea}</Text> : null}
+            {!hidden && !locked ? (
+              <Button
+                label={t('person.updateOccasion')}
+                accessibilityLabel={t('person.updateOccasionLabel', { occasion: t(`person.${occasion.type}`) })}
+                tone="secondary"
+                onPress={() => updateOccasion(occasion.id, Number(month) || occasion.month, Number(day) || occasion.day, Number(year) || undefined)}
+              />
+            ) : null}
+            {!hidden && !locked ? (
+              <Button
+                label={t('person.deleteOccasion')}
+                accessibilityLabel={t('person.deleteOccasionLabel', { occasion: t(`person.${occasion.type}`) })}
+                tone="danger"
+                onPress={() => deleteOccasion(occasion.id)}
+              />
+            ) : null}
+            {hidden || locked ? null : state?.claimedBy ? (
               <Text accessibilityLabel={t('person.claimedBy', { name: claimerName(state.claimedBy, snapshot.members) })} style={{ color: colors.text }}>
                 {t('person.claimedBy', { name: claimerName(state.claimedBy, snapshot.members) })}
               </Text>
             ) : null}
-            {state?.claimedBy && snapshot.profile.uid && (state.claimedBy === snapshot.profile.uid || snapshot.group?.ownerId === snapshot.profile.uid) ? (
+            {!hidden && !locked && state?.claimedBy && snapshot.profile.uid && (state.claimedBy === snapshot.profile.uid || snapshot.group?.ownerId === snapshot.profile.uid) ? (
               <Button
                 label={t('person.unclaim')}
                 accessibilityLabel={t('person.unclaimLabel', { occasion: t(`person.${occasion.type}`) })}
@@ -125,7 +152,7 @@ export function PersonScreen() {
                 onPress={() => unclaimOccasion(occasion.id)}
               />
             ) : null}
-            {!state?.claimedBy ? (
+            {!hidden && !locked && !state?.claimedBy ? (
               <Button
                 label={t('person.claim')}
                 accessibilityLabel={t('person.claimLabel', { occasion: t(`person.${occasion.type}`) })}
@@ -133,7 +160,7 @@ export function PersonScreen() {
                 onPress={() => claimOccasion(occasion.id)}
               />
             ) : null}
-            <Button label={t('person.purchase')} tone="secondary" onPress={() => { setBuying(occasion.id); setGift(state?.savedIdea ?? ''); }} />
+            {hidden || locked ? null : <Button label={t('person.purchase')} tone="secondary" onPress={() => { setBuying(occasion.id); setGift(state?.savedIdea ?? ''); setEditingGift(null); }} />}
           </Card>
         );
       })}
@@ -153,41 +180,88 @@ export function PersonScreen() {
         </View>
       ) : null}
       <Field label={t('person.year')} value={year} onChangeText={setYear} keyboardType="number-pad" />
-      <Button
-        label={t('person.addOccasion')}
-        onPress={() => addOccasion(person.id, type, Number(month) || undefined, Number(day) || undefined, Number(year) || undefined)}
-      />
-      <Title>{t('person.ideas')}</Title>
-      <Body>{t('person.ideasHint')}</Body>
-      {(onDevice?.ideas ?? []).map(idea => (
+      {locked ? null : (
+        <Button
+          label={t('person.addOccasion')}
+          onPress={() => addOccasion(person.id, type, Number(month) || undefined, Number(day) || undefined, Number(year) || undefined)}
+        />
+      )}
+      {hidden || locked ? null : <Title>{t('person.ideas')}</Title>}
+      {hidden || locked ? null : <Body>{t('person.ideasHint')}</Body>}
+      {hidden || locked ? null : (onDevice?.ideas ?? []).map(idea => (
         <IdeaRow key={idea} idea={idea} onUp={() => vote(person.id, idea, 'up')} onDown={() => vote(person.id, idea, 'down')} onSave={() => next && saveIdeaFor(next.occasion.id, idea)} />
       ))}
-      <Button label={t('person.refresh')} tone="secondary" onPress={() => refreshIdeas(person.id)} />
-      <Body>{t('person.cloudHint')}</Body>
-      {cloudRemaining[person.id] != null ? <Body>{t('person.cloudLeft', { count: cloudRemaining[person.id] })}</Body> : null}
-      <Button label={t('person.cloud')} onPress={() => cloudIdeas(person.id)} />
-      {(cloud?.ideas ?? []).map(idea => (
+      {hidden || locked ? null : <Button label={t('person.refresh')} tone="secondary" onPress={() => refreshIdeas(person.id)} />}
+      {hidden || locked ? null : <Body>{t('person.cloudHint')}</Body>}
+      {!hidden && !locked && cloudRemaining[person.id] != null ? <Body>{t('person.cloudLeft', { count: cloudRemaining[person.id] })}</Body> : null}
+      {hidden || locked ? null : <Button label={t('person.cloud')} onPress={() => cloudIdeas(person.id)} />}
+      {hidden || locked ? null : (cloud?.ideas ?? []).map(idea => (
         <IdeaRow key={`cloud-${idea}`} idea={idea} onUp={() => vote(person.id, idea, 'up')} onDown={() => vote(person.id, idea, 'down')} onSave={() => next && saveIdeaFor(next.occasion.id, idea)} />
       ))}
-      <Title>{t('person.history')}</Title>
-      <Button
-        label={mineOnly ? t('person.allPurchases') : t('person.myPurchases')}
-        accessibilityLabel={mineOnly ? t('person.allPurchasesLabel') : t('person.myPurchasesLabel')}
-        tone="secondary"
-        onPress={() => setMineOnly(value => !value)}
-      />
-      {history.length === 0 ? <Body>{mineOnly ? t('person.historyMineEmpty') : t('person.historyEmpty')}</Body> : null}
-      {history.map(item => {
+      {hidden ? null : <Title>{t('person.history')}</Title>}
+      {hidden ? null : (
+        <Button
+          label={mineOnly ? t('person.allPurchases') : t('person.myPurchases')}
+          accessibilityLabel={mineOnly ? t('person.allPurchasesLabel') : t('person.myPurchasesLabel')}
+          tone="secondary"
+          onPress={() => setMineOnly(value => !value)}
+        />
+      )}
+      {hidden || history.length === 0 ? (hidden ? null : <Body>{mineOnly ? t('person.historyMineEmpty') : t('person.historyEmpty')}</Body>) : null}
+      {hidden ? null : history.map(item => {
         const buyerText = buyerLine(item.boughtBy, snapshot.profile.uid, snapshot.members);
+        const editable = item.privateGift || canEditSharedGift(snapshot, item, snapshot.profile.uid);
         return (
-          <Text key={item.id} style={{ color: colors.text }}>
-            {item.title} · {formatMoney(item.priceCents)} · {formatLongDate(new Date(item.purchasedOn))}
-            {buyerText ? `\n${buyerText}` : ''}
-            {item.privateGift ? `\n${t('person.privateGift')}` : ''}
-          </Text>
+          <Card key={item.id}>
+            <Text style={{ color: colors.text }}>
+              {item.title} · {money(item.priceCents)} · {formatLongDate(new Date(item.purchasedOn))}
+              {buyerText ? `\n${buyerText}` : ''}
+              {item.privateGift ? `\n${t('person.privateGift')}` : ''}
+            </Text>
+            {editable && !locked ? (
+              <Button
+                label={t('person.editGift')}
+                accessibilityLabel={t('person.editGiftLabel', { title: item.title })}
+                tone="secondary"
+                onPress={() => {
+                  setEditingGift({ id: item.id, privateGift: item.privateGift });
+                  setGift(item.title);
+                  setPrice(String(item.priceCents / 100));
+                  setDate(item.purchasedOn);
+                  setBuying(null);
+                }}
+              />
+            ) : null}
+            {editable && !locked ? (
+              <Button
+                label={t('person.deleteGift')}
+                accessibilityLabel={t('person.deleteGiftLabel', { title: item.title })}
+                tone="danger"
+                onPress={() => deleteGift(item.id, item.privateGift)}
+              />
+            ) : null}
+          </Card>
         );
       })}
-      {buying ? (
+      {snapshot.profile.uid === snapshot.group?.ownerId ? (
+        <Card>
+          <Title>{t('person.linkTitle')}</Title>
+          <Body>{t('person.linkHint')}</Body>
+          {snapshot.members.filter(member => !member.deleted && member.uid !== snapshot.profile.uid).map(member => (
+            <Button
+              key={member.uid}
+              label={t('person.linkTo', { name: member.displayName })}
+              accessibilityLabel={t('person.linkToLabel', { name: member.displayName })}
+              tone="secondary"
+              onPress={() => linkRecipient(person.id, member.uid)}
+            />
+          ))}
+          {person.linkedUid ? (
+            <Button label={t('person.unlink')} accessibilityLabel={t('person.unlinkLabel')} onPress={() => linkRecipient(person.id, '')} />
+          ) : null}
+        </Card>
+      ) : null}
+      {!hidden && !locked && buying ? (
         <Card>
           <Title>{t('purchase.title')}</Title>
           <PurchaseWarning occasionId={buying} date={date} />
@@ -195,6 +269,19 @@ export function PersonScreen() {
           <Field label={t('purchase.price')} value={price} onChangeText={setPrice} keyboardType="decimal-pad" />
           <Field label={t('purchase.date')} value={date} onChangeText={setDate} />
           <Button label={t('purchase.save')} onPress={() => { logGift(buying, gift, price, date); setBuying(null); }} />
+        </Card>
+      ) : null}
+      {editingGift ? (
+        <Card>
+          <Title>{t('person.editGift')}</Title>
+          <Field label={t('purchase.gift')} value={gift} onChangeText={setGift} />
+          <Field label={t('purchase.price')} value={price} onChangeText={setPrice} keyboardType="decimal-pad" />
+          <Field label={t('purchase.date')} value={date} onChangeText={setDate} />
+          <Button
+            label={t('person.save')}
+            accessibilityLabel={t('person.editGiftLabel', { title: gift || t('person.editGift') })}
+            onPress={() => { updateGift(editingGift.id, gift, price, date, editingGift.privateGift); setEditingGift(null); }}
+          />
         </Card>
       ) : null}
       <Button label={t('person.delete')} tone="danger" onPress={() => removePerson(person.id)} />
@@ -213,15 +300,23 @@ function buyerLine(boughtBy: string | undefined, uid: string | null, members: Pa
   return '';
 }
 
-function SpendBreakdown({ personId, budgetCents }: { personId: string; budgetCents: number | null }) {
+function SpendBreakdown({ personId, budgetCents, money }: { personId: string; budgetCents: number | null; money: (cents: number) => string }) {
   const { snapshot, colors } = useGifteez();
   const year = new Date().getFullYear();
-  const visible = visibleGifts({
+  const sharedYear = yearSpentCents(personId, snapshot.gifts, year);
+  const sharedAll = allTimeSpentCents(personId, snapshot.gifts);
+  const privateYear = yearSpentCents(
     personId,
-    gifts: snapshot.gifts,
-    privateGifts: snapshot.privateGifts ?? [],
-    groupId: snapshot.group?.id ?? null,
-  });
+    (snapshot.privateGifts ?? []).filter(gift => gift.groupId === snapshot.group?.id).map(gift => ({
+      ...gift,
+      occasionId: gift.occasionId,
+    })),
+    year,
+  );
+  const privateAll = allTimeSpentCents(
+    personId,
+    (snapshot.privateGifts ?? []).filter(gift => gift.groupId === snapshot.group?.id).map(gift => ({ ...gift })),
+  );
   const spend = spendByMember({
     personId,
     gifts: snapshot.gifts,
@@ -234,19 +329,20 @@ function SpendBreakdown({ personId, budgetCents }: { personId: string; budgetCen
   return (
     <Card>
       <Title accessibilityLabel={t('person.spendTitle')}>{t('person.spendTitle')}</Title>
-      <Text style={{ color: colors.text }}>{t('person.yearTotal', { amount: formatMoney(yearSpentCents(personId, visible, year)) })}</Text>
-      <Text style={{ color: colors.text }}>{t('person.allTotal', { amount: formatMoney(allTimeSpentCents(personId, visible)) })}</Text>
+      <Text style={{ color: colors.text }}>{t('person.yearTotal', { amount: money(sharedYear) })}</Text>
+      <Text style={{ color: colors.text }}>{t('person.allTotal', { amount: money(sharedAll) })}</Text>
+      {privateYear > 0 || privateAll > 0 ? <Text style={{ color: colors.muted }}>{t('person.privateSpend', { amount: money(privateYear) })}</Text> : null}
       <Text style={{ color: colors.text }}>
-        {budgetCents == null ? t('person.noBudget') : t('person.budgetLine', { amount: formatMoney(budgetCents) })}
+        {budgetCents == null ? t('person.noBudget') : t('person.budgetLine', { amount: money(budgetCents) })}
       </Text>
       {spend.rows.map(row => (
         <Text key={row.uid} style={{ color: colors.muted }}>
-          {row.self ? t('person.spendYou') : row.name} · {t('person.spendYear', { amount: formatMoney(row.yearCents) })} · {t('person.spendAll', { amount: formatMoney(row.allCents) })}
+          {row.self ? t('person.spendYou') : row.name} · {t('person.spendYear', { amount: money(row.yearCents) })} · {t('person.spendAll', { amount: money(row.allCents) })}
         </Text>
       ))}
       {spend.unknownAllCents > 0 ? (
         <Text style={{ color: colors.muted }}>
-          {t('person.spendUnknown')} · {t('person.spendYear', { amount: formatMoney(spend.unknownYearCents) })} · {t('person.spendAll', { amount: formatMoney(spend.unknownAllCents) })}
+          {t('person.spendUnknown')} · {t('person.spendYear', { amount: money(spend.unknownYearCents) })} · {t('person.spendAll', { amount: money(spend.unknownAllCents) })}
         </Text>
       ) : null}
     </Card>

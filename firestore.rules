@@ -30,6 +30,28 @@ service cloud.firestore {
         && before.size() == after.size() + 1;
     }
 
+    function personDoc(groupId, personId) {
+      return get(/databases/$(database)/documents/groups/$(groupId)/people/$(personId)).data;
+    }
+
+    function personLinked(groupId, personId) {
+      return personDoc(groupId, personId).get('linkedUid', '');
+    }
+
+    function personLocked(groupId, personId) {
+      return groupData(groupId).get('lockedPersonIds', []).hasAny([personId]);
+    }
+
+    function unchangedAdmin(groupId) {
+      return request.resource.data.entitled == resource.data.entitled
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.peopleCount == resource.data.peopleCount
+        && request.resource.data.get('keyVersion', 0) == resource.data.get('keyVersion', 0)
+        && request.resource.data.get('needsRotation', false) == resource.data.get('needsRotation', false)
+        && request.resource.data.get('lockedPersonIds', []) == resource.data.get('lockedPersonIds', [])
+        && request.resource.data.get('rotatingBy', '') == resource.data.get('rotatingBy', '');
+    }
+
     match /groups/{groupId} {
       allow get: if signedIn() && request.auth.uid in resource.data.memberIds;
       allow list: if false;
@@ -37,24 +59,13 @@ service cloud.firestore {
       // Direct creates are denied. createOwnedGroup enforces one owned list for a free account.
       allow create: if false;
 
+      // entitled, ownerId, peopleCount, keyVersion, needsRotation, and lockedPersonIds are server-owned.
+      // peopleCount is the real count from writePerson, not a client counter.
       allow update: if signedIn()
         && request.auth.uid in resource.data.memberIds
-        && request.resource.data.entitled == resource.data.entitled
-        && request.resource.data.ownerId == resource.data.ownerId
-        && request.resource.data.peopleCount is number
-        && request.resource.data.peopleCount >= 0
-        && (
-          // Recipient cap follows the list owner. Only Functions set entitled.
-          resource.data.entitled == true
-          || request.resource.data.peopleCount <= 5
-        )
-        && (
-          request.resource.data.peopleCount == resource.data.peopleCount
-          || request.resource.data.peopleCount == resource.data.peopleCount + 1
-          || request.resource.data.peopleCount == resource.data.peopleCount - 1
-        )
+        && unchangedAdmin(groupId)
         && request.resource.data.memberIds.size() >= 1
-        // GROUP_MAX_MEMBERS. Free gift recipients stay at peopleCount <= 5 unless entitled.
+        // GROUP_MAX_MEMBERS. Recipient caps are enforced by writePerson, not this update.
         && request.resource.data.memberIds.size() <= 10
         && (
           sameMembers(resource.data.memberIds, request.resource.data.memberIds)
@@ -62,17 +73,73 @@ service cloud.firestore {
           || ownerRemoves(resource.data.memberIds, request.resource.data.memberIds)
         );
 
-      // Owner deletes go through releaseOwnedGroup so the free slot is freed.
+      // Owner deletes go through releaseOwnedGroup so the free slot is freed and subcollections go with it.
       allow delete: if false;
 
       // claimedBy, claimedAt, and boughtBy live inside ciphertext. Rules cannot read them.
+      // A linked recipient cannot read that person's gifts: those docs live under hidden/{linkedUid}.
+      // The group key still seals them. Rules are the barrier, because every member holds that key.
       // Private gifts are not group docs; see users/{uid}/privateGifts.
-      match /{collection}/{docId} {
+      match /people/{personId} {
+        allow read: if isMember(groupId);
+        allow write: if false;
+      }
+
+      match /keyWraps/{version} {
         allow read: if isMember(groupId);
         allow create, update: if isMember(groupId)
           && request.resource.data.updatedAt is number
           && request.resource.data.ciphertext is string;
-        allow delete: if isMember(groupId);
+        allow delete: if false;
+      }
+
+      match /hidden/{excludedUid}/{collection}/{docId} {
+        allow read: if isMember(groupId) && request.auth.uid != excludedUid;
+        allow create, update: if isMember(groupId)
+          && request.auth.uid != excludedUid
+          && collection in ['states', 'gifts', 'ideas']
+          && request.resource.data.updatedAt is number
+          && request.resource.data.ciphertext is string
+          && request.resource.data.personId is string
+          && personLinked(groupId, request.resource.data.personId) == excludedUid
+          && !personLocked(groupId, request.resource.data.personId);
+        allow delete: if isMember(groupId) && request.auth.uid != excludedUid;
+      }
+
+      match /{collection}/{docId} {
+        allow read: if isMember(groupId)
+          && collection != 'hidden'
+          && collection != 'keyWraps'
+          && collection != 'people';
+        allow create, update: if isMember(groupId)
+          && collection != 'people'
+          && collection != 'hidden'
+          && collection != 'keyWraps'
+          && request.resource.data.updatedAt is number
+          && request.resource.data.ciphertext is string
+          && (
+            collection == 'members'
+            || (
+              collection == 'occasions'
+              && request.resource.data.personId is string
+              && !personLocked(groupId, request.resource.data.personId)
+            )
+            || (
+              (collection == 'states' || collection == 'gifts' || collection == 'ideas')
+              && request.resource.data.personId is string
+              && personLinked(groupId, request.resource.data.personId) == ''
+              && !personLocked(groupId, request.resource.data.personId)
+            )
+          );
+        allow delete: if isMember(groupId)
+          && collection != 'people'
+          && collection != 'hidden'
+          && collection != 'keyWraps'
+          && (
+            collection == 'members'
+            || !(resource.data.personId is string)
+            || !personLocked(groupId, resource.data.personId)
+          );
       }
     }
 
@@ -86,8 +153,10 @@ service cloud.firestore {
         && request.auth.uid in groupData(request.resource.data.groupId).memberIds;
       allow update: if signedIn()
         && request.auth.uid == resource.data.createdBy
+        && request.auth.uid in groupData(resource.data.groupId).memberIds
         && request.resource.data.ciphertext is string
-        && request.resource.data.groupId == resource.data.groupId;
+        && request.resource.data.groupId == resource.data.groupId
+        && (resource.data.active == true || request.resource.data.active == false);
       allow delete: if signedIn() && request.auth.uid == resource.data.createdBy;
     }
 

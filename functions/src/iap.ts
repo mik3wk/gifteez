@@ -1,4 +1,5 @@
 import { createSign, randomBytes } from 'crypto';
+import { classifyAppleVerdict, classifyGoogleVerdict, configuredVerdict, type StoreVerdict } from './entitlement';
 
 export function appleTransactionGrants(payload: {
   productId?: string;
@@ -59,8 +60,20 @@ export async function verifyAppleTransaction(input: {
   bundleId: string;
   productId: string;
 }): Promise<boolean> {
+  const verdict = await verifyAppleVerdict(input);
+  return verdict === 'granted';
+}
+
+export async function verifyAppleVerdict(input: {
+  transactionId: string;
+  privateKey: string;
+  keyId: string;
+  issuerId: string;
+  bundleId: string;
+  productId: string;
+}): Promise<StoreVerdict> {
   if (!input.privateKey || !input.keyId || !input.issuerId) {
-    return false;
+    return 'not_configured';
   }
   const token = buildEs256Jwt(input);
   const hosts = ['https://api.storekit.itunes.apple.com', 'https://api.storekit-sandbox.itunes.apple.com'];
@@ -79,15 +92,15 @@ export async function verifyAppleTransaction(input: {
       continue;
     }
     const payload = decodeJwsPayload(body.signedTransactionInfo);
-    if (appleTransactionGrants({
+    const revocationDate = typeof payload.revocationDate === 'number' ? payload.revocationDate : null;
+    const grants = appleTransactionGrants({
       productId: String(payload.productId ?? ''),
       bundleId: String(payload.bundleId ?? ''),
-      revocationDate: typeof payload.revocationDate === 'number' ? payload.revocationDate : null,
-    }, input.productId, input.bundleId)) {
-      return true;
-    }
+      revocationDate,
+    }, input.productId, input.bundleId);
+    return classifyAppleVerdict({ grants, revocationDate });
   }
-  return false;
+  return 'unknown';
 }
 
 export async function verifyGooglePurchase(input: {
@@ -97,18 +110,32 @@ export async function verifyGooglePurchase(input: {
   serviceAccountJson: string;
   expectedProduct: string;
 }): Promise<boolean> {
+  const verdict = await verifyGoogleVerdict(input);
+  return verdict === 'granted';
+}
+
+export async function verifyGoogleVerdict(input: {
+  packageName: string;
+  productId: string;
+  purchaseToken: string;
+  serviceAccountJson: string;
+  expectedProduct: string;
+}): Promise<StoreVerdict> {
   if (!input.serviceAccountJson || !input.packageName || !input.purchaseToken) {
-    return false;
+    return configuredVerdict(false, 'unknown');
   }
   const account = JSON.parse(input.serviceAccountJson) as { client_email: string; private_key: string };
   const accessToken = await googleAccessToken(account.client_email, account.private_key);
   const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(input.packageName)}/purchases/products/${encodeURIComponent(input.productId)}/tokens/${encodeURIComponent(input.purchaseToken)}`;
   const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!response.ok) {
-    return false;
+    return 'unknown';
   }
   const body = (await response.json()) as { purchaseState?: number };
-  return googlePurchaseGrants(body, input.expectedProduct, input.productId);
+  return classifyGoogleVerdict({
+    purchaseState: body.purchaseState,
+    productMatches: input.productId === input.expectedProduct,
+  });
 }
 
 async function googleAccessToken(clientEmail: string, privateKey: string): Promise<string> {

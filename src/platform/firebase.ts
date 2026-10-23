@@ -15,10 +15,12 @@ import {
   sendSignInLinkToEmail,
   signInWithPhoneNumber,
   connectAuthEmulator,
+  deleteUser,
 } from '@react-native-firebase/auth';
 import {
   collection,
   connectFirestoreEmulator,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -50,6 +52,7 @@ export type SealedDoc = {
   updatedAt: number;
   deleted: boolean;
   ciphertext: string;
+  personId?: string;
 };
 
 let started = false;
@@ -103,6 +106,14 @@ export function currentUid(): string | null {
 
 export function currentUserIsAnonymous(): boolean {
   return getAuth().currentUser?.isAnonymous ?? true;
+}
+
+export async function deleteCurrentUser(): Promise<void> {
+  const user = getAuth().currentUser;
+  if (!user) {
+    return;
+  }
+  await deleteUser(user);
 }
 
 export async function sendMagicLink(env: AppEnv, email: string): Promise<void> {
@@ -180,7 +191,42 @@ export async function writeSealed(
     updatedAt: sealed.updatedAt,
     deleted: sealed.deleted,
     ciphertext: sealed.ciphertext,
+    ...(sealed.personId ? { personId: sealed.personId } : {}),
   });
+}
+
+export async function deleteSealed(groupId: string, collectionName: string, id: string): Promise<void> {
+  await deleteDoc(doc(getFirestore(), 'groups', groupId, collectionName, id));
+}
+
+export async function writeHidden(groupId: string, excludedUid: string, collectionName: string, sealed: SealedDoc): Promise<void> {
+  await setDoc(doc(getFirestore(), 'groups', groupId, 'hidden', excludedUid, collectionName, sealed.id), {
+    updatedAt: sealed.updatedAt,
+    deleted: sealed.deleted,
+    ciphertext: sealed.ciphertext,
+    ...(sealed.personId ? { personId: sealed.personId } : {}),
+  });
+}
+
+export async function readHidden(groupId: string, excludedUid: string, collectionName: string): Promise<SealedDoc[]> {
+  const snap = await getDocs(collection(getFirestore(), 'groups', groupId, 'hidden', excludedUid, collectionName));
+  return snap.docs.map(item => sealedFrom(item.id, item.data() as Partial<SealedDoc>));
+}
+
+export async function writeKeyWrap(groupId: string, version: string, ciphertext: string): Promise<void> {
+  await setDoc(doc(getFirestore(), 'groups', groupId, 'keyWraps', version), {
+    updatedAt: Date.now(),
+    ciphertext,
+  });
+}
+
+export async function readKeyWrap(groupId: string, version: string): Promise<string | null> {
+  const snap = await getDoc(doc(getFirestore(), 'groups', groupId, 'keyWraps', version));
+  if (!snap.exists()) {
+    return null;
+  }
+  const data = snap.data() as { ciphertext?: unknown };
+  return typeof data.ciphertext === 'string' ? data.ciphertext : null;
 }
 
 export async function writePrivateGift(uid: string, sealed: SealedDoc): Promise<void> {
@@ -206,15 +252,17 @@ export async function readPrivateGifts(uid: string): Promise<SealedDoc[]> {
 
 export async function readSealed(groupId: string, collectionName: string): Promise<SealedDoc[]> {
   const snap = await getDocs(collection(getFirestore(), 'groups', groupId, collectionName));
-  return snap.docs.map(item => {
-    const data = item.data() as Partial<SealedDoc>;
-    return {
-      id: item.id,
-      updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : 0,
-      deleted: Boolean(data.deleted),
-      ciphertext: typeof data.ciphertext === 'string' ? data.ciphertext : '',
-    };
-  });
+  return snap.docs.map(item => sealedFrom(item.id, item.data() as Partial<SealedDoc>));
+}
+
+function sealedFrom(id: string, data: Partial<SealedDoc>): SealedDoc {
+  return {
+    id,
+    updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : 0,
+    deleted: Boolean(data.deleted),
+    ciphertext: typeof data.ciphertext === 'string' ? data.ciphertext : '',
+    ...(typeof data.personId === 'string' ? { personId: data.personId } : {}),
+  };
 }
 
 export async function createInvite(groupId: string, inviteId: string, uid: string, ciphertext: string): Promise<void> {

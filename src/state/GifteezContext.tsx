@@ -17,7 +17,11 @@ import {
 } from '../crypto/crypto';
 import { ideaCacheId, suggestIdeas } from '../domain/ideas';
 import { claimOccasion as claimOccasionSnapshot, claimWarningUid, claimerName, unclaimOccasion as unclaimOccasionSnapshot } from '../domain/claims';
-import { applyMerge, findDuplicatePeople, mergePrivateGifts, type DuplicateHint } from '../domain/merge';
+import { adoptSignedInAccount, showStaleList } from '../domain/accountSwitch';
+import { deleteOccasion, deletePrivateGift, deleteSharedGift, updateOccasionDate, updatePrivateGift, updateSharedGift } from '../domain/edits';
+import { applyMerge, commitMergeSource, findDuplicatePeople, mergePrivateGifts, undoMerge, type DuplicateHint } from '../domain/merge';
+import { planReminders } from '../domain/reminders';
+import { bodyWithoutHidden, pushKind, stripSensitiveForViewer } from '../domain/visibility';
 import { classifyStartupError, startupCause, type StartupFailure } from '../domain/startup';
 import { performJoin } from '../domain/joinFlow';
 import {
@@ -29,11 +33,13 @@ import {
   canStartAnotherList,
   createGroup,
   defaultOccasionDate,
-  exportList,
+  clearClaimsForUid,
+  exportAccount,
+  groupCurrency,
   groupDisplayName,
+  isRealMonthDay,
   groupMarker,
   leaveActiveGroup,
-  listOwnerEntitled,
   logPurchase,
   memberNames,
   parkActive,
@@ -46,6 +52,7 @@ import {
   removeMember,
   renameGroup,
   saveIdea,
+  setGroupCurrency,
   switchGroup as switchGroupSnapshot,
   sillyName,
   upcomingOccasion,
@@ -65,8 +72,7 @@ import {
   type PrivateGift,
   type RemoteRecord,
 } from '../domain/types';
-import { formatMoney } from '../i18n';
-import { t } from '../i18n';
+import { currencyForLocale, deviceLocale, formatMoney, t, todayIso } from '../i18n';
 import { readCacheBlob, writeCacheBlob } from '../platform/cache';
 import { deviceId } from '../platform/device';
 import {
@@ -76,17 +82,24 @@ import {
   createInvite,
   readInvite,
   currentUid,
+  deleteCurrentUser,
+  deleteSealed,
   downloadSkin,
   ensureAnonymousUser,
   finishMagicLink,
   initFirebase,
   listRecovery,
   readGroupDocument,
+  readHidden,
+  readKeyWrap,
   readPrivateGifts,
+  readRecovery,
   readSealed,
   sendMagicLink,
   sendSmsCode,
   updateGroupDocument,
+  writeHidden,
+  writeKeyWrap,
   writePrivateGift,
   writeRecovery,
   writeSealed,
@@ -94,6 +107,7 @@ import {
 } from '../platform/firebase';
 import { importContacts, sweepBirthdays } from '../platform/importers';
 import { buyUnlock, connectStore, finishOwned, listenToPurchases, loadOwned, purchaseProof, type StoreProduct } from '../platform/iap';
+import { applyReminderPlan, requestReminderPermission } from '../platform/reminders';
 import { deleteSecret, loadSecret, saveSecret } from '../platform/secure';
 import { colorsFor, parseSkin, resolveSkin, type SkinId, type ThemeColors } from '../theme/skins';
 
@@ -132,6 +146,12 @@ type GifteezApi = {
   addOccasion: (personId: string, type: OccasionType, month?: number, day?: number, year?: number) => Promise<void>;
   saveIdeaFor: (occasionId: string, idea: string) => Promise<void>;
   logGift: (occasionId: string, title: string, price: string, date: string) => Promise<void>;
+  updateGift: (giftId: string, title: string, price: string, date: string, privateGift: boolean) => Promise<void>;
+  deleteGift: (giftId: string, privateGift: boolean) => Promise<void>;
+  updateOccasion: (occasionId: string, month: number, day: number, year?: number) => Promise<void>;
+  deleteOccasion: (occasionId: string) => Promise<void>;
+  linkRecipient: (personId: string, linkedUid: string) => Promise<void>;
+  undoMerge: () => Promise<void>;
   claimOccasion: (occasionId: string) => Promise<void>;
   unclaimOccasion: (occasionId: string) => Promise<void>;
   mergePeople: (input: {
@@ -150,6 +170,10 @@ type GifteezApi = {
   shareInvite: () => Promise<string>;
   leave: () => Promise<void>;
   removeGroupMember: (uid: string) => Promise<void>;
+  transferOwnership: (uid: string) => Promise<void>;
+  setListCurrency: (currency: string) => Promise<void>;
+  setReminders: (enabled: boolean) => Promise<void>;
+  deleteAccount: () => Promise<void>;
   renameList: (name: string) => Promise<void>;
   showRecovery: () => Promise<string | null>;
   exportText: () => string;
@@ -213,17 +237,29 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       await commit(flushed);
       current = snapshotRef.current;
     }
-    if (!current.group || !current.profile.uid) {
+    if (!current.profile.uid) {
       return current;
+    }
+    current = await flushPendingMembership(current, env);
+    if (!current.group) {
+      current = await pullOtherGroups(current, env);
+      await commit(current);
+      return snapshotRef.current;
     }
     const groupKey = await loadGroupKeyString(current.group.id);
     if (!groupKey) {
-      return current;
+      current = markGroupStale(current, current.group.id, true);
+      current = await pullOtherGroups(current, env);
+      await commit(current);
+      return snapshotRef.current;
     }
     const groupId = current.group.id;
-    const key = keyFromString(groupKey);
+    let key = keyFromString(groupKey);
     let next = current;
     try {
+      const rotated = await rotateIfNeeded(next, key, env);
+      next = rotated.snapshot;
+      key = rotated.key;
       await pushSnapshot(next, key, env);
       next = await flushDirtyArchives(next, env);
       next = await flushPrivateGifts(next);
@@ -235,51 +271,19 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         delete cleared[name];
       });
       next = { ...next, dirty: cleared };
-      const remoteGroup = await readGroupDocument(groupId);
-      const localGroup = next.group;
-      if (remoteGroup && localGroup) {
-        const sealedName = openJson<{ name?: string }>(String(remoteGroup.ciphertext ?? ''), key);
-        const mergedGroup = applyGroupRemote(next, {
-          id: groupId,
-          name: sealedName.name || localGroup.name,
-          ownerId: String(remoteGroup.ownerId ?? localGroup.ownerId),
-          memberIds: Array.isArray(remoteGroup.memberIds) ? remoteGroup.memberIds.map(String) : localGroup.memberIds,
-          peopleCount: Number(remoteGroup.peopleCount ?? localGroup.peopleCount),
-          entitled: Boolean(remoteGroup.entitled),
-          updatedAt: Number(remoteGroup.updatedAt ?? localGroup.updatedAt),
-        });
-        next = mergedGroup.snapshot;
-        if (mergedGroup.updatedFromOtherDevice) {
-          setNotice(t('sync.otherDevice'));
-        }
-      }
-      const remoteRecords: RemoteRecord[] = [];
-      for (const name of COLLECTIONS) {
-        const docs = await readSealed(groupId, name);
-        docs.forEach(item => {
-          if (!item.ciphertext) {
-            return;
-          }
-          try {
-            remoteRecords.push({
-              collection: name,
-              id: item.id,
-              updatedAt: item.updatedAt,
-              deleted: item.deleted,
-              data: openJson<Record<string, unknown>>(item.ciphertext, key),
-            });
-          } catch {
-            // Skip a record this phone cannot decrypt.
-          }
-        });
-      }
-      const merged = mergeRemote(next, remoteRecords);
-      next = merged.snapshot;
-      if (merged.updatedFromOtherDevice) {
-        setNotice(t('sync.otherDevice'));
-      }
+      next = await absorbGroup(next, groupId, key, true);
+      next = stripSensitiveForViewer(next);
+      next = await pullOtherGroups(next, env);
+      await migrateDeviceRecovery(next);
+      await scheduleReminders(next);
       await commit(next);
     } catch (caught) {
+      if (caught instanceof CapError) {
+        fail('cap');
+        const dropped = dropPerson(snapshotRef.current, caught.personId);
+        await commit(dropped);
+        return snapshotRef.current;
+      }
       if (isOneListError(caught) && (snapshotRef.current.releasedGroupIds ?? []).length === 0) {
         fail('oneList');
         await commit(leaveActiveGroup(snapshotRef.current));
@@ -379,8 +383,12 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   useEffect(() => {
     const stop = listenToPurchases(purchase => {
       verifyPurchase(env, purchaseProof(purchase))
-        .then(async paid => {
-          if (paid) {
+        .then(async result => {
+          if (result.reason === 'revoked') {
+            await commit(withAccountUnlock(snapshotRef.current, false));
+            return;
+          }
+          if (result.verified) {
             await commit(withAccountUnlock(snapshotRef.current, true));
             await finishOwned(purchase);
           }
@@ -480,6 +488,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         displayName: name,
         groupName,
         inviteId,
+        currency: currencyForLocale(deviceLocale()),
         now: Date.now(),
       });
       await commit(next);
@@ -487,7 +496,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       try {
         const created = await callFunction<{ groupId: string; entitled: boolean }>(env, 'createOwnedGroup', {
           groupId,
-          ciphertext: sealJson({ name: next.group?.name ?? '' }, groupKey),
+          ciphertext: sealJson({ name: next.group?.name ?? '', currency: groupCurrency(next.group) }, groupKey),
           updatedAt: next.group?.updatedAt ?? Date.now(),
           deviceId: await deviceId(),
         });
@@ -497,6 +506,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         await writeSealed(groupId, 'members', sealMember(uid, name, groupKey, Date.now()));
         await publishPreview(snapshotRef.current, groupKey);
         await writeRecovery(uid, groupId, wrapKey(groupKey, code));
+        await writeRecovery(uid, 'device', wrapKey(await ensureDeviceKey(), code));
         next = { ...snapshotRef.current, dirty: {} };
         await commit(next);
       } catch (caught) {
@@ -551,15 +561,20 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       try {
         const mode = await finishMagicLink(email, link.trim());
         const uid = currentUid();
+        if (mode === 'signed-in' && uid) {
+          await commit(adoptSignedInAccount(snapshotRef.current, uid, Date.now()));
+          await sync();
+          if (!snapshotRef.current.group) {
+            setNotice(t('join.needAccount'));
+          }
+          return;
+        }
         await commit(withProfile(snapshotRef.current, {
           uid,
           upgraded: true,
           pendingEmail: null,
           upgradeBannerDismissed: true,
         }));
-        if (mode === 'signed-in') {
-          setNotice(t('join.needAccount'));
-        }
       } catch {
         fail('auth');
       }
@@ -584,9 +599,18 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return;
       }
       try {
-        await confirmSmsCode(verificationId, code);
+        const mode = await confirmSmsCode(verificationId, code);
+        const uid = currentUid();
+        if (mode === 'signed-in' && uid) {
+          await commit(adoptSignedInAccount(snapshotRef.current, uid, Date.now()));
+          await sync();
+          if (!snapshotRef.current.group) {
+            setNotice(t('join.needAccount'));
+          }
+          return;
+        }
         await commit(withProfile(snapshotRef.current, {
-          uid: currentUid(),
+          uid,
           upgraded: true,
           pendingVerificationId: null,
           upgradeBannerDismissed: true,
@@ -647,38 +671,27 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       try {
         const wraps = await listRecovery(uid);
+        let opened = 0;
         for (const wrap of wraps) {
           try {
             const key = unwrapKey(wrap, code);
-            await saveSecret(groupKeyAccount(wrap.groupId), keyToString(key));
-            const parked = parkActive(withProfile(snapshotRef.current, { uid, onboarded: true, upgraded: true }));
-            await commit({
-              ...parked,
-              profile: { ...parked.profile, groupId: wrap.groupId, inviteId: null },
-              group: {
-                id: wrap.groupId,
-                name: '',
-                ownerId: uid,
-                memberIds: [uid],
-                peopleCount: 0,
-                entitled: false,
-                updatedAt: 0,
-              },
-              members: [],
-              people: [],
-              occasions: [],
-              states: [],
-              gifts: [],
-              ideas: [],
-              dirty: {},
-            });
-            await sync(snapshotRef.current);
-            return;
+            if (wrap.groupId === 'device') {
+              await saveSecret('device-key', keyToString(key));
+            } else {
+              await saveSecret(groupKeyAccount(wrap.groupId), keyToString(key));
+            }
+            opened += 1;
           } catch {
             // Try the next wrapped key.
           }
         }
-        fail('invalid');
+        if (opened === 0) {
+          fail('invalid');
+          return;
+        }
+        const restored = adoptSignedInAccount(snapshotRef.current, uid, Date.now());
+        await commit({ ...restored, profile: { ...restored.profile, upgraded: true, onboarded: true } });
+        await sync(snapshotRef.current);
       } catch {
         fail('auth');
       }
@@ -688,21 +701,6 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       if (!name) {
         fail('invalid');
         return null;
-      }
-      if (!input.imported) {
-        try {
-          const claim = await callFunction<{ ok: boolean }>(env, 'claimPersonSlot', {
-            deviceId: await deviceId(),
-            action: 'add',
-            groupId: snapshotRef.current.group?.id ?? '',
-          });
-          if (!claim.ok && !listOwnerEntitled(snapshotRef.current)) {
-            fail('cap');
-            return null;
-          }
-        } catch {
-          // Offline or functions not deployed: the local cap still applies.
-        }
       }
       const now = Date.now();
       const person: Person = {
@@ -739,11 +737,6 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return;
       }
       await commit(result.snapshot);
-      callFunction(env, 'claimPersonSlot', {
-        deviceId: await deviceId(),
-        action: 'remove',
-        groupId: snapshotRef.current.group?.id ?? '',
-      }).catch(() => undefined);
       sync().catch(() => undefined);
     },
     addOccasion: async (personId, type, month, day, year) => {
@@ -758,11 +751,17 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         year,
         updatedAt: Date.now(),
       };
-      if (occasion.month < 1 || occasion.month > 12 || occasion.day < 1 || occasion.day > 31) {
+      if (!isRealMonthDay(occasion.month, occasion.day)) {
         fail('invalid');
         return;
       }
-      await commit(addOccasion(snapshotRef.current, occasion));
+      let next = addOccasion(snapshotRef.current, occasion);
+      if ((next.profile.reminders ?? 'unset') === 'unset') {
+        const granted = await requestReminderPermission();
+        next = withProfile(next, { reminders: granted ? 'on' : 'off' });
+      }
+      await commit(next);
+      scheduleReminders(snapshotRef.current).catch(() => undefined);
       sync().catch(() => undefined);
     },
     saveIdeaFor: async (occasionId, idea) => {
@@ -779,8 +778,12 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         fail('invalid');
         return;
       }
-      const priceCents = parseBudget(price) ?? 0;
-      const purchasedOn = date || new Date().toISOString().slice(0, 10);
+      const priceCents = parseBudget(price);
+      if (priceCents == null) {
+        fail('price');
+        return;
+      }
+      const purchasedOn = date.trim() ? date.trim() : todayIso();
       const year = Number(purchasedOn.slice(0, 4)) || occurrenceYear(occasion, new Date());
       const uid = snapshotRef.current.profile.uid;
       const warningUid = claimWarningUid({
@@ -856,6 +859,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         fail('auth');
         return false;
       }
+      const sourceKey = await loadGroupKeyString(input.sourceGroupId);
       const result = applyMerge({
         snapshot: snapshotRef.current,
         targetPersonId: input.targetPersonId,
@@ -867,23 +871,29 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         now: Date.now(),
         freeLimit: env.freeTierMaxPeople,
         newId: randomId,
+        sourceKeyPresent: Boolean(sourceKey),
+        deleteSource: false,
       });
       if (!result.ok) {
         fail(result.error);
         return false;
       }
       await commit(result.snapshot);
-      setDuplicateOffers(current =>
-        current.filter(offer => offer.sourcePersonId !== input.sourcePersonId || offer.sourceGroupId !== input.sourceGroupId),
-      );
-      setNotice(t('merge.done'));
-      callFunction(env, 'claimPersonSlot', {
-        deviceId: await deviceId(),
-        action: 'remove',
-        groupId: input.sourceGroupId,
-      }).catch(() => undefined);
-      sync().catch(() => undefined);
-      return true;
+      try {
+        await pushCurrent(snapshotRef.current, env);
+        const committed = commitMergeSource(snapshotRef.current, Date.now());
+        await commit(committed);
+        await pushCurrent(snapshotRef.current, env);
+        setDuplicateOffers(current =>
+          current.filter(offer => offer.sourcePersonId !== input.sourcePersonId || offer.sourceGroupId !== input.sourceGroupId),
+        );
+        setNotice(t('merge.done'));
+        return true;
+      } catch {
+        await commit(undoMerge(snapshotRef.current, Date.now()));
+        fail('mergePush');
+        return false;
+      }
     },
     duplicateOffers,
     dismissDuplicateOffer: (sourcePersonId, sourceGroupId, targetPersonId) => {
@@ -1055,31 +1065,88 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       const groupId = current.group.id;
       const ownerClosing = current.group.ownerId === uid && remaining.length === 0;
       let released = true;
+      const cleared = clearClaimsForUid(current, uid, Date.now());
       try {
         if (ownerClosing) {
           await callFunction(env, 'releaseOwnedGroup', { groupId });
         } else {
-          await updateGroupDocument(current.group.id, { memberIds: remaining, updatedAt: Date.now() });
+          await callFunction(env, 'leaveGroup', { groupId });
         }
       } catch {
         released = false;
         setNotice(t('sync.offline'));
       }
-      let next = leaveActiveGroup(current);
-      if (ownerClosing && !released) {
-        next = { ...next, releasedGroupIds: [...(current.releasedGroupIds ?? []), groupId] };
+      let next = leaveActiveGroup(cleared);
+      if (!released) {
+        next = {
+          ...next,
+          pendingMembership: [...(next.pendingMembership ?? []), { action: 'leave', groupId, uid }],
+          ...(ownerClosing ? { releasedGroupIds: [...(current.releasedGroupIds ?? []), groupId] } : {}),
+        };
       }
       await commit(next);
       sync().catch(() => undefined);
     },
     removeGroupMember: async uid => {
-      const result = removeMember(snapshotRef.current, uid, Date.now());
+      const current = snapshotRef.current;
+      const result = removeMember(current, uid, Date.now());
       if (!result.ok) {
         fail(result.error);
         return;
       }
+      const groupId = current.group?.id;
+      if (groupId) {
+        try {
+          await callFunction(env, 'revokeMember', { groupId, uid });
+        } catch {
+          result.snapshot.pendingMembership = [...(result.snapshot.pendingMembership ?? []), { action: 'remove', groupId, uid }];
+          setNotice(t('sync.offline'));
+        }
+      }
       await commit(result.snapshot);
       sync().catch(() => undefined);
+    },
+    transferOwnership: async uid => {
+      const groupId = snapshotRef.current.group?.id;
+      if (!groupId) {
+        return;
+      }
+      try {
+        await callFunction(env, 'transferOwnership', { groupId, nextOwnerId: uid });
+        await sync();
+      } catch (caught) {
+        fail(isOneListError(caught) ? 'oneList' : 'forbidden');
+      }
+    },
+    setListCurrency: async currency => {
+      await commit(setGroupCurrency(snapshotRef.current, currency, Date.now()));
+      sync().catch(() => undefined);
+    },
+    setReminders: async enabled => {
+      if (enabled) {
+        const granted = await requestReminderPermission();
+        await commit(withProfile(snapshotRef.current, { reminders: granted ? 'on' : 'off' }));
+        if (!granted) {
+          fail('notifications');
+        }
+      } else {
+        await commit(withProfile(snapshotRef.current, { reminders: 'off' }));
+      }
+      await scheduleReminders(snapshotRef.current);
+    },
+    deleteAccount: async () => {
+      const uid = snapshotRef.current.profile.uid;
+      if (!uid) {
+        fail('auth');
+        return;
+      }
+      try {
+        await callFunction(env, 'deleteAccount', {});
+        await deleteCurrentUser();
+        await commit(emptySnapshot(Date.now()));
+      } catch {
+        fail('auth');
+      }
     },
     renameList: async name => {
       await commit(renameGroup(snapshotRef.current, name.trim(), Date.now()));
@@ -1098,7 +1165,109 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       return loadSecret(recoveryAccount(id));
     },
-    exportText: () => exportList(snapshotRef.current, new Date(), formatMoney),
+    exportText: () => exportAccount(snapshotRef.current, new Date(), (cents, currency) => formatMoney(cents, deviceLocale(), currency)) ?? '',
+    updateGift: async (giftId, title, price, date, privateGift) => {
+      const priceCents = parseBudget(price);
+      if (priceCents == null || !title.trim()) {
+        fail('price');
+        return;
+      }
+      const purchasedOn = date.trim() ? date.trim() : todayIso();
+      const result = privateGift
+        ? updatePrivateGift({ snapshot: snapshotRef.current, giftId, title, priceCents, purchasedOn, now: Date.now() })
+        : updateSharedGift({ snapshot: snapshotRef.current, giftId, uid: snapshotRef.current.profile.uid, title, priceCents, purchasedOn, now: Date.now() });
+      if (!result.ok) {
+        fail(result.error);
+        return;
+      }
+      await commit(result.snapshot);
+      sync().catch(() => undefined);
+    },
+    deleteGift: async (giftId, privateGift) => {
+      const result = privateGift
+        ? deletePrivateGift(snapshotRef.current, giftId, Date.now())
+        : deleteSharedGift({ snapshot: snapshotRef.current, giftId, uid: snapshotRef.current.profile.uid, now: Date.now() });
+      if (!result.ok) {
+        fail(result.error);
+        return;
+      }
+      await commit(result.snapshot);
+      sync().catch(() => undefined);
+    },
+    updateOccasion: async (occasionId, month, day, year) => {
+      const result = updateOccasionDate({ snapshot: snapshotRef.current, occasionId, month, day, year, now: Date.now() });
+      if (!result.ok) {
+        fail(result.error);
+        return;
+      }
+      await commit(result.snapshot);
+      scheduleReminders(snapshotRef.current).catch(() => undefined);
+      sync().catch(() => undefined);
+    },
+    deleteOccasion: async occasionId => {
+      const result = deleteOccasion(snapshotRef.current, occasionId, Date.now());
+      if (!result.ok) {
+        fail(result.error);
+        return;
+      }
+      await commit(result.snapshot);
+      scheduleReminders(snapshotRef.current).catch(() => undefined);
+      sync().catch(() => undefined);
+    },
+    linkRecipient: async (personId, linkedUid) => {
+      const current = snapshotRef.current;
+      const groupId = current.group?.id;
+      if (!groupId || current.group?.ownerId !== current.profile.uid) {
+        fail('forbidden');
+        return;
+      }
+      try {
+        await callFunction(env, 'linkRecipient', {
+          groupId,
+          personId,
+          linkedUid,
+          states: current.states.filter(item => item.personId === personId).map(item => item.id),
+          gifts: current.gifts.filter(item => item.personId === personId).map(item => item.id),
+          ideas: current.ideas.filter(item => item.personId === personId).map(item => item.id),
+        });
+      } catch {
+        setNotice(t('sync.offline'));
+        return;
+      }
+      const now = Date.now();
+      const linked = updatePerson(current, personId, { linkedUid }, now);
+      if (!linked.ok) {
+        return;
+      }
+      const hidden = linkedUid || '';
+      const dirty = { ...linked.snapshot.dirty };
+      const stamp = <T extends { id: string; personId: string; hiddenFrom?: string; updatedAt: number }>(rows: T[], collection: string): T[] =>
+        rows.map(item => {
+          if (item.personId !== personId) {
+            return item;
+          }
+          const next = { ...item, updatedAt: now };
+          if (hidden) {
+            next.hiddenFrom = hidden;
+          } else {
+            delete next.hiddenFrom;
+          }
+          dirty[dirtyKey(collection, item.id)] = true;
+          return next;
+        });
+      await commit({
+        ...linked.snapshot,
+        states: stamp(linked.snapshot.states, 'states'),
+        gifts: stamp(linked.snapshot.gifts, 'gifts'),
+        ideas: stamp(linked.snapshot.ideas, 'ideas'),
+        dirty,
+      });
+      sync().catch(() => undefined);
+    },
+    undoMerge: async () => {
+      await commit(undoMerge(snapshotRef.current, Date.now()));
+      sync().catch(() => undefined);
+    },
     dismissBanner: async () => {
       await commit(withProfile(snapshotRef.current, { upgradeBannerDismissed: true }));
     },
@@ -1118,7 +1287,11 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         }
         for (const purchase of owned) {
           const paid = await verifyPurchase(env, purchaseProof(purchase));
-          if (paid) {
+          if (paid.reason === 'revoked') {
+            await commit(withAccountUnlock(snapshotRef.current, false));
+            return;
+          }
+          if (paid.verified) {
             await commit(withAccountUnlock(snapshotRef.current, true));
             await finishOwned(purchase);
             return;
@@ -1216,9 +1389,11 @@ async function loadSnapshot(): Promise<AppSnapshot> {
     return {
       ...base,
       ...parsed,
-      profile: { ...base.profile, ...parsed.profile },
       releasedGroupIds: Array.isArray(parsed.releasedGroupIds) ? parsed.releasedGroupIds : [],
       privateGifts: Array.isArray(parsed.privateGifts) ? parsed.privateGifts : [],
+      mergeJournal: parsed.mergeJournal ?? null,
+      pendingMembership: Array.isArray(parsed.pendingMembership) ? parsed.pendingMembership : [],
+      profile: { ...base.profile, ...parsed.profile, reminders: parsed.profile.reminders ?? 'unset' },
     };
   } catch {
     return emptySnapshot(Date.now());
@@ -1263,6 +1438,14 @@ function sealMember(uid: string, displayName: string, key: Uint8Array, now: numb
   };
 }
 
+class CapError extends Error {
+  personId: string;
+  constructor(personId: string) {
+    super('cap');
+    this.personId = personId;
+  }
+}
+
 async function pushSnapshot(snapshot: AppSnapshot, key: Uint8Array, env: AppEnv): Promise<boolean> {
   if (!snapshot.group) {
     return false;
@@ -1276,29 +1459,16 @@ async function pushSnapshot(snapshot: AppSnapshot, key: Uint8Array, env: AppEnv)
       }
       await callFunction(env, 'createOwnedGroup', {
         groupId,
-        ciphertext: sealJson({ name: snapshot.group.name }, key),
+        ciphertext: sealJson({ name: snapshot.group.name, currency: groupCurrency(snapshot.group) }, key),
         updatedAt: snapshot.group.updatedAt,
         deviceId: await deviceId(),
       });
     }
-    let currentCount = existing ? Number(existing.peopleCount ?? 0) : 0;
-    const target = snapshot.group.peopleCount;
-    while (currentCount < target) {
-      currentCount += 1;
-      await updateGroupDocument(groupId, { peopleCount: currentCount, updatedAt: Date.now() });
-    }
-    while (currentCount > target) {
-      currentCount -= 1;
-      await updateGroupDocument(groupId, { peopleCount: currentCount, updatedAt: Date.now() });
-    }
-    const fields: Record<string, unknown> = {
-      ciphertext: sealJson({ name: snapshot.group.name }, key),
+    // Membership, rotation, and the recipient count are server-owned. A client write cannot drop a member.
+    await updateGroupDocument(groupId, {
+      ciphertext: sealJson({ name: snapshot.group.name, currency: groupCurrency(snapshot.group) }, key),
       updatedAt: snapshot.group.updatedAt,
-    };
-    if (snapshot.dirty['group:members']) {
-      fields.memberIds = snapshot.group.memberIds;
-    }
-    await updateGroupDocument(groupId, fields);
+    });
   }
   for (const name of COLLECTIONS) {
     const records = recordsFor(snapshot, name);
@@ -1306,15 +1476,54 @@ async function pushSnapshot(snapshot: AppSnapshot, key: Uint8Array, env: AppEnv)
       if (!snapshot.dirty[dirtyKey(name, record.id)]) {
         continue;
       }
-      await writeSealed(groupId, name, {
+      const personId = typeof record.body.personId === 'string' ? record.body.personId : undefined;
+      const sealed: SealedDoc = {
         id: record.id,
         updatedAt: record.updatedAt,
         deleted: Boolean(record.deleted),
-        ciphertext: sealJson(record.body, key),
-      });
+        ciphertext: sealJson(bodyWithoutHidden(record.body), key),
+        ...(personId ? { personId } : {}),
+      };
+      if (name === 'people') {
+        try {
+          await callFunction(env, 'writePerson', {
+            groupId,
+            personId: record.id,
+            ciphertext: sealed.ciphertext,
+            updatedAt: record.updatedAt,
+            deleted: Boolean(record.deleted),
+            createdAt: Number(record.body.createdAt ?? record.updatedAt),
+          });
+        } catch (caught) {
+          const message = caught instanceof Error ? caught.message : '';
+          if (message.includes('cap') && !record.deleted) {
+            throw new CapError(record.id);
+          }
+          throw caught;
+        }
+        continue;
+      }
+      const kind = pushKind(name, record.hiddenFrom);
+      if (kind === 'hidden' && record.hiddenFrom) {
+        await writeHidden(groupId, record.hiddenFrom, name, sealed);
+        deleteSealed(groupId, name, record.id).catch(() => undefined);
+      } else {
+        await writeSealed(groupId, name, sealed);
+      }
     }
   }
   return true;
+}
+
+async function pushCurrent(snapshot: AppSnapshot, env: AppEnv): Promise<void> {
+  if (snapshot.group) {
+    const secret = await loadGroupKeyString(snapshot.group.id);
+    if (secret) {
+      await pushSnapshot(snapshot, keyFromString(secret), env);
+    }
+  }
+  await flushDirtyArchives(snapshot, env);
+  await flushPrivateGifts(snapshot);
 }
 
 function snapshotForArchive(base: AppSnapshot, archive: GroupArchive): AppSnapshot {
@@ -1419,21 +1628,394 @@ async function flushPrivateGifts(snapshot: AppSnapshot): Promise<AppSnapshot> {
   return { ...snapshot, privateGifts, dirty };
 }
 
-function recordsFor(snapshot: AppSnapshot, name: (typeof COLLECTIONS)[number]): Array<{ id: string; updatedAt: number; deleted?: boolean; body: Record<string, unknown> }> {
-  const source = snapshot[name] as Array<{ id: string; updatedAt: number; deleted?: boolean }>;
+function recordsFor(snapshot: AppSnapshot, name: (typeof COLLECTIONS)[number]): Array<{ id: string; updatedAt: number; deleted?: boolean; hiddenFrom?: string; body: Record<string, unknown> }> {
+  const source = snapshot[name] as Array<{ id: string; updatedAt: number; deleted?: boolean; hiddenFrom?: string }>;
   return source.map(item => {
-    const { id, updatedAt, deleted, ...body } = item;
-    return { id, updatedAt, deleted, body: body as Record<string, unknown> };
+    const { id, updatedAt, deleted, hiddenFrom, ...body } = item;
+    return { id, updatedAt, deleted, hiddenFrom, body: body as Record<string, unknown> };
   });
 }
 
-async function verifyPurchase(env: AppEnv, proof: { transactionId: string; token: string; platform: 'ios' | 'android' }): Promise<boolean> {
-  const result = await callFunction<{ verified: boolean }>(env, 'verifyUnlock', {
+function markGroupStale(snapshot: AppSnapshot, groupId: string, stale: boolean): AppSnapshot {
+  const roster = snapshot.roster.map(item => (item.id === groupId ? { ...item, stale } : item));
+  if (snapshot.group?.id === groupId) {
+    return { ...snapshot, roster, group: { ...snapshot.group, stale } };
+  }
+  const archive = snapshot.archives[groupId];
+  if (!archive) {
+    return { ...snapshot, roster };
+  }
+  return {
+    ...snapshot,
+    roster,
+    archives: { ...snapshot.archives, [groupId]: { ...archive, group: { ...archive.group, stale } } },
+  };
+}
+
+function dropPerson(snapshot: AppSnapshot, personId: string): AppSnapshot {
+  const people = snapshot.people.filter(person => person.id !== personId);
+  const group = snapshot.group
+    ? { ...snapshot.group, peopleCount: people.filter(person => !person.deleted).length }
+    : snapshot.group;
+  const dirty = { ...snapshot.dirty };
+  delete dirty[dirtyKey('people', personId)];
+  return { ...snapshot, people, group, dirty };
+}
+
+async function flushPendingMembership(snapshot: AppSnapshot, env: AppEnv): Promise<AppSnapshot> {
+  const pending = snapshot.pendingMembership ?? [];
+  if (pending.length === 0) {
+    return snapshot;
+  }
+  const left = [];
+  for (const item of pending) {
+    try {
+      if (item.action === 'leave') {
+        await callFunction(env, 'leaveGroup', { groupId: item.groupId });
+      } else {
+        await callFunction(env, 'revokeMember', { groupId: item.groupId, uid: item.uid });
+      }
+    } catch {
+      left.push(item);
+    }
+  }
+  return { ...snapshot, pendingMembership: left };
+}
+
+async function migrateDeviceRecovery(snapshot: AppSnapshot): Promise<void> {
+  const uid = snapshot.profile.uid;
+  if (!uid) {
+    return;
+  }
+  const existing = await readRecovery(uid, 'device').catch(() => null);
+  if (existing?.wrapped && existing.salt) {
+    return;
+  }
+  const ids = [snapshot.group?.id, ...Object.keys(snapshot.archives ?? {})].filter((id): id is string => Boolean(id));
+  const deviceKey = await ensureDeviceKey();
+  for (const groupId of ids) {
+    const code = await loadSecret(recoveryAccount(groupId));
+    if (!code) {
+      continue;
+    }
+    await writeRecovery(uid, 'device', wrapKey(deviceKey, code));
+    return;
+  }
+}
+
+async function scheduleReminders(snapshot: AppSnapshot): Promise<void> {
+  const slots = planReminders({
+    people: snapshot.people,
+    occasions: snapshot.occasions,
+    now: new Date(),
+    enabled: snapshot.profile.reminders === 'on',
+  });
+  await applyReminderPlan(slots);
+}
+
+function groupFromRemote(groupId: string, remote: Record<string, unknown>, key: Uint8Array, fallback: AppSnapshot['group']): AppSnapshot['group'] {
+  let name = fallback?.name ?? '';
+  let currency = groupCurrency(fallback);
+  try {
+    const sealed = openJson<{ name?: string; currency?: string }>(String(remote.ciphertext ?? ''), key);
+    name = sealed.name || name;
+    currency = sealed.currency || currency;
+  } catch {
+    name = fallback?.name ?? name;
+  }
+  return {
+    id: groupId,
+    name,
+    ownerId: String(remote.ownerId ?? fallback?.ownerId ?? ''),
+    memberIds: Array.isArray(remote.memberIds) ? remote.memberIds.map(String) : fallback?.memberIds ?? [],
+    peopleCount: Number(remote.peopleCount ?? fallback?.peopleCount ?? 0),
+    entitled: Boolean(remote.entitled),
+    updatedAt: Number(remote.updatedAt ?? fallback?.updatedAt ?? 0),
+    currency,
+    keyVersion: Number(remote.keyVersion ?? fallback?.keyVersion ?? 0),
+    needsRotation: remote.needsRotation === true,
+    lockedPersonIds: Array.isArray(remote.lockedPersonIds) ? remote.lockedPersonIds.map(String) : [],
+    stale: false,
+  };
+}
+
+async function readGroupRecords(groupId: string, key: Uint8Array, selfUid: string | null, memberIds: string[]): Promise<RemoteRecord[]> {
+  const remoteRecords: RemoteRecord[] = [];
+  for (const name of COLLECTIONS) {
+    const docs = await readSealed(groupId, name);
+    docs.forEach(item => {
+      if (!item.ciphertext) {
+        return;
+      }
+      try {
+        remoteRecords.push({
+          collection: name,
+          id: item.id,
+          updatedAt: item.updatedAt,
+          deleted: item.deleted,
+          data: openJson<Record<string, unknown>>(item.ciphertext, key),
+        });
+      } catch {
+        // Skip a record this phone cannot decrypt.
+      }
+    });
+  }
+  for (const memberId of memberIds) {
+    if (memberId === selfUid) {
+      continue;
+    }
+    for (const name of ['states', 'gifts', 'ideas'] as const) {
+      try {
+        const docs = await readHidden(groupId, memberId, name);
+        docs.forEach(item => {
+          if (!item.ciphertext) {
+            return;
+          }
+          try {
+            remoteRecords.push({
+              collection: name,
+              id: item.id,
+              updatedAt: item.updatedAt,
+              deleted: item.deleted,
+              data: { ...openJson<Record<string, unknown>>(item.ciphertext, key), hiddenFrom: memberId },
+            });
+          } catch {
+            // Hidden ciphertext this key cannot open yet.
+          }
+        });
+      } catch {
+        // Not allowed, or the path is empty.
+      }
+    }
+  }
+  return remoteRecords;
+}
+
+async function absorbGroup(snapshot: AppSnapshot, groupId: string, key: Uint8Array, active: boolean): Promise<AppSnapshot> {
+  const remote = await readGroupDocument(groupId);
+  if (!remote) {
+    return snapshot;
+  }
+  const baseGroup = snapshot.group?.id === groupId ? snapshot.group : snapshot.archives[groupId]?.group ?? null;
+  let nextKey = key;
+  const remoteVersion = Number(remote.keyVersion ?? 0);
+  if (remoteVersion > (baseGroup?.keyVersion ?? 0)) {
+    const wrapped = await readKeyWrap(groupId, String(remoteVersion));
+    if (wrapped) {
+      try {
+        const opened = openJson<{ key: string }>(wrapped, key);
+        nextKey = keyFromString(opened.key);
+        await saveSecret(groupKeyAccount(groupId), keyToString(nextKey));
+      } catch {
+        return markGroupStale(snapshot, groupId, true);
+      }
+    }
+  }
+  const meta = groupFromRemote(groupId, remote, nextKey, baseGroup);
+  if (!meta) {
+    return snapshot;
+  }
+  const shell = snapshot.group?.id === groupId
+    ? snapshot
+    : snapshotForArchive(snapshot, snapshot.archives[groupId] ?? {
+      group: meta,
+      members: [],
+      people: [],
+      occasions: [],
+      states: [],
+      gifts: [],
+      ideas: [],
+      dirty: {},
+      inviteId: null,
+    });
+  const mergedGroup = applyGroupRemote({ ...shell, group: shell.group ?? meta }, meta);
+  const records = await readGroupRecords(groupId, nextKey, snapshot.profile.uid, meta.memberIds);
+  const merged = mergeRemote(mergedGroup.snapshot, records);
+  const cleaned = stripSensitiveForViewer(merged.snapshot);
+  if (active && snapshot.group?.id === groupId) {
+    return { ...cleaned, group: cleaned.group ? { ...cleaned.group, stale: false } : cleaned.group };
+  }
+  const parked = parkActive({ ...snapshot, group: snapshot.group });
+  const archive = captureFrom(cleaned, meta);
+  const roster = upsertRoster(parked, meta, cleaned.members);
+  if (!parked.group) {
+    return switchGroupSnapshot({ ...parked, archives: { ...parked.archives, [groupId]: archive }, roster }, groupId) ?? parked;
+  }
+  return { ...parked, archives: { ...parked.archives, [groupId]: archive }, roster };
+}
+
+function captureFrom(snapshot: AppSnapshot, group: NonNullable<AppSnapshot['group']>): GroupArchive {
+  return {
+    group,
+    members: snapshot.members,
+    people: snapshot.people,
+    occasions: snapshot.occasions,
+    states: snapshot.states,
+    gifts: snapshot.gifts,
+    ideas: snapshot.ideas,
+    dirty: snapshot.dirty,
+    inviteId: snapshot.profile.inviteId,
+  };
+}
+
+function upsertRoster(snapshot: AppSnapshot, group: NonNullable<AppSnapshot['group']>, members: AppSnapshot['members']): AppSnapshot['roster'] {
+  const summary = {
+    id: group.id,
+    name: group.name,
+    ownerId: group.ownerId,
+    memberIds: group.memberIds,
+    memberNames: memberNames(members),
+    updatedAt: group.updatedAt,
+    stale: Boolean(group.stale),
+  };
+  const exists = snapshot.roster.some(item => item.id === group.id);
+  return exists ? snapshot.roster.map(item => (item.id === group.id ? summary : item)) : [...snapshot.roster, summary];
+}
+
+async function pullOtherGroups(snapshot: AppSnapshot, env: AppEnv): Promise<AppSnapshot> {
+  const ids = new Set<string>([...Object.keys(snapshot.archives ?? {}), ...snapshot.roster.map(item => item.id)]);
+  const listed = new Map<string, { id: string; ownerId?: string; memberIds?: string[] }>();
+  if (snapshot.profile.uid) {
+    try {
+      const response = await callFunction<{ groupIds?: string[]; groups?: Array<{ id: string; ownerId?: string; memberIds?: string[] }> }>(env, 'listMyGroups', {});
+      (response.groups ?? (response.groupIds ?? []).map(id => ({ id }))).forEach(group => {
+        ids.add(group.id);
+        listed.set(group.id, group);
+      });
+    } catch {
+      // The phone still pulls the lists it already knows.
+    }
+  }
+  if (snapshot.group) {
+    ids.delete(snapshot.group.id);
+  }
+  let next = snapshot;
+  for (const id of ids) {
+    const secret = await loadGroupKeyString(id);
+    const info = listed.get(id) ?? { id };
+    if (!secret) {
+      next = showStaleList(next, info);
+      continue;
+    }
+    try {
+      next = await absorbGroup(next, id, keyFromString(secret), false);
+    } catch {
+      next = showStaleList(next, info);
+    }
+  }
+  return next;
+}
+
+async function rotateIfNeeded(snapshot: AppSnapshot, key: Uint8Array, env: AppEnv): Promise<{ snapshot: AppSnapshot; key: Uint8Array }> {
+  const group = snapshot.group;
+  const uid = snapshot.profile.uid;
+  if (!group || !uid) {
+    return { snapshot, key };
+  }
+  const remote = await readGroupDocument(group.id);
+  if (!remote || remote.needsRotation !== true || !Array.isArray(remote.memberIds) || !remote.memberIds.map(String).includes(uid)) {
+    return { snapshot, key };
+  }
+  const claim = await callFunction<{ ok: boolean }>(env, 'claimRotationTurn', { groupId: group.id });
+  if (!claim.ok) {
+    return { snapshot, key };
+  }
+  const version = Number(remote.keyVersion ?? 0) + 1;
+  const existingWrap = await readKeyWrap(group.id, String(version));
+  let nextKey = key;
+  if (existingWrap) {
+    nextKey = keyFromString(openJson<{ key: string }>(existingWrap, key).key);
+  } else {
+    nextKey = randomKey();
+    await writeKeyWrap(group.id, String(version), sealJson({ key: keyToString(nextKey) }, key));
+  }
+  await rewriteSealed(snapshot, group.id, key, nextKey, uid, env);
+  await callFunction(env, 'finishRotationTurn', { groupId: group.id, keyVersion: version });
+  await saveSecret(groupKeyAccount(group.id), keyToString(nextKey));
+  const code = await loadSecret(recoveryAccount(group.id));
+  if (code) {
+    await writeRecovery(uid, group.id, wrapKey(nextKey, code));
+  }
+  return {
+    snapshot: { ...snapshot, group: { ...group, keyVersion: version, needsRotation: false } },
+    key: nextKey,
+  };
+}
+
+async function rewriteSealed(snapshot: AppSnapshot, groupId: string, oldKey: Uint8Array, newKey: Uint8Array, selfUid: string, env: AppEnv): Promise<void> {
+  const memberIds = snapshot.group?.memberIds ?? [];
+  for (const name of COLLECTIONS) {
+    if (name === 'people') {
+      continue;
+    }
+    const docs = await readSealed(groupId, name);
+    for (const item of docs) {
+      if (!item.ciphertext) {
+        continue;
+      }
+      const opened = openEither(item.ciphertext, oldKey, newKey);
+      if (!opened) {
+        continue;
+      }
+      await writeSealed(groupId, name, {
+        ...item,
+        ciphertext: sealJson(opened, newKey),
+      });
+    }
+  }
+  const people = await readSealed(groupId, 'people');
+  for (const item of people) {
+    if (!item.ciphertext) {
+      continue;
+    }
+    const opened = openEither(item.ciphertext, oldKey, newKey);
+    if (!opened) {
+      continue;
+    }
+    await callFunction(env, 'writePerson', {
+      groupId,
+      personId: item.id,
+      ciphertext: sealJson(opened, newKey),
+      updatedAt: item.updatedAt,
+      deleted: item.deleted,
+      createdAt: Number((opened as { createdAt?: number }).createdAt ?? item.updatedAt),
+    }).catch(() => undefined);
+  }
+  for (const memberId of memberIds) {
+    if (memberId === selfUid) {
+      continue;
+    }
+    for (const name of ['states', 'gifts', 'ideas'] as const) {
+      const docs = await readHidden(groupId, memberId, name).catch(() => []);
+      for (const item of docs) {
+        const opened = openEither(item.ciphertext, oldKey, newKey);
+        if (!opened) {
+          continue;
+        }
+        await writeHidden(groupId, memberId, name, { ...item, ciphertext: sealJson(opened, newKey) });
+      }
+    }
+  }
+}
+
+function openEither(payload: string, oldKey: Uint8Array, newKey: Uint8Array): Record<string, unknown> | null {
+  try {
+    return openJson<Record<string, unknown>>(payload, oldKey);
+  } catch {
+    try {
+      return openJson<Record<string, unknown>>(payload, newKey);
+    } catch {
+      return null;
+    }
+  }
+}
+
+async function verifyPurchase(env: AppEnv, proof: { transactionId: string; token: string; platform: 'ios' | 'android' }): Promise<{ verified: boolean; reason?: string }> {
+  return callFunction<{ verified: boolean; reason?: string }>(env, 'verifyUnlock', {
     deviceId: await deviceId(),
     productId: env.iapProductId,
     platform: proof.platform,
     transactionId: proof.transactionId,
     purchaseToken: proof.token,
   });
-  return result.verified;
 }

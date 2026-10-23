@@ -2,7 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { canRefresh, claimSlot, emptyUsage, nextUsage } = require('../lib/caps');
+const { canRefresh, emptyUsage, nextUsage } = require('../lib/caps');
+const { decidePersonWrite, lockedPersonIds } = require('../lib/peopleCap');
+const { shouldRevokeEntitlement, configuredVerdict } = require('../lib/entitlement');
+const { planAccountDeletion, decideRotationClaim, canReceiveList } = require('../lib/groupAdmin');
 const { DEFAULT_GROUP_MAX_MEMBERS, groupHasRoom } = require('../lib/members');
 const { FREE_OWNED_LIST_LIMIT, decideOwnedCreate, ownerEntitledForMember, releaseOwnedId } = require('../lib/lists');
 const { fingerprint } = require('../lib/fingerprint');
@@ -59,10 +62,23 @@ test('store receipts grant only a matching unrevoked purchase', () => {
   assert.equal(googlePurchaseGrants({ purchaseState: 1 }, 'gifteez_unlock', 'gifteez_unlock'), false);
 });
 
-test('people slots stop at the free limit', () => {
-  assert.deepEqual(claimSlot(5, false, 'add', 5), { ok: false, active: 5 });
-  assert.deepEqual(claimSlot(5, true, 'add', 5).ok, true);
-  assert.deepEqual(claimSlot(1, false, 'remove', 5).active, 0);
+test('people slots stop at the free limit on the list, and extras lock instead of deleting', () => {
+  const people = ['a', 'b', 'c', 'd', 'e'].map((id, index) => ({ id, createdAt: index }));
+  const blocked = decidePersonWrite({ entitled: false, people, personId: 'f', createdAt: 6, deleted: false, limit: 5 });
+  assert.equal(blocked.ok, false);
+  const paid = decidePersonWrite({ entitled: true, people, personId: 'f', createdAt: 6, deleted: false, limit: 5 });
+  assert.equal(paid.ok, true);
+  const six = [...people, { id: 'f', createdAt: 6 }];
+  assert.deepEqual(lockedPersonIds(six, false, 5), ['f']);
+  const removed = decidePersonWrite({ entitled: false, people: six, personId: 'f', createdAt: 6, deleted: true, limit: 5 });
+  assert.equal(removed.ok, true);
+  if (removed.ok) {
+    assert.deepEqual(removed.lockedPersonIds, []);
+  }
+  assert.equal(shouldRevokeEntitlement('not_configured'), false);
+  assert.equal(shouldRevokeEntitlement('unknown'), false);
+  assert.equal(shouldRevokeEntitlement('revoked'), true);
+  assert.equal(configuredVerdict(false, 'revoked'), 'not_configured');
 });
 
 test('a group accepts a 9th member and refuses the 10th and 11th', () => {
@@ -73,7 +89,10 @@ test('a group accepts a 9th member and refuses the 10th and 11th', () => {
   const root = path.join(__dirname, '..', '..');
   const rules = fs.readFileSync(path.join(root, 'firestore.rules'), 'utf8');
   assert.match(rules, /request\.resource\.data\.memberIds\.size\(\) <= 10/);
-  assert.match(rules, /request\.resource\.data\.peopleCount <= 5/);
+  assert.match(rules, /allow write: if false/);
+  assert.match(rules, /match \/hidden\/\{excludedUid\}\/\{collection\}\/\{docId\}/);
+  assert.match(rules, /match \/keyWraps\/\{version\}/);
+  assert.match(rules, /lockedPersonIds/);
   assert.match(fs.readFileSync(path.join(root, '.env.example'), 'utf8'), /GROUP_MAX_MEMBERS=10/);
   const fnEnv = fs.readFileSync(path.join(root, 'functions', '.env.example'), 'utf8');
   assert.match(fnEnv, /GROUP_MAX_MEMBERS=10/);
@@ -143,8 +162,14 @@ test('a free account cannot start a second list, a paid account can, and joining
   assert.equal(ownerEntitledForMember({ memberIds: ['owner', 'joiner'], uid: 'joiner', groupEntitled: false }), false);
   assert.equal(ownerEntitledForMember({ memberIds: ['owner', 'joiner'], uid: 'joiner', groupEntitled: true }), true);
   assert.equal(ownerEntitledForMember({ memberIds: ['owner'], uid: 'stranger', groupEntitled: true }), false);
-  assert.equal(claimSlot(5, false, 'add', 5).ok, false);
-  assert.equal(claimSlot(5, true, 'add', 5).ok, true);
+  assert.equal(index.includes('claimPersonSlot'), false);
+  assert.match(index, /accounts\/\{uid\}|collection\('accounts'\)/);
+  assert.match(index, /recheckEntitlements/);
+  assert.equal(canReceiveList({ entitled: false, ownedGroupIds: ['g1'], groupId: 'g2' }), false);
+  assert.equal(decideRotationClaim({ needsRotation: true, rotatingBy: '', uid: 'a', member: true }), true);
+  assert.deepEqual(planAccountDeletion([{ id: 'g', ownerId: 'me', memberIds: ['me', 'sam'] }], 'me'), [
+    { groupId: 'g', action: 'transfer-and-remove', nextOwnerId: 'sam' },
+  ]);
   assert.match(rules, /claimedBy, claimedAt, and boughtBy live inside ciphertext/);
   const privateGifts = rules.slice(rules.indexOf('match /privateGifts/{giftId}'));
   assert.notEqual(privateGifts, '');
@@ -156,4 +181,19 @@ test('a free account cannot start a second list, a paid account can, and joining
   const groupDocs = rules.slice(rules.indexOf('match /{collection}/{docId}'), rules.indexOf('match /invites/{inviteId}'));
   assert.match(groupDocs, /ciphertext is string/);
   assert.match(groupDocs, /updatedAt is number/);
+  const people = rules.slice(rules.indexOf('match /people/{personId}'), rules.indexOf('match /keyWraps/{version}'));
+  assert.match(people, /allow read: if isMember\(groupId\)/);
+  assert.match(people, /allow write: if false/);
+  assert.match(rules, /match \/hidden\/\{excludedUid\}\/\{collection\}\/\{docId\}/);
+  assert.match(rules, /request\.auth\.uid != excludedUid/);
+  assert.match(rules, /personLinked\(groupId, request\.resource\.data\.personId\) == excludedUid/);
+  assert.match(rules, /match \/keyWraps\/\{version\}/);
+  assert.match(rules, /lockedPersonIds/);
+  assert.match(rules, /request\.resource\.data\.memberIds\.size\(\) <= 10/);
+  const ideas = index.slice(index.indexOf('export const generateGiftIdeas'), index.indexOf('export const getEntitlement'));
+  assert.match(ideas, /account\.data\(\)\?\.entitled === true \|\| await isPaid\(id\)/);
+  const ops = fs.readFileSync(path.join(root, 'functions', 'src', 'groupOps.ts'), 'utf8');
+  assert.match(ops, /recursiveDelete/);
+  assert.match(ops, /active: false/);
+  assert.match(ops, /needsRotation: true/);
 });

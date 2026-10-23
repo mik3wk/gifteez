@@ -51,11 +51,11 @@ export function currencyForLocale(locale: string): string {
   return 'USD';
 }
 
-export function formatMoney(cents: number, locale = deviceLocale()): string {
+export function formatMoney(cents: number, locale = deviceLocale(), currency = currencyForLocale(locale)): string {
   const amount = cents / 100;
   return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: currencyForLocale(locale),
+    currency,
   }).format(amount);
 }
 

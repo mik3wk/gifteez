@@ -3,9 +3,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
-import { statusFor, upcomingOccasion } from '../domain/logic';
+import { groupCurrency, statusFor, upcomingOccasion } from '../domain/logic';
 import { sortPeople } from '../domain/logic';
-import { formatDate, formatMoney, t } from '../i18n';
+import { isHiddenFromViewer } from '../domain/visibility';
+import { deviceLocale, formatDate, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { DuplicateOffers } from './mergeUi';
 import { EmptyArt, SkinBanner } from '../ui/art';
@@ -55,11 +56,15 @@ export function PeopleScreen() {
       ) : null}
       {people.map(person => {
         const next = upcomingOccasion(person.id, snapshot.occasions, new Date());
+        const hidden = isHiddenFromViewer(person, snapshot.profile.uid);
+        const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(snapshot.group));
         const spent = yearSpentCents(person.id, snapshot.gifts, year);
-        const budget = person.budgetCents == null
-          ? t('people.spent', { used: formatMoney(spent) })
-          : t('people.budgetLeft', { used: formatMoney(spent), budget: formatMoney(person.budgetCents) });
-        const status = next ? statusFor(next.occasion, snapshot.states, new Date()) : null;
+        const budget = hidden
+          ? ''
+          : person.budgetCents == null
+            ? t('people.spent', { used: money(spent) })
+            : t('people.budgetLeft', { used: money(spent), budget: money(person.budgetCents) });
+        const status = hidden || !next ? null : statusFor(next.occasion, snapshot.states, new Date());
         return (
           <Pressable key={person.id} onPress={() => navigation.navigate('Person', { personId: person.id })}>
             <Card>

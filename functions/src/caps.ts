@@ -55,12 +55,3 @@ export function nextUsage(usage: Usage, paid: boolean, now: Date): Usage {
   return { ...usage, freeUsed: usage.freeUsed + 1 };
 }
 
-export function claimSlot(active: number, paid: boolean, action: 'add' | 'remove', limit: number): { ok: boolean; active: number } {
-  if (action === 'remove') {
-    return { ok: true, active: Math.max(0, active - 1) };
-  }
-  if (paid || active < limit) {
-    return { ok: true, active: active + 1 };
-  }
-  return { ok: false, active };
-}

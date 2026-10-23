@@ -3,11 +3,26 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { defineSecret, defineString } from 'firebase-functions/params';
-import { canRefresh, claimSlot, emptyUsage, nextUsage, type Usage } from './caps';
+import { canRefresh, emptyUsage, nextUsage, type Usage } from './caps';
 import { DEFAULT_GROUP_MAX_MEMBERS, groupHasRoom } from './members';
-import { decideOwnedCreate, normalizeOwnedGroupIds, ownerEntitledForMember, releaseOwnedId } from './lists';
+import { decideOwnedCreate, normalizeOwnedGroupIds } from './lists';
 import { fingerprint } from './fingerprint';
-import { appleTransactionGrants, googlePurchaseGrants, verifyAppleTransaction, verifyGooglePurchase } from './iap';
+import { appleTransactionGrants, googlePurchaseGrants, verifyAppleVerdict, verifyGoogleVerdict } from './iap';
+import { shouldRevokeEntitlement } from './entitlement';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
+import {
+  applyEntitlement,
+  claimRotation,
+  deleteAccountGroups,
+  finishRotation,
+  leaveGroupServer,
+  linkRecipientDocs,
+  listGroupIds,
+  releaseOwnedTree,
+  removeMemberServer,
+  transferOwner,
+  writePersonDoc,
+} from './groupOps';
 import { promptHash, requestIdeas, type IdeaPrompt } from './ideas';
 
 initializeApp();
@@ -39,7 +54,8 @@ export const generateGiftIdeas = onCall(callable, async request => {
   await assertPerson(uid, personId);
   const id = fingerprint(pepper.value(), device);
   const db = getFirestore();
-  const paid = await isPaid(id);
+  const account = await db.collection('accounts').doc(uid).get();
+  const paid = account.data()?.entitled === true || await isPaid(id);
   const limits = { free: numberParam(freeRefreshes.value(), 5), paidPerMonth: numberParam(paidRefreshes.value(), 20) };
   const usageRef = db.collection('aiUsage').doc(id).collection('people').doc(personId);
   const cacheRef = db.collection('aiCache').doc(id).collection('entries').doc(hashKey(promptHash(personId, prompt)));
@@ -70,46 +86,19 @@ export const generateGiftIdeas = onCall(callable, async request => {
   return { ideas, counted: true, remaining: remaining(updated, paid, limits) };
 });
 
-export const claimPersonSlot = onCall(callable, async request => {
-  const uid = requireUid(request.auth?.uid);
-  const device = requireString(request.data?.deviceId, 'deviceId');
-  const action = request.data?.action === 'remove' ? 'remove' : 'add';
-  const groupId = typeof request.data?.groupId === 'string' ? request.data.groupId.trim() : '';
-  const id = fingerprint(pepper.value(), device);
-  const db = getFirestore();
-  let ownerPaid = false;
-  if (groupId) {
-    const group = await db.collection('groups').doc(groupId).get();
-    const memberIds = Array.isArray(group.data()?.memberIds) ? group.data()?.memberIds.map(String) : [];
-    ownerPaid = ownerEntitledForMember({
-      memberIds,
-      uid,
-      groupEntitled: group.data()?.entitled === true,
-    });
-  }
-  const ref = db.collection('aiUsage').doc(id);
-  const snap = await ref.get();
-  const active = Number(snap.data()?.activePeople ?? 0);
-  // `ownerPaid` is the list owner's unlock, not this device's purchase.
-  // Adds on an unlocked owner's list do not consume the free-device counter.
-  const result = claimSlot(active, ownerPaid, action, numberParam(freePeople.value(), 5));
-  if (result.ok && !ownerPaid) {
-    await ref.set({ activePeople: result.active }, { merge: true });
-  }
-  if (ownerPaid) {
-    return { ok: true, active };
-  }
-  return result;
-});
-
 export const getEntitlement = onCall(callable, async request => {
   const device = requireString(request.data?.deviceId, 'deviceId');
   const id = fingerprint(pepper.value(), device);
-  const paid = await isPaid(id);
-  if (paid && request.auth?.uid) {
-    await grantAccountUnlock(request.auth.uid);
+  const devicePaid = await isPaid(id);
+  let accountPaid = false;
+  if (request.auth?.uid) {
+    const account = await getFirestore().collection('accounts').doc(request.auth.uid).get();
+    accountPaid = account.data()?.entitled === true;
+    if (devicePaid) {
+      await grantAccountUnlock(request.auth.uid);
+    }
   }
-  return { paid };
+  return { paid: devicePaid || accountPaid };
 });
 
 export const verifyUnlock = onCall(callable, async request => {
@@ -122,31 +111,32 @@ export const verifyUnlock = onCall(callable, async request => {
   if (productId !== unlockProduct.value()) {
     return { verified: false, reason: 'product' };
   }
-  let verified = false;
-  if (platform === 'ios') {
-    if (!appleKey.value()) {
-      return { verified: false, reason: 'not_configured' };
-    }
-    verified = await verifyAppleTransaction({
+  const verdict = platform === 'ios'
+    ? await verifyAppleVerdict({
       transactionId,
       privateKey: appleKey.value().replace(/\\n/g, '\n'),
       keyId: appleKeyId.value(),
       issuerId: appleIssuer.value(),
       bundleId: appleBundle.value(),
       productId,
-    });
-  } else if (!playAccount.value()) {
-    return { verified: false, reason: 'not_configured' };
-  } else {
-    verified = await verifyGooglePurchase({
+    })
+    : await verifyGoogleVerdict({
       packageName: playPackage.value(),
       productId,
       purchaseToken,
       serviceAccountJson: playAccount.value(),
       expectedProduct: productId,
     });
+  if (verdict === 'not_configured') {
+    return { verified: false, reason: 'not_configured' };
   }
-  if (!verified) {
+  if (shouldRevokeEntitlement(verdict)) {
+    const id = fingerprint(pepper.value(), device);
+    await getFirestore().collection('entitlements').doc(id).set({ paid: false, uid, updatedAt: Date.now() }, { merge: true });
+    await revokeAccountUnlock(uid);
+    return { verified: false, reason: 'revoked' };
+  }
+  if (verdict !== 'granted') {
     return { verified: false, reason: 'rejected' };
   }
   const id = fingerprint(pepper.value(), device);
@@ -156,6 +146,7 @@ export const verifyUnlock = onCall(callable, async request => {
     productId,
     platform,
     transactionId,
+    purchaseToken,
     uid,
     updatedAt: Date.now(),
   });
@@ -234,28 +225,11 @@ export const createOwnedGroup = onCall(callable, async request => {
 export const releaseOwnedGroup = onCall({ enforceAppCheck: true }, async request => {
   const uid = requireUid(request.auth?.uid);
   const groupId = requireGroupId(request.data?.groupId);
-  const db = getFirestore();
-  const accountRef = db.collection('accounts').doc(uid);
-  const groupRef = db.collection('groups').doc(groupId);
-  await db.runTransaction(async transaction => {
-    const group = await transaction.get(groupRef);
-    const account = await transaction.get(accountRef);
-    if (group.exists) {
-      if (group.data()?.ownerId !== uid) {
-        throw new HttpsError('permission-denied', 'owner');
-      }
-      const rawMembers: unknown = group.data()?.memberIds;
-      const memberIds = Array.isArray(rawMembers) ? rawMembers.map((id: unknown) => String(id)) : [];
-      if (memberIds.some(id => id !== uid)) {
-        throw new HttpsError('failed-precondition', 'owner-stays');
-      }
-      transaction.delete(groupRef);
-    }
-    transaction.set(accountRef, {
-      ownedGroupIds: releaseOwnedId(normalizeOwnedGroupIds(account.data()?.ownedGroupIds), groupId),
-      updatedAt: Date.now(),
-    }, { merge: true });
-  });
+  try {
+    await releaseOwnedTree(getFirestore(), uid, groupId);
+  } catch (caught) {
+    throw mapGroupError(caught);
+  }
   return { released: true };
 });
 
@@ -296,10 +270,11 @@ async function isPaid(id: string): Promise<boolean> {
 
 /** Copy a device purchase onto the signed-in account and every list that account owns. */
 async function grantAccountUnlock(uid: string): Promise<void> {
-  const db = getFirestore();
-  await db.collection('accounts').doc(uid).set({ entitled: true, updatedAt: Date.now() }, { merge: true });
-  const groups = await db.collection('groups').where('ownerId', '==', uid).get();
-  await Promise.all(groups.docs.map(group => group.ref.set({ entitled: true }, { merge: true })));
+  await applyEntitlement(getFirestore(), uid, true, numberParam(freePeople.value(), 5));
+}
+
+async function revokeAccountUnlock(uid: string): Promise<void> {
+  await applyEntitlement(getFirestore(), uid, false, numberParam(freePeople.value(), 5));
 }
 
 async function assertPerson(uid: string, personId: string): Promise<void> {
@@ -352,6 +327,172 @@ function numberParam(value: string, fallback: number): number {
 
 function hashKey(value: string): string {
   return Buffer.from(value).toString('base64url').slice(0, 120);
+}
+
+const guarded = { enforceAppCheck: true };
+
+export const writePerson = onCall(guarded, async request => {
+  const uid = requireUid(request.auth?.uid);
+  try {
+    return await writePersonDoc(getFirestore(), {
+      groupId: requireGroupId(request.data?.groupId),
+      uid,
+      personId: requireString(request.data?.personId, 'personId'),
+      ciphertext: requireString(request.data?.ciphertext, 'ciphertext'),
+      updatedAt: Number(request.data?.updatedAt),
+      deleted: request.data?.deleted === true,
+      createdAt: Number(request.data?.createdAt ?? Date.now()),
+      limit: numberParam(freePeople.value(), 5),
+    });
+  } catch (caught) {
+    throw mapGroupError(caught);
+  }
+});
+
+export const linkRecipient = onCall(guarded, async request => {
+  const uid = requireUid(request.auth?.uid);
+  const ids = (value: unknown): string[] => Array.isArray(value) ? value.map(item => String(item)).filter(Boolean) : [];
+  try {
+    await linkRecipientDocs(getFirestore(), {
+      groupId: requireGroupId(request.data?.groupId),
+      uid,
+      personId: requireString(request.data?.personId, 'personId'),
+      linkedUid: typeof request.data?.linkedUid === 'string' ? request.data.linkedUid.trim() : '',
+      states: ids(request.data?.states),
+      gifts: ids(request.data?.gifts),
+      ideas: ids(request.data?.ideas),
+    });
+  } catch (caught) {
+    throw mapGroupError(caught);
+  }
+  return { linked: true };
+});
+
+export const transferOwnership = onCall(guarded, async request => {
+  const uid = requireUid(request.auth?.uid);
+  try {
+    await transferOwner(getFirestore(), {
+      groupId: requireGroupId(request.data?.groupId),
+      uid,
+      nextOwnerId: requireString(request.data?.nextOwnerId, 'nextOwnerId'),
+    });
+  } catch (caught) {
+    throw mapGroupError(caught);
+  }
+  return { transferred: true };
+});
+
+export const revokeMember = onCall(guarded, async request => {
+  const uid = requireUid(request.auth?.uid);
+  try {
+    await removeMemberServer(getFirestore(), {
+      groupId: requireGroupId(request.data?.groupId),
+      actorUid: uid,
+      targetUid: requireString(request.data?.uid, 'uid'),
+    });
+  } catch (caught) {
+    throw mapGroupError(caught);
+  }
+  return { removed: true };
+});
+
+export const leaveGroup = onCall(guarded, async request => {
+  const uid = requireUid(request.auth?.uid);
+  try {
+    const result = await leaveGroupServer(getFirestore(), { groupId: requireGroupId(request.data?.groupId), uid });
+    return { result };
+  } catch (caught) {
+    throw mapGroupError(caught);
+  }
+});
+
+export const deleteAccount = onCall(guarded, async request => {
+  const uid = requireUid(request.auth?.uid);
+  await deleteAccountGroups(getFirestore(), uid, numberParam(freePeople.value(), 5));
+  return { deleted: true };
+});
+
+export const claimRotationTurn = onCall(guarded, async request => {
+  const uid = requireUid(request.auth?.uid);
+  const ok = await claimRotation(getFirestore(), requireGroupId(request.data?.groupId), uid);
+  return { ok };
+});
+
+export const finishRotationTurn = onCall(guarded, async request => {
+  const uid = requireUid(request.auth?.uid);
+  const keyVersion = Number(request.data?.keyVersion);
+  if (!Number.isFinite(keyVersion)) {
+    throw new HttpsError('invalid-argument', 'keyVersion');
+  }
+  try {
+    await finishRotation(getFirestore(), requireGroupId(request.data?.groupId), uid, keyVersion);
+  } catch (caught) {
+    throw mapGroupError(caught);
+  }
+  return { rotated: true };
+});
+
+export const listMyGroups = onCall(guarded, async request => {
+  const uid = requireUid(request.auth?.uid);
+  const groups = await listGroupIds(getFirestore(), uid);
+  return { groupIds: groups.map(group => group.id), groups };
+});
+
+export const recheckEntitlements = onSchedule('every 24 hours', async () => {
+  const db = getFirestore();
+  if (!appleKey.value() && !playAccount.value()) {
+    return;
+  }
+  const paid = await db.collection('entitlements').where('paid', '==', true).get();
+  for (const doc of paid.docs) {
+    const data = doc.data();
+    const uid = typeof data.uid === 'string' ? data.uid : '';
+    if (!uid) {
+      continue;
+    }
+    const platform = data.platform === 'android' ? 'android' : 'ios';
+    const verdict = platform === 'ios'
+      ? await verifyAppleVerdict({
+        transactionId: String(data.transactionId ?? ''),
+        privateKey: appleKey.value().replace(/\\n/g, '\n'),
+        keyId: appleKeyId.value(),
+        issuerId: appleIssuer.value(),
+        bundleId: appleBundle.value(),
+        productId: String(data.productId ?? unlockProduct.value()),
+      })
+      : await verifyGoogleVerdict({
+        packageName: playPackage.value(),
+        productId: String(data.productId ?? unlockProduct.value()),
+        purchaseToken: String(data.purchaseToken ?? ''),
+        serviceAccountJson: playAccount.value(),
+        expectedProduct: String(data.productId ?? unlockProduct.value()),
+      });
+    if (!shouldRevokeEntitlement(verdict)) {
+      continue;
+    }
+    await doc.ref.set({ paid: false, updatedAt: Date.now() }, { merge: true });
+    await revokeAccountUnlock(uid);
+  }
+});
+
+function mapGroupError(caught: unknown): HttpsError {
+  const code = caught && typeof caught === 'object' && 'code' in caught ? String((caught as { code?: unknown }).code) : '';
+  if (code === 'cap') {
+    return new HttpsError('resource-exhausted', 'cap');
+  }
+  if (code === 'owner-stays') {
+    return new HttpsError('failed-precondition', 'owner-stays');
+  }
+  if (code === 'one-list') {
+    return new HttpsError('failed-precondition', 'one-list');
+  }
+  if (code === 'owner' || code === 'member') {
+    return new HttpsError('permission-denied', code);
+  }
+  if (caught instanceof HttpsError) {
+    return caught;
+  }
+  return new HttpsError('failed-precondition', code || 'group');
 }
 
 export const iapChecks = { appleTransactionGrants, googlePurchaseGrants };

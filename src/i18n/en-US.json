@@ -122,6 +122,23 @@
     "samePerson": "Same person as…",
     "samePersonLabel": "Mark this person as the same as someone on another list",
     "delete": "Remove person",
+    "editGift": "Edit gift",
+    "editGiftLabel": "Edit {title}",
+    "deleteGift": "Delete gift",
+    "deleteGiftLabel": "Delete {title}",
+    "deleteOccasion": "Remove occasion",
+    "deleteOccasionLabel": "Remove {occasion}",
+    "updateOccasion": "Update date",
+    "updateOccasionLabel": "Update the date for {occasion}",
+    "privateSpend": "Private, only you: {amount}",
+    "readOnly": "This person is read-only until the list is unlocked or someone is removed. Nothing was deleted.",
+    "hiddenRecipient": "You are this person on the list, so gifts, claims, and ideas stay hidden.",
+    "linkTitle": "Hide gifts from",
+    "linkHint": "The member you pick can still see the name and the date. They cannot read gifts, claims, or ideas.",
+    "linkTo": "Hide from {name}",
+    "linkToLabel": "Hide this person's gifts from {name}",
+    "unlink": "Show gifts to everyone again",
+    "unlinkLabel": "Stop hiding this person's gifts",
     "saved": "Saved",
     "openedImported": "Opening this person turns ideas on. Imported people stay quiet until then."
   },
@@ -153,7 +170,10 @@
     "offerReviewLabel": "Review merging {source} into {target}",
     "offerDismiss": "Not the same",
     "offerDismissLabel": "Keep {source} and {target} separate",
-    "done": "Merged. The other copy was removed."
+    "done": "Merged. The other copy was removed.",
+    "confirmBody": "This copies the checked gifts onto this person and removes the other copy after it saves. You can undo it from the person.",
+    "undo": "Undo merge",
+    "undoLabel": "Undo the last merge"
   },
   "fairness": {
     "title": "Fairness",
@@ -186,7 +206,13 @@
     "shareText": "{marker} {name}\n{links}",
     "full": "This list already has {count} members, the most a list can have.",
     "ownerStays": "Hand the list to someone else before you leave. You started it.",
-    "emptyCode": "There is no recovery code on this phone."
+    "emptyCode": "There is no recovery code on this phone.",
+    "makeOwner": "Make owner",
+    "makeOwnerLabel": "Make {name} the owner",
+    "currency": "Currency",
+    "saveCurrency": "Save currency",
+    "saveCurrencyLabel": "Save the list currency",
+    "notCurrent": "Not up to date on this phone"
   },
   "join": {
     "title": "Join a list",
@@ -228,7 +254,15 @@
     "importAction": "Import people",
     "skin": "Theme",
     "skinNow": "Using the {skin} theme.",
-    "optional": "These are optional. Gifteez never imports anyone on its own."
+    "optional": "These are optional. Gifteez never imports anyone on its own.",
+    "remindersOn": "Reminders on",
+    "remindersOff": "Reminders off",
+    "remindersLabel": "Turn occasion reminders on or off",
+    "deleteAccount": "Delete account",
+    "deleteAccountLabel": "Delete this account",
+    "deleteAccountBody": "This releases lists you own and removes you from lists you joined. It cannot be undone.",
+    "deleteAccountConfirm": "Delete my account",
+    "deleteAccountConfirmLabel": "Confirm account deletion"
   },
   "importFlow": {
     "pick": "Add selected",
@@ -251,7 +285,16 @@
     "full": "This list already has {count} members, the most a list can have.",
     "invalid": "Check the fields and try again.",
     "claimed": "Someone else already said they would get this.",
-    "forbidden": "Only the person who claimed this, or the list owner, can unclaim it."
+    "forbidden": "Only the person who claimed this, or the list owner, can unclaim it.",
+    "price": "Enter a price of zero or more.",
+    "sourceKey": "That list's key is not on this phone, so the merge was not started.",
+    "mergePush": "The merge did not finish saving, so it was undone.",
+    "notifications": "Notifications stayed off."
+  },
+  "reminders": {
+    "title": "Gifteez",
+    "day": "{name} is today",
+    "week": "{name} is in a week"
   },
   "common": {
     "cancel": "Cancel",

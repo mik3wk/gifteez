@@ -6,6 +6,7 @@ import type {
   GiftStatus,
   GroupArchive,
   GroupMeta,
+  MergeJournal,
   Occasion,
   OccasionState,
   Person,
@@ -272,7 +273,14 @@ export function applyMerge(input: {
   now: number;
   freeLimit: number;
   newId: () => string;
+  /** Refuse before any copy when the source list's key is not on this phone. */
+  sourceKeyPresent?: boolean;
+  /** Keep the source until the caller has pushed it. Default true matches a finished merge. */
+  deleteSource?: boolean;
 }): Mutation<MergeOutcome> {
+  if (input.sourceKeyPresent === false) {
+    return fail('sourceKey');
+  }
   if (!input.uid) {
     return fail('auth');
   }
@@ -300,6 +308,16 @@ export function applyMerge(input: {
   const occasionMap = new Map<string, string>();
   const privateAdds: PrivateGift[] = [];
   const privateDirty: DirtyMap = {};
+  const createdOccasionIds: string[] = [];
+  const createdStateIds: string[] = [];
+  const createdGiftIds: string[] = [];
+  const replacedStates: OccasionState[] = [];
+  const sourcePersonCopy: Person = { ...sourcePerson };
+  const sourceOccasions = source.occasions.filter(item => item.personId === sourcePerson.id).map(item => ({ ...item }));
+  const sourceStates = source.states.filter(item => item.personId === sourcePerson.id).map(item => ({ ...item }));
+  const sourceGifts = source.gifts.filter(item => item.personId === sourcePerson.id).map(item => ({ ...item }));
+  const sourcePeopleCount = source.group.peopleCount;
+  const deleteSource = input.deleteSource !== false;
 
   source.occasions
     .filter(item => item.personId === sourcePerson.id && !item.deleted)
@@ -324,6 +342,7 @@ export function applyMerge(input: {
         };
         target.occasions = [...target.occasions, host];
         target.dirty = { ...target.dirty, [dirtyKey('occasions', host.id)]: true };
+        createdOccasionIds.push(host.id);
       }
       occasionMap.set(occasion.id, host.id);
       source.occasions = source.occasions.map(item =>
@@ -338,6 +357,11 @@ export function applyMerge(input: {
       const occasionId = occasionMap.get(state.occasionId) ?? state.occasionId;
       const id = stateId(occasionId, state.year);
       const existing = target.states.find(item => item.id === id && !item.deleted);
+      if (existing) {
+        replacedStates.push({ ...existing });
+      } else {
+        createdStateIds.push(id);
+      }
       const rest: OccasionState = { ...state, id, occasionId, personId: targetPerson.id, updatedAt: input.now };
       delete rest.deleted;
       const nextState = existing ? combineStates(existing, state, targetPerson.id, occasionId, input.now) : rest;
@@ -370,6 +394,7 @@ export function applyMerge(input: {
         };
         target.gifts = [...target.gifts, moved];
         target.dirty = { ...target.dirty, [dirtyKey('gifts', id)]: true };
+        createdGiftIds.push(id);
       } else {
         const id = input.newId();
         privateAdds.push({
@@ -392,12 +417,32 @@ export function applyMerge(input: {
       source.dirty = { ...source.dirty, [dirtyKey('gifts', gift.id)]: true };
     });
 
-  source.people = source.people.map(person =>
-    person.id === sourcePerson.id ? { ...person, deleted: true, updatedAt: input.now } : person,
-  );
-  source.dirty = { ...source.dirty, [dirtyKey('people', sourcePerson.id)]: true, 'group:meta': true };
+  if (deleteSource) {
+    source.people = source.people.map(person =>
+      person.id === sourcePerson.id ? { ...person, deleted: true, updatedAt: input.now } : person,
+    );
+    source.dirty = { ...source.dirty, [dirtyKey('people', sourcePerson.id)]: true, 'group:meta': true };
+    source.group = { ...source.group, peopleCount: activeCount(source.people), updatedAt: input.now };
+  } else {
+    source.people = source.people.map(person => (person.id === sourcePersonCopy.id ? sourcePersonCopy : person));
+    source.occasions = source.occasions.map(item => sourceOccasions.find(copy => copy.id === item.id) ?? item);
+    source.states = source.states.map(item => sourceStates.find(copy => copy.id === item.id) ?? item);
+    source.gifts = source.gifts.map(item => sourceGifts.find(copy => copy.id === item.id) ?? item);
+    const dirty = { ...source.dirty };
+    sourceOccasions.forEach(item => {
+      delete dirty[dirtyKey('occasions', item.id)];
+    });
+    sourceStates.forEach(item => {
+      delete dirty[dirtyKey('states', item.id)];
+    });
+    sourceGifts.forEach(item => {
+      delete dirty[dirtyKey('gifts', item.id)];
+    });
+    delete dirty[dirtyKey('people', sourcePersonCopy.id)];
+    source.dirty = dirty;
+    source.group = { ...source.group, peopleCount: sourcePeopleCount };
+  }
   const remaining = activeCount(source.people);
-  source.group = { ...source.group, peopleCount: remaining, updatedAt: input.now };
 
   const afterTarget = activeCount(target.people);
   const overCap = afterTarget > beforeTarget && afterTarget > input.freeLimit && !ownerUnlocked(input.snapshot, target.group);
@@ -405,12 +450,30 @@ export function applyMerge(input: {
     return fail('cap');
   }
 
+  const journal: MergeJournal = {
+    sourceGroupId: input.sourceGroupId,
+    sourcePersonId: sourcePersonCopy.id,
+    targetGroupId: input.targetGroupId,
+    targetPersonId: targetPerson.id,
+    createdOccasionIds,
+    createdStateIds,
+    createdGiftIds,
+    replacedStates,
+    privateGiftIds: privateAdds.map(gift => gift.id),
+    sourcePerson: sourcePersonCopy,
+    sourceOccasions,
+    sourceStates,
+    sourceGifts,
+    sourcePeopleCount,
+    sourceDeleted: deleteSource,
+  };
   let next = withBundle(input.snapshot, source);
   next = withBundle(next, target);
   next = {
     ...next,
     privateGifts: [...(next.privateGifts ?? []), ...privateAdds],
     dirty: { ...next.dirty, ...privateDirty },
+    mergeJournal: journal,
   };
   return ok(next, {
     sourceGroupId: input.sourceGroupId,
@@ -418,6 +481,120 @@ export function applyMerge(input: {
     targetPeopleCount: target.group.peopleCount,
     privateGiftIds: privateAdds.map(gift => gift.id),
   });
+}
+
+export function commitMergeSource(snapshot: AppSnapshot, now: number): AppSnapshot {
+  const journal = snapshot.mergeJournal;
+  if (!journal || journal.sourceDeleted) {
+    return snapshot;
+  }
+  const source = editableFrom(snapshot, journal.sourceGroupId);
+  if (!source) {
+    return snapshot;
+  }
+  const mark = <T extends { id: string; personId: string; deleted?: boolean; updatedAt: number }>(rows: T[]): T[] =>
+    rows.map(item => (item.personId === journal.sourcePersonId && !item.deleted ? { ...item, deleted: true, updatedAt: now } : item));
+  source.people = source.people.map(person =>
+    person.id === journal.sourcePersonId ? { ...person, deleted: true, updatedAt: now } : person,
+  );
+  source.occasions = mark(source.occasions);
+  source.states = mark(source.states);
+  source.gifts = mark(source.gifts);
+  const dirty: DirtyMap = { ...source.dirty, 'group:meta': true, [dirtyKey('people', journal.sourcePersonId)]: true };
+  source.occasions.forEach(item => {
+    if (item.personId === journal.sourcePersonId) {
+      dirty[dirtyKey('occasions', item.id)] = true;
+    }
+  });
+  source.states.forEach(item => {
+    if (item.personId === journal.sourcePersonId) {
+      dirty[dirtyKey('states', item.id)] = true;
+    }
+  });
+  source.gifts.forEach(item => {
+    if (item.personId === journal.sourcePersonId) {
+      dirty[dirtyKey('gifts', item.id)] = true;
+    }
+  });
+  source.dirty = dirty;
+  source.group = { ...source.group, peopleCount: activeCount(source.people), updatedAt: now };
+  return { ...withBundle(snapshot, source), mergeJournal: { ...journal, sourceDeleted: true } };
+}
+
+export function undoMerge(snapshot: AppSnapshot, now: number): AppSnapshot {
+  const journal = snapshot.mergeJournal;
+  if (!journal) {
+    return snapshot;
+  }
+  const target = editableFrom(snapshot, journal.targetGroupId);
+  const source = editableFrom(snapshot, journal.sourceGroupId);
+  if (!target || !source) {
+    return { ...snapshot, mergeJournal: null };
+  }
+  const dropOccasion = new Set(journal.createdOccasionIds);
+  const dropState = new Set(journal.createdStateIds);
+  const dropGift = new Set(journal.createdGiftIds);
+  target.occasions = target.occasions.map(item => (dropOccasion.has(item.id) ? { ...item, deleted: true, updatedAt: now } : item));
+  target.states = target.states.map(item => (dropState.has(item.id) ? { ...item, deleted: true, updatedAt: now } : item));
+  target.gifts = target.gifts.map(item => (dropGift.has(item.id) ? { ...item, deleted: true, updatedAt: now } : item));
+  journal.replacedStates.forEach(previous => {
+    const restored = { ...previous, updatedAt: now };
+    const exists = target.states.some(item => item.id === previous.id);
+    target.states = exists
+      ? target.states.map(item => (item.id === previous.id ? restored : item))
+      : [...target.states, restored];
+    target.dirty = { ...target.dirty, [dirtyKey('states', previous.id)]: true };
+  });
+  dropOccasion.forEach(id => {
+    target.dirty = { ...target.dirty, [dirtyKey('occasions', id)]: true };
+  });
+  dropState.forEach(id => {
+    target.dirty = { ...target.dirty, [dirtyKey('states', id)]: true };
+  });
+  dropGift.forEach(id => {
+    target.dirty = { ...target.dirty, [dirtyKey('gifts', id)]: true };
+  });
+  const restorePerson: Person = { ...journal.sourcePerson, deleted: false, updatedAt: now };
+  source.people = source.people.some(person => person.id === restorePerson.id)
+    ? source.people.map(person => (person.id === restorePerson.id ? restorePerson : person))
+    : [...source.people, restorePerson];
+  const restoreRows = <T extends { id: string }>(current: T[], copies: T[]): T[] => {
+    const map = new Map(current.map(item => [item.id, item]));
+    copies.forEach(copy => {
+      map.set(copy.id, { ...copy, deleted: false, updatedAt: now });
+    });
+    return [...map.values()];
+  };
+  source.occasions = restoreRows(source.occasions, journal.sourceOccasions);
+  source.states = restoreRows(source.states, journal.sourceStates);
+  source.gifts = restoreRows(source.gifts, journal.sourceGifts);
+  source.group = { ...source.group, peopleCount: journal.sourcePeopleCount, updatedAt: now };
+  source.dirty = {
+    ...source.dirty,
+    'group:meta': true,
+    [dirtyKey('people', journal.sourcePersonId)]: true,
+  };
+  journal.sourceOccasions.forEach(item => {
+    source.dirty[dirtyKey('occasions', item.id)] = true;
+  });
+  journal.sourceStates.forEach(item => {
+    source.dirty[dirtyKey('states', item.id)] = true;
+  });
+  journal.sourceGifts.forEach(item => {
+    source.dirty[dirtyKey('gifts', item.id)] = true;
+  });
+  let next = withBundle(snapshot, source);
+  next = withBundle(next, target);
+  const privateIds = new Set(journal.privateGiftIds);
+  next = {
+    ...next,
+    privateGifts: (next.privateGifts ?? []).map(gift => (privateIds.has(gift.id) ? { ...gift, deleted: true, updatedAt: now } : gift)),
+    mergeJournal: null,
+  };
+  privateIds.forEach(id => {
+    next.dirty = { ...next.dirty, [dirtyKey('privateGifts', id)]: true };
+  });
+  return next;
 }
 
 export function mergePrivateGifts(local: PrivateGift[], remote: PrivateGift[], dirty: DirtyMap): PrivateGift[] {

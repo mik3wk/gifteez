@@ -37,6 +37,7 @@ export function MergeScreen() {
       {picked ? (
         <>
           <Body>{t('merge.fromList', { name: sourceLabel, list: source?.listName.trim() || t('merge.otherList') })}</Body>
+          <Body>{t('merge.confirmBody')}</Body>
           <MergeChecklist
             gifts={gifts.map(gift => ({ id: gift.id, title: gift.title }))}
             checked={checked}

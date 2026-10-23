@@ -217,3 +217,65 @@ Fastlane is already in the repo: `fastlane/Fastfile`, `fastlane/Appfile`, `fastl
 - [ ] Add internal testers in TestFlight and in the Play internal track; test on real devices
 - [ ] Fill in the store listing assets from Phase 13: screenshots, description, privacy label and Data safety
 - [ ] Production: `fastlane ios release` (submit for review), then `fastlane android release` (20% staged rollout) or `fastlane android promote`
+
+## Audit & Verification
+
+Audit of `aa5d54b`. A box is checked only when that finding is fixed and covered by a unit test or a rules-source test. Nothing in this list is deferred. Live device, store, and Firebase project checks are called out under manual setup; they are not a reason to leave a box empty when the code and tests cover the finding.
+
+### Recipient hiding
+
+A linked member must not read that person's gifts, claims, ideas, or states. Every member holds the same group key, so a second ciphertext key cannot be kept from the linked member and still shared with everyone else. The barrier is the path, not a second key.
+
+- People, occasions, and members stay in the shared collections. The linked member still sees the name and the occasion date.
+- States, gifts, and ideas for a person with a plaintext `linkedUid` are stored at `groups/{groupId}/hidden/{linkedUid}/{states|gifts|ideas}/{docId}`.
+- Rules allow that path only for a member whose uid is not `linkedUid`. Shared writes of states, gifts, and ideas are rejected when `linkedUid` is set. `personId` is plaintext on those docs so the rules can see which person they belong to. Names and prices stay inside the ciphertext.
+- The owner links or unlinks through the `linkRecipient` callable. The admin SDK copies the ciphertext bytes and does not decrypt them.
+- The client never reads `hidden/{self}`. `stripSensitiveForViewer` also drops any leaked local copies.
+
+This stops new Firestore reads. It does not erase ciphertext already on a phone, and it does not stop someone who is handed the blob out of band, because they still hold the group key.
+
+### Over-cap people after a refund or lapse
+
+Nothing is deleted. If the list is not entitled and more than five people are active, `lockedPersonIds` is the newest people beyond the oldest five (by `createdAt`, then id). Those people stay readable. Writes of their gifts, states, occasions, and ideas are denied. A new person is rejected. Soft-deleting a locked person is still allowed, so the list can get back under the cap. When the count is five or fewer, or the owner is entitled again, the locks clear.
+
+Missing store credentials are `not_configured` and do not revoke anyone. Only an explicit store revocation clears `accounts/{uid}.entitled` and `entitled` on groups that uid owns.
+
+### Currency
+
+Currency is per list, stored in the group ciphertext and on `GroupMeta.currency`. New lists default from the owner's locale. Older lists with no currency display and export as USD. The owner can edit the code. Amounts on a list use that code, not the viewer's locale.
+
+### Logical inconsistencies and bugs
+
+- [x] Critical. A removed member could rejoin with the old key and still decrypt. `revokeMember` and `leaveGroup` drop the uid, set `needsRotation`, and mark that group's invites inactive. A remaining member seals the new key with the previous key, re-encrypts the docs, then bumps `keyVersion`. Old invites cannot be turned back on by the client. A removed member keeps plaintext already on their phone; rotation stops them reading current server copies and rejoining.
+- [x] High. The five-recipient cap counted a device slot, not people. `writePerson` counts non-deleted people in a transaction and rejects a create past the free cap. The cap follows `group.entitled`.
+- [x] High. `claimPersonSlot` / `activePeople` was a second cap. That counter is gone. The list is the only people cap.
+- [x] High. Saving an idea cleared "purchased", and a later write could drop `claimedBy`. A purchased state stays purchased. An idea save keeps an existing claim. An explicit unclaim still clears it.
+- [x] High. A refund or lapse never cleared the unlock. `recheckEntitlements` runs every 24 hours, and restore/verify revoke when the store says revoked. People over the cap become read-only. Nothing is deleted.
+- [x] High. A claim survived the claimer leaving and blocked everyone else. Removing a member clears that uid's claims. A missing or deleted member does not count as the current claimer, so someone else can claim.
+- [x] High. Impossible dates became a different day. Days the month does not have are rejected. February 29 is stored, and in a non-leap year it is celebrated on February 28.
+- [x] High. A wedding repeated every year. A wedding with a year is that year only and does not advance after it passes. Birthdays and Christmas still recur. A past wedding does not sort to the top.
+- [x] Medium. A blank or negative price counted as a purchase. Blank and negative fail validation. Zero is allowed. An empty purchase date uses the local calendar day.
+- [x] Medium. The same cents were a different currency on each phone. Currency is per list, defaulting from the owner's locale and editable by the owner. Missing currency is USD.
+- [x] Medium. The same person's total differed by screen. The headline total is shared gifts only, on the list, the person, and fairness. Private spend is its own line on the person.
+- [x] Medium. Export said an account was required, then shared anyway, and only the open list. Export waits until the account is saved, then shares every list, with buyers and private gifts marked private.
+- [x] Medium. Signing into an email or phone that already exists kept this phone's list and adopted the other uid. `signed-in` drops the anonymous snapshot and pulls that account's lists. `linked` keeps the same uid. Lists with no key on the phone show as not up to date.
+- [x] Medium. Deleting a group deleted the parent document only. `deleteGroupTree` deactivates that group's invites and recursively deletes the group.
+- [x] Low. Another list on this phone stayed stale until it was opened. After sync, every list this account belongs to is pulled when the key is on the phone. A missing key marks that list not up to date.
+
+### Missing behavior
+
+- [x] Critical. The person you are buying for could be in the group and see every gift. The owner can link a recipient to a member. That member cannot read the gifts, claims, ideas, or states. See the hiding design above.
+- [x] High. Nothing reminded anyone an occasion was coming. Local notifications schedule the morning of the day and seven days before, per member, with the permission prompt the first time an occasion is added while the toggle is unset. The plan is tested. Delivery on a device is not.
+- [x] High. A logged gift could not be fixed or removed. The buyer or the owner can correct or soft-delete a shared gift. The current user can correct or soft-delete a private gift. Totals use what remains.
+- [x] High. The owner could not hand the list off, leave, or delete the account. `transferOwnership` moves the list to another member and refuses when that member is free and already owns a different list. After that, the old owner can leave. `deleteAccount` releases owned lists and removes the uid from joined groups. If the owner is deleted and others remain, the next member receives the list even if they are free and already own one, so the group is not orphaned; extras lock. If nobody else remains, the group is deleted. The client then deletes the Firebase user.
+- [x] High. A new phone recovered group keys and lost private gifts. The device key is wrapped with the recovery code at `users/{uid}/keys/device`. Startup writes that wrap when a device key and any group's recovery code already exist and the device wrap is missing. Restore applies every wrap, and `groupId === 'device'` becomes the device key. Someone who never saved a recovery code still cannot recover.
+- [x] High. A merge could not be undone, and it could leave both copies alive. A merge with no source key is refused before any change. The source stays until its push succeeds. The journal can undo the merge, and a failed push undoes it. The merge screen says the other copy is removed only after the save.
+- [x] Medium. An occasion could not be removed or corrected. The occasion can be soft-deleted or given a real month and day. Gifts stay on the person.
+- [x] Low. Cloud idea limits followed the phone, not the account. The usage document stays on the device fingerprint. The paid cap applies when `accounts/{uid}.entitled` is true or the device entitlement is paid.
+
+### Manual setup
+
+- Deploy functions and rules (`firebase deploy --only functions,firestore`). That publishes `recheckEntitlements` (every 24 hours) and the new callables: `writePerson`, `linkRecipient`, `transferOwnership`, `revokeMember`, `leaveGroup`, `deleteAccount`, `claimRotationTurn`, `finishRotationTurn`, `listMyGroups`.
+- Set `APPLE_IAP_*` and `GOOGLE_PLAY_SERVICE_ACCOUNT` before expecting refunds to revoke unlocks. If both Apple and Google credentials are empty, the scheduled job returns without changing entitlement.
+- Install pods and rebuild iOS (`npm run pods`, then the iOS app) so `@notifee/react-native` links. Local notifications do not need a push entitlement. Android already declares `POST_NOTIFICATIONS`; a Gradle build links the same module.
+- No new secrets were added to the repo.

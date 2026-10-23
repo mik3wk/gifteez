@@ -1,7 +1,9 @@
 import { hashToUint } from '../crypto/crypto';
+import { DEFAULT_FREE_PEOPLE, lockedPersonIds } from '../../functions/src/peopleCap';
 import {
   dirtyKey,
   type AppSnapshot,
+  type DirtyMap,
   type FeedbackEntry,
   type GiftRecord,
   type GroupArchive,
@@ -40,17 +42,54 @@ export function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+export function isLeapYear(year: number): boolean {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+/** February 29 is a real birthday. Every other day must exist in a non-leap year. */
+export function isRealMonthDay(month: number, day: number): boolean {
+  if (!Number.isInteger(month) || !Number.isInteger(day)) {
+    return false;
+  }
+  if (month < 1 || month > 12 || day < 1) {
+    return false;
+  }
+  if (month === 2 && day === 29) {
+    return true;
+  }
+  const lengths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= lengths[month - 1];
+}
+
+/** February 29 in a non-leap year is celebrated on February 28. */
+export function dateInYear(month: number, day: number, year: number): Date {
+  if (month === 2 && day === 29 && !isLeapYear(year)) {
+    return new Date(year, 1, 28);
+  }
+  return new Date(year, month - 1, day);
+}
+
 export function nextOccurrence(month: number, day: number, today: Date): Date {
   const year = today.getFullYear();
   const todayStart = startOfDay(today).getTime();
-  const thisYear = new Date(year, month - 1, day);
+  const thisYear = dateInYear(month, day, year);
   if (thisYear.getTime() >= todayStart) {
     return thisYear;
   }
-  return new Date(year + 1, month - 1, day);
+  return dateInYear(month, day, year + 1);
+}
+
+export function isOneTimeOccasion(occasion: Pick<Occasion, 'type'>): boolean {
+  return occasion.type === 'wedding';
 }
 
 export function occurrenceYear(occasion: Occasion, today: Date): number {
+  if (isOneTimeOccasion(occasion)) {
+    if (occasion.year != null && occasion.year > 0) {
+      return occasion.year;
+    }
+    return today.getFullYear();
+  }
   return nextOccurrence(occasion.month, occasion.day, today).getFullYear();
 }
 
@@ -76,7 +115,16 @@ export function upcomingOccasion(
   const mine = occasions.filter(item => item.personId === personId && !item.deleted);
   let best: { occasion: Occasion; date: Date } | null = null;
   mine.forEach(occasion => {
-    const date = nextOccurrence(occasion.month, occasion.day, today);
+    let date: Date;
+    if (isOneTimeOccasion(occasion)) {
+      const year = occasion.year != null && occasion.year > 0 ? occasion.year : today.getFullYear();
+      date = dateInYear(occasion.month, occasion.day, year);
+      if (startOfDay(date).getTime() < startOfDay(today).getTime()) {
+        return;
+      }
+    } else {
+      date = nextOccurrence(occasion.month, occasion.day, today);
+    }
     if (!best || date.getTime() < best.date.getTime()) {
       best = { occasion, date };
     }
@@ -104,6 +152,7 @@ export function sortPeople(people: Person[], occasions: Occasion[], today: Date)
     });
 }
 
+/** Headline spend is shared gifts only. Private gifts are a separate line. */
 export function yearSpentCents(personId: string, gifts: GiftRecord[], year: number): number {
   return gifts
     .filter(gift => !gift.deleted && gift.personId === personId && giftYear(gift) === year)
@@ -226,21 +275,40 @@ export function canStartAnotherList(snapshot: AppSnapshot, uid: string): boolean
   return ownedGroupIds(snapshot, uid).length < FREE_OWNED_LIST_LIMIT;
 }
 
+export const DEFAULT_LIST_CURRENCY = 'USD';
+
+export function groupCurrency(group: { currency?: string } | null | undefined): string {
+  const code = group?.currency?.trim();
+  return code || DEFAULT_LIST_CURRENCY;
+}
+
 export function withAccountUnlock(snapshot: AppSnapshot, paid: boolean): AppSnapshot {
-  if (!paid) {
-    return { ...snapshot, entitlementPaid: false };
-  }
   const uid = snapshot.profile.uid;
-  const stamp = (group: GroupMeta): GroupMeta =>
-    uid && group.ownerId === uid ? { ...group, entitled: true } : group;
+  const stamp = (group: GroupMeta, people: Person[]): GroupMeta => {
+    if (!uid || group.ownerId !== uid) {
+      return group;
+    }
+    if (paid) {
+      return { ...group, entitled: true, lockedPersonIds: [] };
+    }
+    return {
+      ...group,
+      entitled: false,
+      lockedPersonIds: lockedPersonIds(
+        people.map(person => ({ id: person.id, createdAt: person.createdAt, deleted: person.deleted })),
+        false,
+        DEFAULT_FREE_PEOPLE,
+      ),
+    };
+  };
   const archives: AppSnapshot['archives'] = {};
   for (const [id, archive] of Object.entries(snapshot.archives ?? {})) {
-    archives[id] = { ...archive, group: stamp(archive.group) };
+    archives[id] = { ...archive, group: stamp(archive.group, archive.people) };
   }
   return {
     ...snapshot,
-    entitlementPaid: true,
-    group: snapshot.group ? stamp(snapshot.group) : snapshot.group,
+    entitlementPaid: paid,
+    group: snapshot.group ? stamp(snapshot.group, snapshot.people) : snapshot.group,
     archives,
   };
 }
@@ -455,6 +523,7 @@ export function createGroup(input: {
   displayName: string;
   groupName: string;
   inviteId?: string | null;
+  currency?: string;
   now: number;
 }): AppSnapshot {
   const parked = parkActive(input.snapshot);
@@ -465,6 +534,8 @@ export function createGroup(input: {
     memberIds: [input.ownerId],
     peopleCount: 0,
     entitled: input.snapshot.entitlementPaid,
+    currency: input.currency || DEFAULT_LIST_CURRENCY,
+    keyVersion: 0,
     updatedAt: input.now,
   };
   const member: Member = {
@@ -532,7 +603,7 @@ export function addPerson(input: {
 export function updatePerson(
   snapshot: AppSnapshot,
   personId: string,
-  patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'opened' | 'deleted'>>,
+  patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'opened' | 'deleted' | 'linkedUid'>>,
   now: number,
 ): Mutation<Person> {
   const current = snapshot.people.find(person => person.id === personId);
@@ -587,7 +658,7 @@ export function saveIdea(input: {
     occasionId: input.occasion.id,
     personId: input.occasion.personId,
     year,
-    status: 'idea-saved',
+    status: existing?.status === 'purchased' ? 'purchased' : 'idea-saved',
     savedIdea: input.idea,
     updatedAt: input.now,
     ...carriedClaim(existing),
@@ -653,6 +724,21 @@ export function upsertIdeas(snapshot: AppSnapshot, entry: AppSnapshot['ideas'][n
   };
 }
 
+export function setGroupCurrency(snapshot: AppSnapshot, currency: string, now: number): AppSnapshot {
+  if (!snapshot.group || snapshot.group.ownerId !== snapshot.profile.uid) {
+    return snapshot;
+  }
+  const code = currency.trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(code)) {
+    return snapshot;
+  }
+  return {
+    ...snapshot,
+    group: { ...snapshot.group, currency: code, updatedAt: now },
+    dirty: { ...snapshot.dirty, 'group:meta': true },
+  };
+}
+
 export function renameGroup(snapshot: AppSnapshot, name: string, now: number): AppSnapshot {
   if (!snapshot.group) {
     return snapshot;
@@ -688,22 +774,35 @@ export function removeMember(snapshot: AppSnapshot, uid: string, now: number): M
   if (uid === snapshot.group.ownerId) {
     return fail('owner');
   }
+  const dirty: DirtyMap = {
+    ...snapshot.dirty,
+    'group:meta': true,
+    [dirtyKey('members', uid)]: true,
+  };
+  const states = snapshot.states.map(state => {
+    if (state.claimedBy !== uid) {
+      return state;
+    }
+    const next: OccasionState = { ...state, updatedAt: now };
+    delete next.claimedBy;
+    delete next.claimedAt;
+    dirty[dirtyKey('states', state.id)] = true;
+    return next;
+  });
   return ok(
     {
       ...snapshot,
       group: {
         ...snapshot.group,
         memberIds: snapshot.group.memberIds.filter(id => id !== uid),
+        needsRotation: true,
         updatedAt: now,
       },
       members: snapshot.members.map(member =>
         member.uid === uid ? { ...member, deleted: true, updatedAt: now } : member,
       ),
-      dirty: {
-        ...snapshot.dirty,
-        'group:meta': true,
-        [dirtyKey('members', uid)]: true,
-      },
+      states,
+      dirty,
     },
     null,
   );
@@ -718,11 +817,38 @@ export function mergeRemote(
   remote.forEach(record => {
     const key = dirtyKey(record.collection, record.id);
     const current = readRecord(snapshot, record.collection, record.id);
-    if (current && current.updatedAt > record.updatedAt) {
+    if (current && current.updatedAt > record.updatedAt && record.collection !== 'states') {
       return;
     }
     if (current && current.updatedAt < record.updatedAt) {
       updatedFromOtherDevice = true;
+    }
+    if (record.collection === 'states' && current) {
+      const local = snapshot.states.find(state => state.id === record.id);
+      if (local) {
+        const incoming = {
+          ...record.data,
+          id: record.id,
+          updatedAt: record.updatedAt,
+          deleted: record.deleted,
+        } as OccasionState;
+        const merged = mergeOccasionState(local, incoming, snapshot.gifts);
+        if (merged.updatedAt !== local.updatedAt || merged.status !== local.status || merged.claimedBy !== local.claimedBy) {
+          updatedFromOtherDevice = record.updatedAt !== local.updatedAt || updatedFromOtherDevice;
+        }
+        snapshot = writeRecord(snapshot, {
+          ...record,
+          updatedAt: merged.updatedAt,
+          deleted: merged.deleted,
+          data: merged,
+        });
+        if (snapshot.dirty[key] && record.updatedAt >= local.updatedAt) {
+          const dirty = { ...snapshot.dirty };
+          delete dirty[key];
+          snapshot = { ...snapshot, dirty };
+        }
+        return;
+      }
     }
     snapshot = writeRecord(snapshot, record);
     if (snapshot.dirty[key]) {
@@ -764,6 +890,60 @@ export function applyGroupRemote(
 }
 
 type Timed = { id: string; updatedAt: number };
+
+/** A later idea save must not clear purchased or a claim it did not mean to replace. An explicit unclaim still drops the claim. */
+export function mergeOccasionState(local: OccasionState, incoming: OccasionState, gifts: GiftRecord[]): OccasionState {
+  const newer = incoming.updatedAt >= local.updatedAt ? incoming : local;
+  const older = newer === incoming ? local : incoming;
+  const giftPurchased = gifts.some(
+    gift => !gift.deleted && gift.occasionId === (newer.occasionId || local.occasionId) && gift.year === (newer.year || local.year),
+  );
+  const status = newer.status === 'purchased' || older.status === 'purchased' || giftPurchased ? 'purchased' : newer.status;
+  let claimedBy = newer.claimedBy;
+  let claimedAt = newer.claimedAt;
+  if (!claimedBy && older.claimedBy) {
+    const ideaClobber = newer.savedIdea !== older.savedIdea || (older.status === 'purchased' && newer.status !== 'purchased');
+    if (ideaClobber) {
+      claimedBy = older.claimedBy;
+      claimedAt = older.claimedAt;
+    }
+  }
+  const next: OccasionState = {
+    id: newer.id || local.id,
+    occasionId: newer.occasionId || local.occasionId,
+    personId: newer.personId || local.personId,
+    year: newer.year || local.year,
+    status,
+    savedIdea: newer.savedIdea ?? older.savedIdea ?? null,
+    updatedAt: Math.max(local.updatedAt, incoming.updatedAt),
+    ...(newer.hiddenFrom || older.hiddenFrom ? { hiddenFrom: newer.hiddenFrom || older.hiddenFrom } : {}),
+  };
+  if (claimedBy) {
+    next.claimedBy = claimedBy;
+    if (claimedAt != null) {
+      next.claimedAt = claimedAt;
+    }
+  }
+  if (newer.deleted) {
+    next.deleted = true;
+  }
+  return next;
+}
+
+export function clearClaimsForUid(snapshot: AppSnapshot, uid: string, now: number): AppSnapshot {
+  const dirty = { ...snapshot.dirty };
+  const states = snapshot.states.map(state => {
+    if (state.claimedBy !== uid) {
+      return state;
+    }
+    const next: OccasionState = { ...state, updatedAt: now };
+    delete next.claimedBy;
+    delete next.claimedAt;
+    dirty[dirtyKey('states', state.id)] = true;
+    return next;
+  });
+  return { ...snapshot, states, dirty };
+}
 
 function carriedClaim(existing: OccasionState | undefined): Partial<Pick<OccasionState, 'claimedBy' | 'claimedAt'>> {
   if (!existing?.claimedBy) {
@@ -973,17 +1153,20 @@ function stringField(record: Record<string, unknown>, keys: string[]): string {
 }
 
 export function parseBudget(value: unknown): number | null {
+  let cents: number | null = null;
   if (typeof value === 'number' && Number.isFinite(value)) {
-    return Math.round(value * 100);
+    cents = Math.round(value * 100);
+  } else if (typeof value === 'string') {
+    const match = value.replace(/,/g, '').match(/-?\d+(\.\d+)?/);
+    if (!match) {
+      return null;
+    }
+    cents = Math.round(Number(match[0]) * 100);
   }
-  if (typeof value !== 'string') {
+  if (cents == null || cents < 0) {
     return null;
   }
-  const match = value.replace(/,/g, '').match(/-?\d+(\.\d+)?/);
-  if (!match) {
-    return null;
-  }
-  return Math.round(Number(match[0]) * 100);
+  return cents;
 }
 
 export function parseLooseDate(value: string): { month: number; day: number } | undefined {
@@ -1075,20 +1258,81 @@ export function phoneAllowed(phone: string, regions: string[]): boolean {
   return false;
 }
 
-export function exportList(snapshot: AppSnapshot, today: Date, formatMoney: (cents: number) => string): string {
-  const lines = [groupDisplayName(snapshot.group?.name ?? '', memberNames(snapshot.members))];
-  sortPeople(snapshot.people, snapshot.occasions, today).forEach(person => {
-    const next = upcomingOccasion(person.id, snapshot.occasions, today);
-    const spent = yearSpentCents(person.id, snapshot.gifts, today.getFullYear());
-    const budget = person.budgetCents == null ? 'no budget' : formatMoney(person.budgetCents);
-    lines.push(`${person.name} — ${next ? next.occasion.type : 'no occasion'} — ${formatMoney(spent)} of ${budget}`);
-    snapshot.gifts
+type ExportBundle = {
+  group: GroupMeta;
+  members: Member[];
+  people: Person[];
+  occasions: Occasion[];
+  gifts: GiftRecord[];
+  privateGifts: AppSnapshot['privateGifts'];
+};
+
+function renderExportBundle(
+  bundle: ExportBundle,
+  today: Date,
+  formatMoney: (cents: number, currency: string) => string,
+): string {
+  const currency = groupCurrency(bundle.group);
+  const money = (cents: number) => formatMoney(cents, currency);
+  const lines = [groupDisplayName(bundle.group.name, memberNames(bundle.members))];
+  sortPeople(bundle.people, bundle.occasions, today).forEach(person => {
+    const next = upcomingOccasion(person.id, bundle.occasions, today);
+    const spent = yearSpentCents(person.id, bundle.gifts, today.getFullYear());
+    const budget = person.budgetCents == null ? 'no budget' : money(person.budgetCents);
+    lines.push(`${person.name} — ${next ? next.occasion.type : 'no occasion'} — ${money(spent)} of ${budget}`);
+    bundle.gifts
       .filter(gift => gift.personId === person.id && !gift.deleted)
       .forEach(gift => {
-        lines.push(`  ${gift.title} (${formatMoney(gift.priceCents)}) on ${gift.purchasedOn}`);
+        const buyer = gift.boughtBy ? ` bought by ${gift.boughtBy}` : '';
+        lines.push(`  ${gift.title} (${money(gift.priceCents)}) on ${gift.purchasedOn}${buyer}`);
+      });
+    bundle.privateGifts
+      .filter(gift => gift.personId === person.id && !gift.deleted && gift.groupId === bundle.group.id)
+      .forEach(gift => {
+        lines.push(`  ${gift.title} (${money(gift.priceCents)}) on ${gift.purchasedOn} private`);
       });
   });
   return lines.join('\n');
+}
+
+/** Waits for a saved account. Includes every list this phone can see, plus private gifts. */
+export function exportAccount(
+  snapshot: AppSnapshot,
+  today: Date,
+  formatMoney: (cents: number, currency: string) => string,
+): string | null {
+  if (!snapshot.profile.upgraded) {
+    return null;
+  }
+  const bundles: ExportBundle[] = [];
+  if (snapshot.group) {
+    bundles.push({
+      group: snapshot.group,
+      members: snapshot.members,
+      people: snapshot.people,
+      occasions: snapshot.occasions,
+      gifts: snapshot.gifts,
+      privateGifts: snapshot.privateGifts ?? [],
+    });
+  }
+  Object.values(snapshot.archives ?? {}).forEach(archive => {
+    if (!archive?.group || archive.group.id === snapshot.group?.id) {
+      return;
+    }
+    bundles.push({
+      group: archive.group,
+      members: archive.members,
+      people: archive.people,
+      occasions: archive.occasions,
+      gifts: archive.gifts,
+      privateGifts: snapshot.privateGifts ?? [],
+    });
+  });
+  return bundles.map(bundle => renderExportBundle(bundle, today, formatMoney)).join('\n\n');
+}
+
+export function exportList(snapshot: AppSnapshot, today: Date, formatMoney: (cents: number) => string): string {
+  return exportAccount(snapshot, today, cents => formatMoney(cents)) ?? '';
 }
 
 export function normalizeUsPhone(phone: string): string {

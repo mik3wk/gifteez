@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -6,8 +6,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { joinConfirmModel, type JoinPreview } from '../app/incomingLink';
 import type { RootStack } from '../app/navigation';
 import { getEnv } from '../config/env';
-import { accountUnlocked, canStartAnotherList, fairnessRows, groupDisplayName, groupMarker } from '../domain/logic';
-import { formatMoney, t } from '../i18n';
+import { accountUnlocked, canStartAnotherList, fairnessRows, groupCurrency, groupDisplayName, groupMarker } from '../domain/logic';
+import { isHiddenFromViewer } from '../domain/visibility';
+import { deviceLocale, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { EmptyArt } from '../ui/art';
 import { useGroupHeading } from '../ui/heading';
@@ -16,7 +17,11 @@ import { AccountSheet, Body, Button, Card, Field, Screen, Title, UnlockSheet } f
 export function FairnessScreen() {
   const { snapshot, colors } = useGifteez();
   useGroupHeading();
-  const rows = fairnessRows(snapshot, new Date());
+  const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(snapshot.group));
+  const rows = fairnessRows(snapshot, new Date()).filter(row => {
+    const person = snapshot.people.find(item => item.id === row.personId);
+    return !isHiddenFromViewer(person, snapshot.profile.uid);
+  });
   const max = Math.max(1, ...rows.map(row => row.yearSpentCents));
   return (
     <Screen>
@@ -32,10 +37,10 @@ export function FairnessScreen() {
         <Card key={row.personId}>
           <Text style={[styles.name, { color: colors.text }]}>{row.name}</Text>
           <Text style={{ color: colors.muted }}>{t('fairness.gifts', { count: row.giftCount })}</Text>
-          <Text style={{ color: colors.text }}>{t('fairness.year', { amount: formatMoney(row.yearSpentCents) })}</Text>
-          <Text style={{ color: colors.muted }}>{t('fairness.all', { amount: formatMoney(row.spentCents) })}</Text>
+          <Text style={{ color: colors.text }}>{t('fairness.year', { amount: money(row.yearSpentCents) })}</Text>
+          <Text style={{ color: colors.muted }}>{t('fairness.all', { amount: money(row.spentCents) })}</Text>
           <Text style={{ color: colors.text }}>
-            {row.remainingCents == null ? t('fairness.noBudget') : t('fairness.left', { amount: formatMoney(row.remainingCents) })}
+            {row.remainingCents == null ? t('fairness.noBudget') : t('fairness.left', { amount: money(row.remainingCents) })}
           </Text>
           <View style={[styles.track, { backgroundColor: colors.border }]}>
             <View style={[styles.bar, { backgroundColor: colors.accent, width: `${Math.round((row.yearSpentCents / max) * 100)}%` }]} />
@@ -47,17 +52,22 @@ export function FairnessScreen() {
 }
 
 export function GroupScreen() {
-  const { snapshot, shareInvite, leave, removeGroupMember, renameList, showRecovery, switchGroup, startGroup, colors } = useGifteez();
+  const { snapshot, shareInvite, leave, removeGroupMember, renameList, showRecovery, switchGroup, startGroup, colors, transferOwnership, setListCurrency } = useGifteez();
   const heading = useGroupHeading();
-  const [name, setName] = useState(snapshot.group?.name ?? '');
+  const groupName = snapshot.group?.name ?? '';
+  const groupId = snapshot.group?.id;
+  const storedCurrency = groupCurrency(snapshot.group);
+  const [name, setName] = useState(groupName);
+  const [currency, setCurrency] = useState(storedCurrency);
   const [code, setCode] = useState<string | null>(null);
   const [upgrade, setUpgrade] = useState(false);
   const [creating, setCreating] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const canStart = canStartAnotherList(snapshot, snapshot.profile.uid ?? '');
   useEffect(() => {
-    setName(snapshot.group?.name ?? '');
-  }, [snapshot.group?.id, snapshot.group?.name]);
+    setName(groupName);
+    setCurrency(storedCurrency);
+  }, [groupId, groupName, storedCurrency]);
   return (
     <Screen>
       <Title>{`${heading.emoji} ${heading.label}`}</Title>
@@ -71,6 +81,7 @@ export function GroupScreen() {
             <Card>
               <Text style={[styles.name, { color: marker.color }]}>{`${marker.emoji} ${label}`}</Text>
               <Text style={{ color: colors.muted }}>{active ? t('groupScreen.current') : t('groupScreen.switchTo')}</Text>
+              {item.stale ? <Text style={{ color: colors.muted }}>{t('groupScreen.notCurrent')}</Text> : null}
             </Card>
           </Pressable>
         );
@@ -89,6 +100,12 @@ export function GroupScreen() {
       <Field label={t('groupScreen.groupName')} value={name} onChangeText={setName} />
       <Body>{t('groupScreen.nameHint', { name: heading.label })}</Body>
       <Button label={t('groupScreen.rename')} onPress={() => renameList(name)} />
+      {snapshot.profile.uid === snapshot.group?.ownerId ? (
+        <>
+          <Field label={t('groupScreen.currency')} value={currency} onChangeText={setCurrency} accessibilityLabel={t('groupScreen.currency')} />
+          <Button label={t('groupScreen.saveCurrency')} accessibilityLabel={t('groupScreen.saveCurrencyLabel')} tone="secondary" onPress={() => setListCurrency(currency)} />
+        </>
+      ) : null}
       <Body>{t('groupScreen.inviteHint', { count: getEnv().groupMaxMembers })}</Body>
       <Button
         label={t('groupScreen.invite')}
@@ -110,7 +127,15 @@ export function GroupScreen() {
             {member.uid === snapshot.group?.ownerId ? ` · ${t('groupScreen.owner')}` : ''}
           </Text>
           {snapshot.profile.uid === snapshot.group?.ownerId && member.uid !== snapshot.profile.uid ? (
-            <Button label={t('groupScreen.remove')} tone="danger" onPress={() => removeGroupMember(member.uid)} />
+            <>
+              <Button
+                label={t('groupScreen.makeOwner')}
+                accessibilityLabel={t('groupScreen.makeOwnerLabel', { name: member.displayName })}
+                tone="secondary"
+                onPress={() => transferOwnership(member.uid)}
+              />
+              <Button label={t('groupScreen.remove')} tone="danger" onPress={() => removeGroupMember(member.uid)} />
+            </>
           ) : null}
         </Card>
       ))}
@@ -267,6 +292,8 @@ export function SettingsScreen() {
   const {
     snapshot,
     exportText,
+    setReminders,
+    deleteAccount,
     buy,
     restorePurchases,
     storeProduct,
@@ -278,8 +305,20 @@ export function SettingsScreen() {
     envNotice,
   } = useSettingsData();
   const [upgrade, setUpgrade] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const exportAfterSave = useRef(false);
   const [pasted, setPasted] = useState('');
   const [message, setMessage] = useState<string | null>(envNotice);
+  useEffect(() => {
+    if (!exportAfterSave.current || !snapshot.profile.upgraded) {
+      return;
+    }
+    exportAfterSave.current = false;
+    const text = exportText();
+    if (text) {
+      Share.share({ message: text }).catch(() => undefined);
+    }
+  }, [exportText, snapshot.profile.upgraded]);
   return (
     <Screen>
       <Title>{t('settings.title')}</Title>
@@ -294,10 +333,21 @@ export function SettingsScreen() {
         label={t('settings.export')}
         onPress={async () => {
           if (!snapshot.profile.upgraded) {
+            exportAfterSave.current = true;
             setUpgrade(true);
+            return;
           }
-          await Share.share({ message: exportText() });
+          const message = exportText();
+          if (message) {
+            await Share.share({ message });
+          }
         }}
+      />
+      <Button
+        label={snapshot.profile.reminders === 'on' ? t('settings.remindersOn') : t('settings.remindersOff')}
+        accessibilityLabel={t('settings.remindersLabel')}
+        tone="secondary"
+        onPress={() => setReminders(snapshot.profile.reminders !== 'on')}
       />
       <Card>
         <Title>{t('settings.unlock')}</Title>
@@ -328,8 +378,36 @@ export function SettingsScreen() {
         label={t('settings.importAction')}
         onPress={async () => setMessage(await describeImport(await importText(pasted)))}
       />
+      {confirmDelete ? (
+        <>
+          <Body>{t('settings.deleteAccountBody')}</Body>
+          <Button
+            label={t('settings.deleteAccountConfirm')}
+            accessibilityLabel={t('settings.deleteAccountConfirmLabel')}
+            tone="danger"
+            onPress={() => deleteAccount()}
+          />
+        </>
+      ) : (
+        <Button
+          label={t('settings.deleteAccount')}
+          accessibilityLabel={t('settings.deleteAccountLabel')}
+          tone="danger"
+          onPress={() => setConfirmDelete(true)}
+        />
+      )}
       {message ? <Body>{message}</Body> : null}
-      <AccountSheet visible={upgrade} allowName={false} showCreate={false} onClose={() => setUpgrade(false)} />
+      <AccountSheet
+        visible={upgrade}
+        allowName={false}
+        showCreate={false}
+        onClose={() => {
+          setUpgrade(false);
+          if (!snapshot.profile.upgraded) {
+            exportAfterSave.current = false;
+          }
+        }}
+      />
     </Screen>
   );
 }

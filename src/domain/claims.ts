@@ -11,9 +11,22 @@ function fail<T>(error: string): Mutation<T> {
 }
 
 export function claimerName(uid: string, members: Member[]): string {
-  const member = members.find(item => item.uid === uid && !item.deleted) ?? members.find(item => item.uid === uid);
-  const name = member?.displayName.trim();
-  return name || uid;
+  const member = members.find(item => item.uid === uid && !item.deleted);
+  if (!member) {
+    return '';
+  }
+  return member.displayName.trim() || uid;
+}
+
+function claimStillHeld(snapshot: AppSnapshot, claimedBy: string): boolean {
+  if (snapshot.group && !snapshot.group.memberIds.includes(claimedBy)) {
+    return false;
+  }
+  const member = snapshot.members.find(item => item.uid === claimedBy);
+  if (member?.deleted) {
+    return false;
+  }
+  return true;
 }
 
 export type BuyerLabel = { kind: 'none' } | { kind: 'you' } | { kind: 'name'; name: string };
@@ -74,7 +87,7 @@ export function claimOccasion(input: {
   const year = occurrenceYear(occasion, input.today);
   const id = stateId(occasion.id, year);
   const existing = input.snapshot.states.find(state => state.id === id && !state.deleted);
-  if (existing?.claimedBy && existing.claimedBy !== input.uid) {
+  if (existing?.claimedBy && existing.claimedBy !== input.uid && claimStillHeld(input.snapshot, existing.claimedBy)) {
     return fail('claimed');
   }
   if (existing?.claimedBy === input.uid) {
