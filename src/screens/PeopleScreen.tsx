@@ -65,8 +65,8 @@ export function PeopleScreen() {
 
   return (
     <Screen tab="people">
-      <SessionEntrance id="people">
       <AppHeader title={heading.label} greeting={greeting} />
+      <SessionEntrance id="people">
       <DuplicateOffers
         offers={duplicateOffers}
         onReview={offer => navigation.navigate('SamePerson', {

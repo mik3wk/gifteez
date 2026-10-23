@@ -54,8 +54,8 @@ export function FairnessScreen() {
   const quiet = rows.length > 0 && rows.every(row => row.giftCount === 0);
   return (
     <Screen tab="fairness">
-      <SessionEntrance id="fairness">
       <AppHeader title={heading.label} />
+      <SessionEntrance id="fairness">
       <Display>{t('fairness.title')}</Display>
       <Body>{t('fairness.intro')}</Body>
       {rows.length === 0 ? (
@@ -111,8 +111,8 @@ export function GroupScreen() {
   const members = snapshot.members.filter(member => !member.deleted);
   return (
     <Screen tab="group">
-      <SessionEntrance id="group">
       <AppHeader title={heading.label} />
+      <SessionEntrance id="group">
       <Heading>{t('groupScreen.lists')}</Heading>
       {snapshot.roster.length === 0 ? <EmptyState kind="group" text={t('groupScreen.listsEmpty')} /> : null}
       {snapshot.roster.map(item => {
@@ -482,8 +482,8 @@ export function SettingsScreen() {
   const saved = snapshot.profile.upgraded;
   return (
     <Screen tab="settings">
-      <SessionEntrance id="settings">
       <AppHeader title={heading.label} />
+      <SessionEntrance id="settings">
       <Heading>{t('settings.title')}</Heading>
       <Card>
         <Heading>{t('settings.account')}</Heading>
