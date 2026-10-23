@@ -106,11 +106,12 @@ import {
 } from '../platform/firebase';
 import { importContacts, sweepBirthdays } from '../platform/importers';
 import { buyUnlock, connectStore, finishOwned, listenToPurchases, loadOwned, purchaseProof, type StoreProduct } from '../platform/iap';
-import { applyReminderPlan, requestReminderPermission } from '../platform/reminders';
+import { applyReminderPlan, cancelReminderPlan, requestReminderPermission } from '../platform/reminders';
 import { deleteSecret, loadSecret, saveSecret } from '../platform/secure';
 import { occasionLabel, planOccasion, presetFor } from '../domain/occasions';
+import { classifySyncError } from '../domain/syncStatus';
 import { haptic } from '../platform/haptics';
-import { colorsFor, parseSkin, resolveSkin, withColorScheme, type SkinId, type ThemeColors } from '../theme/skins';
+import { colorsFor, parseSkin, resolveSkin, withColorScheme, type ResolvedColors, type SkinId, type ThemeColors } from '../theme/skins';
 
 const COLLECTIONS = ['people', 'occasions', 'states', 'gifts', 'ideas', 'members'] as const;
 
@@ -119,7 +120,11 @@ type CloudResult = { ideas: string[]; counted: boolean; remaining: number };
 type GifteezApi = {
   ready: boolean;
   snapshot: AppSnapshot;
-  colors: ThemeColors;
+  colors: ResolvedColors;
+  offline: boolean;
+  canUndo: boolean;
+  runUndo: () => Promise<void>;
+  onNavigate: () => void;
   skinId: string;
   notice: string | null;
   error: string | null;
@@ -143,7 +148,7 @@ type GifteezApi = {
   sendPhone: (phone: string) => Promise<void>;
   confirmPhone: (code: string) => Promise<void>;
   joinFromLink: (url: string) => Promise<boolean>;
-  restoreWithCode: (code: string) => Promise<void>;
+  restoreWithCode: (code: string) => Promise<boolean>;
   addPerson: (input: { name: string; budget: string; tags: string[]; imported?: boolean }) => Promise<string | null>;
   savePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags'>>) => Promise<void>;
   removePerson: (id: string) => Promise<void>;
@@ -156,8 +161,8 @@ type GifteezApi = {
     extra?: { label?: string; recurs?: boolean },
   ) => Promise<void>;
   saveIdeaFor: (occasionId: string, idea: string) => Promise<void>;
-  logGift: (occasionId: string, title: string, price: string, date: string) => Promise<void>;
-  updateGift: (giftId: string, title: string, price: string, date: string, privateGift: boolean) => Promise<void>;
+  logGift: (occasionId: string, title: string, price: string, date: string) => Promise<boolean>;
+  updateGift: (giftId: string, title: string, price: string, date: string, privateGift: boolean) => Promise<boolean>;
   deleteGift: (giftId: string, privateGift: boolean) => Promise<void>;
   updateOccasion: (occasionId: string, month: number, day: number, year?: number) => Promise<void>;
   deleteOccasion: (occasionId: string) => Promise<void>;
@@ -220,7 +225,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const [resumePersonId, setResumePersonId] = useState<string | null>(null);
   const clearResumePerson = useCallback(() => setResumePersonId(null), []);
   const [skinId, setSkinId] = useState<SkinId>('base');
-  const [colors, setColors] = useState<ThemeColors>(() => withColorScheme(colorsFor('base', {}).colors, Appearance.getColorScheme()));
+  const [colors, setColors] = useState<ResolvedColors>(() => withColorScheme(colorsFor('base', {}).colors, Appearance.getColorScheme()));
+  const [offline, setOffline] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
   const paletteRef = useRef<ThemeColors>(colorsFor('base', {}).colors);
   const paint = useCallback((next: ThemeColors) => {
     paletteRef.current = next;
@@ -242,9 +249,80 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     await writeCacheBlob(sealJson(next, key));
   }, []);
 
+  const undoRestore = useRef<(() => Promise<void>) | null>(null);
+  const remoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncReported = useRef<string | null>(null);
+  const noticeStickyUntil = useRef(0);
+
+  const showNotice = useCallback((message: string, sticky = false) => {
+    setError(null);
+    setNotice(message);
+    if (sticky) {
+      noticeStickyUntil.current = Date.now() + 6000;
+    }
+  }, []);
+
+  const noteSync = useCallback((caught: unknown) => {
+    const kind = classifySyncError(caught);
+    if (kind === 'offline') {
+      setOffline(true);
+      return;
+    }
+    if (syncReported.current === kind) {
+      return;
+    }
+    syncReported.current = kind;
+    showNotice(t(kind === 'permission' ? 'sync.permission' : 'sync.failed'));
+  }, [showNotice]);
+
+  const markSynced = useCallback(() => {
+    setOffline(false);
+    syncReported.current = null;
+  }, []);
+
+  const offerUndo = useCallback((message: string, restore: () => Promise<void>, commitRemote?: () => Promise<unknown>) => {
+    if (remoteTimer.current) {
+      clearTimeout(remoteTimer.current);
+    }
+    undoRestore.current = restore;
+    setCanUndo(true);
+    showNotice(message, true);
+    remoteTimer.current = setTimeout(() => {
+      setCanUndo(false);
+      undoRestore.current = null;
+      remoteTimer.current = null;
+      commitRemote?.().catch(() => undefined);
+    }, 5200);
+  }, [showNotice]);
+
+  const runUndo = useCallback(async () => {
+    if (remoteTimer.current) {
+      clearTimeout(remoteTimer.current);
+    }
+    remoteTimer.current = null;
+    const restore = undoRestore.current;
+    undoRestore.current = null;
+    setCanUndo(false);
+    setNotice(null);
+    if (restore) {
+      await restore();
+    }
+  }, []);
+
+  const onNavigate = useCallback(() => {
+    if (Date.now() < noticeStickyUntil.current) {
+      return;
+    }
+    setNotice(null);
+    setError(null);
+  }, []);
+
   const fail = useCallback((code: string, vars?: Record<string, string | number>) => {
     const key = `errors.${code}`;
     const message = t(key, vars);
+    setNotice(null);
+    setCanUndo(false);
+    undoRestore.current = null;
     setError(message === key ? t('errors.generic') : message);
     haptic('error');
   }, []);
@@ -296,6 +374,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       await migrateDeviceRecovery(next);
       await scheduleReminders(next);
       await commit(next);
+      markSynced();
     } catch (caught) {
       if (caught instanceof CapError) {
         fail('cap');
@@ -308,10 +387,10 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         await commit(leaveActiveGroup(snapshotRef.current));
         return snapshotRef.current;
       }
-      setNotice(t('sync.offline'));
+      noteSync(caught);
     }
     return snapshotRef.current;
-  }, [commit, env, fail]);
+  }, [commit, env, fail, markSynced, noteSync]);
 
   useEffect(() => {
     let cancelled = false;
@@ -475,6 +554,10 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     skinId,
     notice,
     error,
+    offline,
+    canUndo,
+    runUndo,
+    onNavigate,
     startupFailure,
     startupDetail,
     retryStartup: () => {
@@ -547,7 +630,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           fail('oneList');
           return false;
         }
-        setNotice(t('sync.offline'));
+        noteSync(caught);
       }
       return snapshotRef.current.group?.id === groupId;
     },
@@ -696,8 +779,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           'members',
           sealMember(outcome.uid, outcome.displayName, keyFromString(outcome.groupKey), Date.now()),
         );
-      } catch {
-        setNotice(t('sync.offline'));
+      } catch (caught) {
+        noteSync(caught);
       }
       await sync(snapshotRef.current);
       setDuplicateOffers(findDuplicatePeople(snapshotRef.current));
@@ -707,7 +790,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       const uid = currentUid();
       if (!uid) {
         fail('auth');
-        return;
+        return false;
       }
       try {
         const wraps = await listRecovery(uid);
@@ -726,14 +809,15 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           }
         }
         if (opened === 0) {
-          fail('invalid');
-          return;
+          return false;
         }
         const restored = adoptSignedInAccount(snapshotRef.current, uid, Date.now());
         await commit({ ...restored, profile: { ...restored.profile, upgraded: true, onboarded: true } });
         await sync(snapshotRef.current);
+        return true;
       } catch {
         fail('auth');
+        return false;
       }
     },
     addPerson: async input => {
@@ -772,13 +856,18 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       sync().catch(() => undefined);
     },
     removePerson: async id => {
-      const result = updatePerson(snapshotRef.current, id, { deleted: true }, Date.now());
+      const before = snapshotRef.current;
+      const name = before.people.find(person => person.id === id)?.name ?? '';
+      const result = updatePerson(before, id, { deleted: true }, Date.now());
       if (!result.ok) {
         return;
       }
       await commit(result.snapshot);
       haptic('warning');
-      sync().catch(() => undefined);
+      offerUndo(t('person.removed', { name }), async () => {
+        await commit(before);
+        sync().catch(() => undefined);
+      }, () => sync());
     },
     addOccasion: async (personId, type, month, day, year, extra) => {
       const planned = planOccasion({
@@ -813,7 +902,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         recurs: planned.recurs,
         updatedAt: Date.now(),
       };
-      const next = addOccasion(snapshotRef.current, occasion);
+      const next = withOnDeviceIdeas(addOccasion(snapshotRef.current, occasion), personId);
       await commit(next);
       haptic('success');
       scheduleReminders(snapshotRef.current).catch(() => undefined);
@@ -832,12 +921,12 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       const occasion = snapshotRef.current.occasions.find(item => item.id === occasionId);
       if (!occasion || !title.trim()) {
         fail('invalid');
-        return;
+        return false;
       }
       const priceCents = parseBudget(price);
       if (priceCents == null) {
         fail('price');
-        return;
+        return false;
       }
       const purchasedOn = date.trim() ? date.trim() : todayIso();
       const year = Number(purchasedOn.slice(0, 4)) || occurrenceYear(occasion, new Date());
@@ -869,6 +958,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       haptic('success');
       sync().catch(() => undefined);
+      return true;
     },
     claimOccasion: async occasionId => {
       const uid = snapshotRef.current.profile.uid;
@@ -1095,8 +1185,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         if (groupKey) {
           await publishPreview(snapshotRef.current, keyFromString(groupKey));
         }
-      } catch {
-        setNotice(t('sync.offline'));
+      } catch (caught) {
+        noteSync(caught);
       }
       const httpsLink = buildInviteUrl({
         domain: env.inviteDomain,
@@ -1123,29 +1213,33 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       const groupId = current.group.id;
       const ownerClosing = current.group.ownerId === uid && remaining.length === 0;
-      let released = true;
-      const cleared = clearClaimsForUid(current, uid, Date.now());
-      try {
-        if (ownerClosing) {
-          await callFunction(env, 'releaseOwnedGroup', { groupId });
-        } else {
-          await callFunction(env, 'leaveGroup', { groupId });
-        }
-      } catch {
-        released = false;
-        setNotice(t('sync.offline'));
-      }
-      let next = leaveActiveGroup(cleared);
-      if (!released) {
-        next = {
-          ...next,
-          pendingMembership: [...(next.pendingMembership ?? []), { action: 'leave', groupId, uid }],
-          ...(ownerClosing ? { releasedGroupIds: [...(current.releasedGroupIds ?? []), groupId] } : {}),
-        };
-      }
-      await commit(next);
+      const before = current;
+      await commit(leaveActiveGroup(clearClaimsForUid(current, uid, Date.now())));
       haptic('warning');
-      sync().catch(() => undefined);
+      offerUndo(t('groupScreen.leftList'), async () => {
+        await commit(before);
+      }, async () => {
+        let released = true;
+        try {
+          if (ownerClosing) {
+            await callFunction(env, 'releaseOwnedGroup', { groupId });
+          } else {
+            await callFunction(env, 'leaveGroup', { groupId });
+          }
+        } catch (caught) {
+          released = false;
+          noteSync(caught);
+        }
+        if (!released) {
+          const latest = snapshotRef.current;
+          await commit({
+            ...latest,
+            pendingMembership: [...(latest.pendingMembership ?? []), { action: 'leave', groupId, uid }],
+            ...(ownerClosing ? { releasedGroupIds: [...(before.releasedGroupIds ?? []), groupId] } : {}),
+          });
+        }
+        sync().catch(() => undefined);
+      });
     },
     removeGroupMember: async uid => {
       const current = snapshotRef.current;
@@ -1155,17 +1249,27 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return;
       }
       const groupId = current.group?.id;
-      if (groupId) {
-        try {
-          await callFunction(env, 'revokeMember', { groupId, uid });
-        } catch {
-          result.snapshot.pendingMembership = [...(result.snapshot.pendingMembership ?? []), { action: 'remove', groupId, uid }];
-          setNotice(t('sync.offline'));
-        }
-      }
+      const name = current.members.find(member => member.uid === uid)?.displayName ?? '';
       await commit(result.snapshot);
       haptic('warning');
-      sync().catch(() => undefined);
+      offerUndo(t('groupScreen.memberRemoved', { name }), async () => {
+        await commit(current);
+      }, async () => {
+        if (!groupId) {
+          return;
+        }
+        try {
+          await callFunction(env, 'revokeMember', { groupId, uid });
+        } catch (caught) {
+          const latest = snapshotRef.current;
+          await commit({
+            ...latest,
+            pendingMembership: [...(latest.pendingMembership ?? []), { action: 'remove', groupId, uid }],
+          });
+          noteSync(caught);
+        }
+        sync().catch(() => undefined);
+      });
     },
     transferOwnership: async uid => {
       const groupId = snapshotRef.current.group?.id;
@@ -1230,9 +1334,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     exportText: () => exportAccount(snapshotRef.current, new Date(), (cents, currency) => formatMoney(cents, deviceLocale(), currency)) ?? '',
     updateGift: async (giftId, title, price, date, privateGift) => {
       const priceCents = parseBudget(price);
-      if (priceCents == null || !title.trim()) {
-        fail('price');
-        return;
+      if (!title.trim() || priceCents == null) {
+        fail(title.trim() ? 'price' : 'invalid');
+        return false;
       }
       const purchasedOn = date.trim() ? date.trim() : todayIso();
       const result = privateGift
@@ -1240,22 +1344,27 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         : updateSharedGift({ snapshot: snapshotRef.current, giftId, uid: snapshotRef.current.profile.uid, title, priceCents, purchasedOn, now: Date.now() });
       if (!result.ok) {
         fail(result.error);
-        return;
+        return false;
       }
       await commit(result.snapshot);
       sync().catch(() => undefined);
+      return true;
     },
     deleteGift: async (giftId, privateGift) => {
+      const before = snapshotRef.current;
       const result = privateGift
-        ? deletePrivateGift(snapshotRef.current, giftId, Date.now())
-        : deleteSharedGift({ snapshot: snapshotRef.current, giftId, uid: snapshotRef.current.profile.uid, now: Date.now() });
+        ? deletePrivateGift(before, giftId, Date.now())
+        : deleteSharedGift({ snapshot: before, giftId, uid: before.profile.uid, now: Date.now() });
       if (!result.ok) {
         fail(result.error);
         return;
       }
       await commit(result.snapshot);
       haptic('warning');
-      sync().catch(() => undefined);
+      offerUndo(t('person.giftRemoved'), async () => {
+        await commit(before);
+        sync().catch(() => undefined);
+      }, () => sync());
     },
     updateOccasion: async (occasionId, month, day, year) => {
       const result = updateOccasionDate({ snapshot: snapshotRef.current, occasionId, month, day, year, now: Date.now() });
@@ -1269,7 +1378,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       sync().catch(() => undefined);
     },
     deleteOccasion: async occasionId => {
-      const result = deleteOccasion(snapshotRef.current, occasionId, Date.now());
+      const before = snapshotRef.current;
+      const result = deleteOccasion(before, occasionId, Date.now());
       if (!result.ok) {
         fail(result.error);
         return;
@@ -1277,7 +1387,11 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       await commit(result.snapshot);
       haptic('warning');
       scheduleReminders(snapshotRef.current).catch(() => undefined);
-      sync().catch(() => undefined);
+      offerUndo(t('person.occasionRemoved'), async () => {
+        await commit(before);
+        scheduleReminders(snapshotRef.current).catch(() => undefined);
+        sync().catch(() => undefined);
+      }, () => sync());
     },
     linkRecipient: async (personId, linkedUid) => {
       const current = snapshotRef.current;
@@ -1295,8 +1409,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           gifts: current.gifts.filter(item => item.personId === personId).map(item => item.id),
           ideas: current.ideas.filter(item => item.personId === personId).map(item => item.id),
         });
-      } catch {
-        setNotice(t('sync.offline'));
+      } catch (caught) {
+        noteSync(caught);
         return;
       }
       const now = Date.now();
@@ -1395,7 +1509,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       return addImported(rows);
     },
-  }), [addImported, clearResumePerson, cloudRemaining, colors, commit, duplicateOffers, env, error, fail, notice, ready, recoveryCode, resumePersonId, skinId, snapshot, startupDetail, startupFailure, storeProduct, storeReady, sync]);
+  }), [addImported, canUndo, clearResumePerson, cloudRemaining, colors, commit, duplicateOffers, env, error, fail, noteSync, notice, offerUndo, offline, onNavigate, ready, recoveryCode, resumePersonId, runUndo, skinId, snapshot, startupDetail, startupFailure, storeProduct, storeReady, sync]);
 
   return <GifteezContext.Provider value={api}>{children}</GifteezContext.Provider>;
 }
@@ -1773,13 +1887,48 @@ async function migrateDeviceRecovery(snapshot: AppSnapshot): Promise<void> {
 }
 
 async function scheduleReminders(snapshot: AppSnapshot): Promise<void> {
+  if (snapshot.profile.reminders !== 'on') {
+    if (snapshot.profile.reminders === 'off') {
+      await cancelReminderPlan();
+    }
+    return;
+  }
   const slots = planReminders({
     people: snapshot.people,
     occasions: snapshot.occasions,
     now: new Date(),
-    enabled: snapshot.profile.reminders === 'on',
+    enabled: true,
   });
   await applyReminderPlan(slots);
+}
+
+function withOnDeviceIdeas(snapshot: AppSnapshot, personId: string): AppSnapshot {
+  const person = snapshot.people.find(item => item.id === personId && !item.deleted);
+  if (!person) {
+    return snapshot;
+  }
+  const occasion = upcomingOccasion(personId, snapshot.occasions, new Date());
+  const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
+  const cacheId = ideaCacheId(personId, occasionKey, 'on-device');
+  const previous = snapshot.ideas.find(item => item.id === cacheId);
+  const ideas = suggestIdeas({
+    personId,
+    name: person.name,
+    tags: person.tags,
+    occasion: occasion && occasion.occasion.type !== 'custom' ? occasion.occasion.type : null,
+    feedback: snapshot.feedback,
+    salt: previous?.salt ?? 0,
+  });
+  return upsertIdeas(snapshot, {
+    id: cacheId,
+    personId,
+    occasionKey,
+    ideas,
+    source: 'on-device',
+    salt: previous?.salt ?? 0,
+    generatedAt: Date.now(),
+    updatedAt: Date.now(),
+  });
 }
 
 function groupFromRemote(groupId: string, remote: Record<string, unknown>, key: Uint8Array, fallback: AppSnapshot['group']): AppSnapshot['group'] {

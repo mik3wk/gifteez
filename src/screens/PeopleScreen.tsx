@@ -81,7 +81,7 @@ export function PeopleScreen() {
                 {next ? `${occasionLabel(next.occasion)} · ${isOneTimeOccasion(next.occasion) ? formatLongDate(next.date) : formatDate(next.date)}` : t('people.noOccasion')}
               </Text>
               <Text style={[styles.meta, { color: colors.text }]}>{budget}</Text>
-              {status ? <Text style={[styles.meta, { color: colors.accent }]}>{t(statusKey(status))}</Text> : null}
+              {status ? <Text style={[styles.meta, { color: colors.accentForeground }]}>{t(statusKey(status))}</Text> : null}
               {person.imported && !person.opened ? <Text style={[styles.meta, { color: colors.muted }]}>{t('people.imported')}</Text> : null}
           </Row>
         );

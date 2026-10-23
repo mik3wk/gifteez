@@ -10,11 +10,11 @@ const sharp = require('sharp');
 const root = path.resolve(__dirname, '..');
 const src = path.join(root, 'assets/src');
 
-async function png(name, width, height, dest) {
+async function png(name, width, height, dest, options = {}) {
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   await sharp(path.join(src, name), { density: 300 })
     .resize(width, height, { fit: 'fill' })
-    .png({ compressionLevel: 9, palette: true })
+    .png({ compressionLevel: 9, palette: options.palette !== false })
     .toFile(dest);
 }
 
@@ -84,6 +84,9 @@ async function main() {
   await png('splash.svg', 200, 200, path.join(splashSet, 'splash.png'));
   await png('splash.svg', 400, 400, path.join(splashSet, 'splash@2x.png'));
   await png('splash.svg', 600, 600, path.join(splashSet, 'splash@3x.png'));
+  await png('splash-dark.svg', 200, 200, path.join(splashSet, 'splash-dark.png'));
+  await png('splash-dark.svg', 400, 400, path.join(splashSet, 'splash-dark@2x.png'));
+  await png('splash-dark.svg', 600, 600, path.join(splashSet, 'splash-dark@3x.png'));
   fs.writeFileSync(
     path.join(splashSet, 'Contents.json'),
     `${JSON.stringify({
@@ -91,6 +94,9 @@ async function main() {
         { filename: 'splash.png', idiom: 'universal', scale: '1x' },
         { filename: 'splash@2x.png', idiom: 'universal', scale: '2x' },
         { filename: 'splash@3x.png', idiom: 'universal', scale: '3x' },
+        { appearances: [{ appearance: 'luminosity', value: 'dark' }], filename: 'splash-dark.png', idiom: 'universal', scale: '1x' },
+        { appearances: [{ appearance: 'luminosity', value: 'dark' }], filename: 'splash-dark@2x.png', idiom: 'universal', scale: '2x' },
+        { appearances: [{ appearance: 'luminosity', value: 'dark' }], filename: 'splash-dark@3x.png', idiom: 'universal', scale: '3x' },
       ],
       info: { author: 'xcode', version: 1 },
     }, null, 2)}\n`,
@@ -120,12 +126,13 @@ async function main() {
     await png('icon-foreground.svg', size, size, path.join(dir, 'ic_launcher_foreground.png'));
   }
   await png('splash.svg', 512, 512, path.join(root, 'android/app/src/main/res/drawable-nodpi/splash_logo.png'));
+  await png('splash-dark.svg', 512, 512, path.join(root, 'android/app/src/main/res/drawable-night-nodpi/splash_logo.png'));
 
   const art = path.join(root, 'src/assets');
   await png('empty-people.svg', 800, 420, path.join(art, 'empty-people.png'));
   await png('empty-fairness.svg', 800, 420, path.join(art, 'empty-fairness.png'));
   for (const season of ['base', 'fall', 'winter', 'spring', 'summer']) {
-    await png(`skin-${season}.svg`, 1200, 320, path.join(art, 'skins', `${season}.png`));
+    await png(`skin-${season}.svg`, 1200, 320, path.join(art, 'skins', `${season}.png`), { palette: false });
   }
 
   const store = path.join(root, 'assets/store');

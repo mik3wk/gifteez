@@ -193,6 +193,16 @@
     "samePerson": "Same person as…",
     "samePersonLabel": "Mark this person as the same as someone on another list",
     "delete": "Remove person",
+    "deleteConfirm": "Remove {name}?",
+    "deleteConfirmBody": "They leave this list. You can undo it for a few seconds.",
+    "removed": "{name} was removed.",
+    "deleteGiftConfirm": "Delete this gift?",
+    "deleteGiftBody": "You can undo it for a few seconds.",
+    "giftRemoved": "Gift deleted.",
+    "deleteOccasionConfirm": "Remove this occasion?",
+    "occasionRemoved": "Occasion removed.",
+    "savedMark": "Saved",
+    "cancelUpdate": "Cancel",
     "editGift": "Edit gift",
     "editGiftLabel": "Edit {title}",
     "deleteGift": "Delete gift",
@@ -265,7 +275,13 @@
     "invite": "Share invite link",
     "inviteHint": "Only share this with people you shop with. Anyone who opens it can read the list. A list holds up to {count} people.",
     "leave": "Leave group",
+    "leaveConfirm": "Leave this list?",
+    "leaveBody": "You can undo it for a few seconds.",
+    "leftList": "You left the list.",
     "remove": "Remove",
+    "removeConfirm": "Remove {name}?",
+    "removeBody": "You can undo it for a few seconds.",
+    "memberRemoved": "{name} was removed.",
     "recovery": "Show recovery code",
     "recoveryWhy": "These words unlock this list on a new phone. Gifteez can't read them. You only need them if you switch phones.",
     "groupName": "List name",
@@ -348,7 +364,10 @@
   },
   "sync": {
     "otherDevice": "Updated on another device",
-    "offline": "Saved on this phone. It will sync when the connection is back."
+    "offline": "Saved on this phone. It will sync when the connection is back.",
+    "permission": "Gifteez could not prove this install to the server. Your changes are still on this phone. In development, register the App Check debug token from the device log.",
+    "failed": "Gifteez could not sync just now. Your changes are still on this phone.",
+    "offlineBanner": "Offline. Changes stay on this phone until the connection is back."
   },
   "errors": {
     "generic": "Something went wrong. Your latest change is still on this phone.",
@@ -367,18 +386,23 @@
     "claimed": "Someone else already said they would get this.",
     "forbidden": "Only the person who claimed this, or the list owner, can unclaim it.",
     "price": "Enter a price of zero or more.",
+    "purchaseDate": "Use a real date, like 2026-10-23.",
+    "currency": "Use a 3-letter code, like USD.",
     "sourceKey": "That list's key is not on this phone, so the merge was not started.",
     "mergePush": "The merge did not finish saving, so it was undone.",
     "notifications": "Notifications stayed off."
   },
   "reminders": {
     "title": "Gifteez",
+    "alertTitle": "{name}'s {occasion}",
     "day": "{name}'s {occasion} is today",
     "week": "{name}'s {occasion} is in a week"
   },
   "common": {
     "back": "Back",
     "cancel": "Cancel",
+    "undo": "Undo",
+    "dismiss": "Dismiss",
     "close": "Close",
     "continue": "Continue",
     "loading": "Loading"

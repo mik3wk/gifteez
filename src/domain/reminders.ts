@@ -8,6 +8,7 @@ export type ReminderSlot = {
   at: number;
   kind: ReminderKind;
   personName: string;
+  personId: string;
   occasionName: string;
   occasionType: Occasion['type'];
   occasionId: string;
@@ -56,6 +57,7 @@ export function planReminders(input: {
         at: candidate.at.getTime(),
         kind: candidate.kind,
         personName: person.name,
+        personId: person.id,
         occasionName: occasionLabel(occasion),
         occasionType: occasion.type,
         occasionId: occasion.id,

@@ -1,6 +1,7 @@
 import React, { useContext, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -9,6 +10,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
   type StyleProp,
   type ViewStyle,
@@ -98,6 +100,23 @@ export function Body({ children }: { children: string }) {
   return <Text style={[styles.body, { color: colors.muted }]}>{children}</Text>;
 }
 
+export function confirmDestructive(title: string, message: string, confirmLabel: string): Promise<boolean> {
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = (value: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(value);
+    };
+    Alert.alert(title, message, [
+      { text: t('common.cancel'), style: 'cancel', onPress: () => finish(false) },
+      { text: confirmLabel, style: 'destructive', onPress: () => finish(true) },
+    ], { cancelable: true, onDismiss: () => finish(false) });
+  });
+}
+
 export function Button({
   label,
   onPress,
@@ -109,7 +128,7 @@ export function Button({
 }: {
   label: string;
   onPress: () => void | Promise<unknown>;
-  tone?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  tone?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'danger-quiet';
   disabled?: boolean;
   busy?: boolean;
   flex?: boolean;
@@ -119,9 +138,33 @@ export function Button({
   const [pending, setPending] = useState(false);
   const working = pending || Boolean(busy);
   const blocked = Boolean(disabled) || working;
-  const background = tone === 'primary' ? colors.accent : tone === 'danger' ? colors.danger : tone === 'ghost' ? 'transparent' : colors.surface;
-  const text = tone === 'primary' || tone === 'danger' ? colors.accentText : colors.accent;
-  const border = tone === 'ghost' ? 'transparent' : tone === 'secondary' ? colors.border : background;
+  const quiet = Boolean(disabled) && !working;
+  const filled = tone === 'primary' || tone === 'danger';
+  const background = quiet
+    ? colors.surface
+    : tone === 'primary'
+      ? colors.accent
+      : tone === 'danger'
+        ? colors.danger
+        : 'transparent';
+  const text = quiet
+    ? colors.muted
+    : tone === 'primary'
+      ? colors.onAccent
+      : tone === 'danger'
+        ? colors.onDanger
+        : tone === 'danger-quiet'
+          ? colors.dangerText
+          : tone === 'ghost'
+            ? colors.accentForeground
+            : colors.text;
+  const border = quiet
+    ? colors.borderStrong
+    : tone === 'ghost' || tone === 'danger-quiet'
+      ? 'transparent'
+      : tone === 'secondary'
+        ? colors.borderStrong
+        : background;
   return (
     <Pressable
       accessibilityRole="button"
@@ -146,14 +189,14 @@ export function Button({
         {
           backgroundColor: background,
           borderColor: border,
-          opacity: blocked ? 0.5 : pressed ? 0.72 : 1,
+          opacity: pressed && !blocked ? 0.72 : 1,
           transform: [{ scale: pressed && !blocked ? 0.98 : 1 }],
         },
       ]}>
       {working ? (
-        <ActivityIndicator color={text} />
+        <ActivityIndicator color={filled ? colors.onAccent : text} />
       ) : (
-        <Text style={[styles.buttonText, { color: tone === 'secondary' ? colors.text : text }]}>{label}</Text>
+        <Text style={[styles.buttonText, { color: text }]}>{label}</Text>
       )}
     </Pressable>
   );
@@ -191,6 +234,7 @@ export function Field({
   keyboardType,
   accessibilityLabel,
   error,
+  invalid,
 }: {
   label: string;
   value: string;
@@ -199,13 +243,16 @@ export function Field({
   keyboardType?: 'default' | 'email-address' | 'phone-pad' | 'number-pad' | 'decimal-pad';
   accessibilityLabel?: string;
   error?: string;
+  /** Marks the border when a sibling field already shows the message. */
+  invalid?: boolean;
 }) {
   const { colors } = useGifteez();
+  const bad = Boolean(error) || Boolean(invalid);
   return (
     <View style={styles.field}>
       <Text style={[styles.label, { color: colors.muted }]}>{label}</Text>
       <TextInput
-        accessibilityLabel={accessibilityLabel ?? label}
+        accessibilityLabel={error ? `${accessibilityLabel ?? label}. ${error}` : (accessibilityLabel ?? label)}
         accessibilityHint={error}
         value={value}
         onChangeText={onChangeText}
@@ -214,9 +261,9 @@ export function Field({
         keyboardType={keyboardType}
         autoCapitalize={keyboardType === 'email-address' ? 'none' : 'sentences'}
         autoCorrect={keyboardType === 'email-address' ? false : undefined}
-        style={[styles.input, { color: colors.text, borderColor: error ? colors.danger : colors.border, backgroundColor: colors.surface }]}
+        style={[styles.input, { color: colors.text, borderColor: bad ? colors.dangerText : colors.borderStrong, backgroundColor: colors.surface }]}
       />
-      {error ? <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
+      {error ? <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.dangerText }]}>{error}</Text> : null}
     </View>
   );
 }
@@ -244,17 +291,52 @@ export function Banner({
   );
 }
 
-export function Notice({ text, onClose, tone = 'success' }: { text: string; onClose: () => void; tone?: 'success' | 'danger' }) {
+export function Notice({
+  text,
+  onClose,
+  tone = 'success',
+  action,
+  onAction,
+}: {
+  text: string;
+  onClose: () => void;
+  tone?: 'success' | 'danger';
+  action?: string;
+  onAction?: () => void;
+}) {
   const { colors } = useGifteez();
+  const insets = useSafeAreaInsets();
   const background = tone === 'danger' ? colors.danger : colors.success;
+  const ink = tone === 'danger' ? colors.onDanger : colors.onSuccess;
+  const closeRef = React.useRef(onClose);
+  closeRef.current = onClose;
+  React.useEffect(() => {
+    const timer = setTimeout(() => closeRef.current(), 5000);
+    return () => clearTimeout(timer);
+  }, [text]);
   return (
-    <Pressable
-      accessibilityRole="alert"
-      accessibilityLabel={text}
-      onPress={onClose}
-      style={({ pressed }) => [styles.notice, { backgroundColor: background, opacity: pressed ? 0.85 : 1 }]}>
-      <Text style={[styles.noticeText, { color: colors.accentText }]}>{text}</Text>
-    </Pressable>
+    <View
+      accessibilityRole={tone === 'danger' ? 'alert' : 'none'}
+      accessibilityLiveRegion={tone === 'danger' ? 'assertive' : 'polite'}
+      style={[styles.notice, { backgroundColor: background, bottom: insets.bottom + 88 }]}>
+      <Text style={[styles.noticeText, { color: ink }]}>{text}</Text>
+      <View style={styles.row}>
+        {action && onAction ? <Button label={action} tone="secondary" onPress={onAction} /> : null}
+        <Button label={t('common.dismiss')} tone="secondary" onPress={onClose} />
+      </View>
+    </View>
+  );
+}
+
+export function OfflineBanner({ text }: { text: string }) {
+  const { colors } = useGifteez();
+  const insets = useSafeAreaInsets();
+  return (
+    <View
+      accessibilityLiveRegion="polite"
+      style={[styles.offline, { backgroundColor: colors.surface, borderColor: colors.borderStrong, top: insets.top + 8 }]}>
+      <Text style={[styles.bannerText, { color: colors.text }]}>{text}</Text>
+    </View>
   );
 }
 
@@ -294,8 +376,9 @@ function Sheet({
 }) {
   const { colors } = useGifteez();
   const insets = useSafeAreaInsets();
+  const scheme = useColorScheme();
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+    <Modal key={scheme ?? 'light'} visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top }]}>
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
           {children}
@@ -423,7 +506,8 @@ const styles = StyleSheet.create({
   banner: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8 },
   bannerText: { fontSize: 15, lineHeight: 21, flexShrink: 1 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  notice: { position: 'absolute', left: 16, right: 16, bottom: 24, borderRadius: 12, padding: 14 },
+  notice: { position: 'absolute', left: 16, right: 16, borderRadius: 12, padding: 14, gap: 8 },
+  offline: { position: 'absolute', left: 16, right: 16, borderRadius: 12, borderWidth: 1, padding: 10 },
   noticeText: { fontSize: 15, lineHeight: 20, textAlign: 'center', fontWeight: '600' },
   card: { borderWidth: 1, borderRadius: 14, padding: 14, gap: 8 },
   empty: { gap: 12, alignItems: 'stretch' },

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, StyleSheet, useColorScheme, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 import { t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 
@@ -17,23 +17,13 @@ const EMPTY = {
 };
 
 export function SkinBanner({ skinId }: { skinId: string }) {
-  const scheme = useColorScheme();
   const { colors } = useGifteez();
   const source = SKINS[skinId as keyof typeof SKINS] ?? SKINS.base;
-  const dark = scheme === 'dark';
   return (
     <View
       accessibilityRole="image"
       accessibilityLabel={t('people.seasonBanner')}
-      style={[
-        styles.frame,
-        {
-          backgroundColor: dark ? colors.banner : 'transparent',
-          borderColor: dark ? colors.accent : colors.border,
-          borderWidth: dark ? 2 : StyleSheet.hairlineWidth,
-          padding: dark ? 8 : 0,
-        },
-      ]}>
+      style={[styles.frame, { backgroundColor: colors.banner, borderColor: colors.border, borderWidth: StyleSheet.hairlineWidth }]}>
       <Image source={source} style={styles.banner} resizeMode="cover" accessibilityIgnoresInvertColors />
     </View>
   );

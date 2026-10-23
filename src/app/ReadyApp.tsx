@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Linking, View } from 'react-native';
+import { Linking, StyleSheet, View } from 'react-native';
 import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { t } from '../i18n';
@@ -11,10 +11,21 @@ import { describeIncomingLink } from './incomingLink';
 import { PeopleScreen } from '../screens/PeopleScreen';
 import { StartupScreen } from '../screens/StartupScreen';
 import { GifteezProvider, useGifteez } from '../state/GifteezContext';
-import { Body, Button, Screen, Title } from '../ui/ui';
-import { Notice } from '../ui/ui';
+import { listenForReminderOpens } from '../platform/reminders';
+import { Body, Button, Notice, OfflineBanner, Screen, Title } from '../ui/ui';
 import type { AppEnv } from '../config/env';
 import type { RootStack } from './navigation';
+
+function GiftMark() {
+  const { colors } = useGifteez();
+  return (
+    <View accessibilityElementsHidden style={styles.gift}>
+      <View style={[styles.giftBox, { backgroundColor: colors.surface, borderColor: colors.accent }]} />
+      <View style={[styles.giftRibbon, { backgroundColor: colors.accentForeground }]} />
+      <View style={[styles.giftBand, { backgroundColor: colors.accentForeground }]} />
+    </View>
+  );
+}
 
 const Stack = createNativeStackNavigator<RootStack>();
 const navigationRef = createNavigationContainerRef<RootStack>();
@@ -75,9 +86,15 @@ function Navigator() {
   useEffect(() => {
     flushLink.current();
   }, [gifteez.ready]);
+  useEffect(() => listenForReminderOpens(personId => {
+    if (navigationRef.isReady()) {
+      navigationRef.navigate('Person', { personId });
+    }
+  }), []);
   if (!gifteez.ready) {
     return (
       <Screen centered>
+        <GiftMark />
         <Title>{t('appName')}</Title>
         <Body>{t('common.loading')}</Body>
       </Screen>
@@ -94,7 +111,11 @@ function Navigator() {
   }
   return (
     <View style={{ flex: 1 }}>
-      <NavigationContainer ref={navigationRef} theme={theme} onReady={() => flushLink.current()}>
+      <NavigationContainer
+        ref={navigationRef}
+        theme={theme}
+        onReady={() => flushLink.current()}
+        onStateChange={() => gifteez.onNavigate()}>
         <Stack.Navigator screenOptions={{ headerShadowVisible: false, headerTintColor: gifteez.colors.text, contentStyle: { backgroundColor: gifteez.colors.background } }}>
           {gifteez.snapshot.profile.onboarded ? (
             <>
@@ -117,8 +138,17 @@ function Navigator() {
           )}
         </Stack.Navigator>
       </NavigationContainer>
-      {gifteez.notice ? <Notice text={gifteez.notice} onClose={gifteez.clearNotice} /> : null}
-      {gifteez.error ? <Notice text={gifteez.error} tone="danger" onClose={gifteez.clearError} /> : null}
+      {gifteez.offline ? <OfflineBanner text={t('sync.offlineBanner')} /> : null}
+      {gifteez.error ? (
+        <Notice text={gifteez.error} tone="danger" onClose={gifteez.clearError} />
+      ) : gifteez.notice ? (
+        <Notice
+          text={gifteez.notice}
+          onClose={gifteez.clearNotice}
+          action={gifteez.canUndo ? t('common.undo') : undefined}
+          onAction={gifteez.canUndo ? () => { gifteez.runUndo().catch(() => undefined); } : undefined}
+        />
+      ) : null}
       {gifteez.recoveryCode ? (
         <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}>
           <Screen>
@@ -134,3 +164,10 @@ function Navigator() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  gift: { width: 88, height: 88, alignItems: 'center', justifyContent: 'center' },
+  giftBox: { width: 72, height: 56, borderRadius: 12, borderWidth: 3 },
+  giftRibbon: { position: 'absolute', width: 10, height: 70, borderRadius: 4 },
+  giftBand: { position: 'absolute', top: 28, width: 78, height: 12, borderRadius: 4 },
+});

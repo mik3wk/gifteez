@@ -23,7 +23,7 @@
                                 </constraints>
                             </imageView>
                         </subviews>
-                        <color key="backgroundColor" red="0.9647058823529412" green="0.9450980392156862" blue="0.9058823529411765" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <color key="backgroundColor" name="LaunchBackground"/>
                         <constraints>
                             <constraint firstItem="spl-ash-img" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="spl-cx"/>
                             <constraint firstItem="spl-ash-img" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="spl-cy"/>
@@ -38,5 +38,8 @@
     </scenes>
     <resources>
         <image name="SplashLogo" width="200" height="200"/>
+        <namedColor name="LaunchBackground">
+            <color red="0.9647058823529412" green="0.9450980392156862" blue="0.9058823529411765" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+        </namedColor>
     </resources>
 </document>

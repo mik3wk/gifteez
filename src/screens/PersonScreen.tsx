@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -8,7 +8,7 @@ import { INTEREST_TAGS } from '../domain/catalog';
 import { buyerLabel, claimerName, claimWarningUid, isMyPurchase, spendByMember, visibleGifts } from '../domain/claims';
 import { ideaCacheId } from '../domain/ideas';
 import { canEditSharedGift } from '../domain/edits';
-import { allTimeSpentCents, groupCurrency, isRealMonthDay, occurrenceYear, parseBudget, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
+import { allTimeSpentCents, groupCurrency, isRealMonthDay, occurrenceYear, parseBudget, parseLooseDate, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
 import { dateIsEstimated, isOneTimeOccasion, nextOccasionDate, occasionLabel, occasionNeedsDate, presetFor } from '../domain/occasions';
 import { isHiddenFromViewer, isPersonLocked } from '../domain/visibility';
 import { peopleOnOtherLists } from '../domain/merge';
@@ -16,7 +16,7 @@ import type { Occasion } from '../domain/types';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, t, todayIso } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { OccasionPicker } from '../ui/OccasionPicker';
-import { Body, Button, Card, Field, Heading, Screen, Title } from '../ui/ui';
+import { Body, Button, Card, confirmDestructive, Field, Heading, Screen, Title } from '../ui/ui';
 
 export function AddPersonScreen() {
   const navigation = useNavigation();
@@ -69,6 +69,12 @@ export function PersonScreen() {
   const [findingIdeas, setFindingIdeas] = useState(true);
   const [ideaNote, setIdeaNote] = useState('');
   const [interestTags, setInterestTags] = useState<string[]>(person?.tags ?? []);
+  const [nameError, setNameError] = useState('');
+  const [budgetError, setBudgetError] = useState('');
+  const [giftError, setGiftError] = useState('');
+  const [priceError, setPriceError] = useState('');
+  const [dateError, setDateError] = useState('');
+  const scheme = useColorScheme();
 
   useEffect(() => {
     setInterestTags(person?.tags ?? []);
@@ -134,7 +140,7 @@ export function PersonScreen() {
       {hidden || locked ? null : <Heading>{t('person.ideas')}</Heading>}
       {hidden || locked ? null : <Body>{t('person.ideasHint')}</Body>}
       {hidden || locked || !findingIdeas || ideas.length > 0 ? null : (
-        <ActivityIndicator accessibilityLabel={t('person.ideasLoading')} color={colors.accent} />
+        <ActivityIndicator accessibilityLabel={t('person.ideasLoading')} color={colors.accentForeground} />
       )}
       {hidden || locked || !findingIdeas || ideas.length > 0 ? null : <Body>{t('person.ideasLoading')}</Body>}
       {ideaNote ? <Body>{ideaNote}</Body> : null}
@@ -144,6 +150,7 @@ export function PersonScreen() {
           idea={idea}
           onUp={() => vote(person.id, idea, 'up')}
           onDown={() => vote(person.id, idea, 'down')}
+          saved={Boolean(next?.occasion && snapshot.states.some(item => item.occasionId === next.occasion.id && !item.deleted && item.savedIdea === idea))}
           onSave={() => {
             if (!next) {
               setIdeaNote(t('person.saveIdeaNeedsDate'));
@@ -166,13 +173,14 @@ export function PersonScreen() {
         />
       )}
       {hidden || locked ? null : <Button label={t('person.refresh')} tone="secondary" onPress={() => refreshIdeas(person.id)} />}
-      {hidden || locked ? null : <Body>{t('person.cloudHint')}</Body>}
       {!hidden && !locked && cloudRemaining[person.id] != null ? <Body>{t('person.cloudLeft', { count: cloudRemaining[person.id] })}</Body> : null}
       {hidden || locked ? null : <Button label={t('person.cloud')} tone="secondary" onPress={() => cloudIdeas(person.id)} />}
+      {hidden || locked ? null : <Body>{t('person.cloudHint')}</Body>}
       {hidden || locked ? null : (cloud?.ideas ?? []).map(idea => (
         <IdeaRow
           key={`cloud-${idea}`}
           idea={idea}
+          saved={Boolean(next?.occasion && snapshot.states.some(item => item.occasionId === next.occasion.id && !item.deleted && item.savedIdea === idea))}
           onUp={() => vote(person.id, idea, 'up')}
           onDown={() => vote(person.id, idea, 'down')}
           onSave={() => {
@@ -203,6 +211,11 @@ export function PersonScreen() {
           onPurchase={idea => {
             setBuying(occasion.id);
             setGift(idea);
+            setPrice('');
+            setDate(todayIso());
+            setGiftError('');
+            setPriceError('');
+            setDateError('');
             setEditingGift(null);
           }}
         />
@@ -210,11 +223,42 @@ export function PersonScreen() {
       {locked ? null : <OccasionPicker personId={person.id} />}
       <ReminderOffer />
       <Heading>{t('person.details')}</Heading>
-      <Field label={t('person.name')} value={name} onChangeText={setName} />
-      <Field label={t('person.budget')} value={budget} onChangeText={setBudget} keyboardType="decimal-pad" />
+      <Field
+        label={t('person.name')}
+        value={name}
+        error={nameError}
+        onChangeText={value => {
+          setName(value);
+          setNameError('');
+        }}
+      />
+      <Field
+        label={t('person.budget')}
+        value={budget}
+        error={budgetError}
+        onChangeText={value => {
+          setBudget(value);
+          setBudgetError('');
+        }}
+        keyboardType="decimal-pad"
+      />
       <Button
         label={t('person.save')}
-        onPress={() => savePerson(person.id, { name: name.trim() || person.name, budgetCents: budget.trim() ? parseBudget(budget) : null, tags: interestTags })}
+        onPress={() => {
+          const trimmed = name.trim();
+          const nextNameError = trimmed ? '' : t('errors.name');
+          const nextBudgetError = budget.trim() && parseBudget(budget) == null ? t('errors.price') : '';
+          setNameError(nextNameError);
+          setBudgetError(nextBudgetError);
+          if (nextNameError || nextBudgetError) {
+            return;
+          }
+          return savePerson(person.id, {
+            name: trimmed,
+            budgetCents: budget.trim() ? parseBudget(budget) : null,
+            tags: interestTags,
+          });
+        }}
       />
       {hidden || !showSpend ? null : <SpendBreakdown personId={person.id} budgetCents={person.budgetCents} money={money} />}
       {hidden ? null : <Heading>{t('person.history')}</Heading>}
@@ -247,6 +291,9 @@ export function PersonScreen() {
                   setGift(item.title);
                   setPrice(String(item.priceCents / 100));
                   setDate(item.purchasedOn);
+                  setGiftError('');
+                  setPriceError('');
+                  setDateError('');
                   setBuying(null);
                 }}
               />
@@ -255,14 +302,24 @@ export function PersonScreen() {
               <Button
                 label={t('person.deleteGift')}
                 accessibilityLabel={t('person.deleteGiftLabel', { title: item.title })}
-                tone="danger"
-                onPress={() => deleteGift(item.id, item.privateGift)}
+                tone="danger-quiet"
+                onPress={async () => {
+                  const ok = await confirmDestructive(
+                    t('person.deleteGiftConfirm'),
+                    t('person.deleteGiftBody'),
+                    t('person.deleteGift'),
+                  );
+                  if (ok) {
+                    await deleteGift(item.id, item.privateGift);
+                  }
+                }}
               />
             ) : null}
           </Card>
         );
       })}
-      {snapshot.profile.uid === snapshot.group?.ownerId ? (
+      {snapshot.profile.uid === snapshot.group?.ownerId
+        && (snapshot.members.some(member => !member.deleted && member.uid !== snapshot.profile.uid) || person.linkedUid) ? (
         <Card>
           <Heading>{t('person.linkTitle')}</Heading>
           <Body>{t('person.linkHint')}</Body>
@@ -280,30 +337,102 @@ export function PersonScreen() {
           ) : null}
         </Card>
       ) : null}
-      {!hidden && !locked && buying ? (
-        <Card>
-          <Heading>{t('purchase.title')}</Heading>
-          <PurchaseWarning occasionId={buying} date={date} />
-          <Field label={t('purchase.gift')} value={gift} onChangeText={setGift} />
-          <Field label={t('purchase.price')} value={price} onChangeText={setPrice} keyboardType="decimal-pad" />
-          <Field label={t('purchase.date')} value={date} onChangeText={setDate} />
-          <Button label={t('purchase.save')} onPress={() => { logGift(buying, gift, price, date); setBuying(null); }} />
-        </Card>
+      {buying ? (
+        <GiftSheet
+          scheme={scheme}
+          title={t('purchase.title')}
+          gift={gift}
+          price={price}
+          date={date}
+          giftError={giftError}
+          priceError={priceError}
+          dateError={dateError}
+          occasionId={buying}
+          saveLabel={t('purchase.save')}
+          onGift={value => {
+            setGift(value);
+            setGiftError('');
+          }}
+          onPrice={value => {
+            setPrice(value);
+            setPriceError('');
+          }}
+          onDate={value => {
+            setDate(value);
+            setDateError('');
+          }}
+          onClose={() => setBuying(null)}
+          onSave={async () => {
+            const fields = giftFieldErrors(gift, price, date);
+            setGiftError(fields.gift);
+            setPriceError(fields.price);
+            setDateError(fields.date);
+            if (fields.gift || fields.price || fields.date) {
+              return;
+            }
+            const ok = await logGift(buying, gift, price, date);
+            if (ok) {
+              setBuying(null);
+            }
+          }}
+        />
       ) : null}
       {editingGift ? (
-        <Card>
-          <Heading>{t('person.editGift')}</Heading>
-          <Field label={t('purchase.gift')} value={gift} onChangeText={setGift} />
-          <Field label={t('purchase.price')} value={price} onChangeText={setPrice} keyboardType="decimal-pad" />
-          <Field label={t('purchase.date')} value={date} onChangeText={setDate} />
-          <Button
-            label={t('person.save')}
-            accessibilityLabel={t('person.editGiftLabel', { title: gift || t('person.editGift') })}
-            onPress={() => { updateGift(editingGift.id, gift, price, date, editingGift.privateGift); setEditingGift(null); }}
-          />
-        </Card>
+        <GiftSheet
+          scheme={scheme}
+          title={t('person.editGift')}
+          gift={gift}
+          price={price}
+          date={date}
+          giftError={giftError}
+          priceError={priceError}
+          dateError={dateError}
+          saveLabel={t('person.save')}
+          saveAccessibilityLabel={t('person.editGiftLabel', { title: gift || t('person.editGift') })}
+          onGift={value => {
+            setGift(value);
+            setGiftError('');
+          }}
+          onPrice={value => {
+            setPrice(value);
+            setPriceError('');
+          }}
+          onDate={value => {
+            setDate(value);
+            setDateError('');
+          }}
+          onClose={() => setEditingGift(null)}
+          onSave={async () => {
+            const fields = giftFieldErrors(gift, price, date);
+            setGiftError(fields.gift);
+            setPriceError(fields.price);
+            setDateError(fields.date);
+            if (fields.gift || fields.price || fields.date || !editingGift) {
+              return;
+            }
+            const ok = await updateGift(editingGift.id, gift, price, date, editingGift.privateGift);
+            if (ok) {
+              setEditingGift(null);
+            }
+          }}
+        />
       ) : null}
-      <Button label={t('person.delete')} tone="danger" onPress={() => removePerson(person.id)} />
+      <Button
+        label={t('person.delete')}
+        tone="danger-quiet"
+        onPress={async () => {
+          const ok = await confirmDestructive(
+            t('person.deleteConfirm', { name: person.name }),
+            t('person.deleteConfirmBody'),
+            t('person.delete'),
+          );
+          if (!ok) {
+            return;
+          }
+          navigation.goBack();
+          await removePerson(person.id);
+        }}
+      />
     </Screen>
   );
 }
@@ -343,7 +472,7 @@ function OccasionCard({
       <Text style={[styles.name, { color: colors.text }]}>{label} · {when}</Text>
       {note ? <Text style={{ color: colors.muted }}>{note}</Text> : null}
       {estimated ? <Text style={{ color: colors.muted }}>{t('person.dateEstimated')}</Text> : null}
-      {hidden ? null : <Text style={{ color: colors.accent }}>{t(status === 'idea-saved' ? 'person.statusIdea' : status === 'purchased' ? 'person.statusPurchased' : 'person.statusNotStarted')}</Text>}
+      {hidden ? null : <Text style={{ color: colors.accentForeground }}>{t(status === 'idea-saved' ? 'person.statusIdea' : status === 'purchased' ? 'person.statusPurchased' : 'person.statusNotStarted')}</Text>}
       {!hidden && state?.savedIdea ? <Text style={{ color: colors.text }}>{state.savedIdea}</Text> : null}
       {!hidden && !locked && canEdit && editing ? (
         <>
@@ -361,10 +490,28 @@ function OccasionCard({
               />
             </View>
             <View style={styles.flex}>
-              <Field label={t('person.day')} value={day} onChangeText={setDay} keyboardType="number-pad" />
+              <Field
+                label={t('person.day')}
+                value={day}
+                invalid={Boolean(dateError)}
+                onChangeText={value => {
+                  setDay(value);
+                  setDateError('');
+                }}
+                keyboardType="number-pad"
+              />
             </View>
           </View>
-          <Field label={t('person.year')} value={year} onChangeText={setYear} keyboardType="number-pad" />
+          <Field
+            label={t('person.year')}
+            value={year}
+            invalid={Boolean(dateError)}
+            onChangeText={value => {
+              setYear(value);
+              setDateError('');
+            }}
+            keyboardType="number-pad"
+          />
           <Button
             label={t('person.updateOccasion')}
             accessibilityLabel={t('person.updateOccasionLabel', { occasion: label })}
@@ -380,6 +527,7 @@ function OccasionCard({
               setEditing(false);
             }}
           />
+          <Button label={t('person.cancelUpdate')} tone="secondary" onPress={() => { setEditing(false); setDateError(''); }} />
         </>
       ) : null}
       {!hidden && !locked && canEdit && !editing ? (
@@ -388,14 +536,6 @@ function OccasionCard({
           accessibilityLabel={t('person.updateOccasionLabel', { occasion: label })}
           tone="secondary"
           onPress={() => setEditing(true)}
-        />
-      ) : null}
-      {!hidden && !locked ? (
-        <Button
-          label={t('person.deleteOccasion')}
-          accessibilityLabel={t('person.deleteOccasionLabel', { occasion: label })}
-          tone="danger"
-          onPress={() => deleteOccasion(occasion.id)}
         />
       ) : null}
       {hidden || locked ? null : state?.claimedBy ? (
@@ -422,6 +562,23 @@ function OccasionCard({
       {hidden || locked ? null : (
         <Button label={t('person.purchase')} tone="secondary" onPress={() => onPurchase(state?.savedIdea ?? '')} />
       )}
+      {!hidden && !locked ? (
+        <Button
+          label={t('person.deleteOccasion')}
+          accessibilityLabel={t('person.deleteOccasionLabel', { occasion: label })}
+          tone="danger-quiet"
+          onPress={async () => {
+            const ok = await confirmDestructive(
+              t('person.deleteOccasionConfirm'),
+              t('person.deleteGiftBody'),
+              t('person.deleteOccasion'),
+            );
+            if (ok) {
+              await deleteOccasion(occasion.id);
+            }
+          }}
+        />
+      ) : null}
     </Card>
   );
 }
@@ -549,7 +706,19 @@ function TagPicker({ tags, onChange }: { tags: string[]; onChange: (tags: string
   );
 }
 
-function IdeaRow({ idea, onUp, onDown, onSave }: { idea: string; onUp: () => void; onDown: () => void; onSave: () => void }) {
+function IdeaRow({
+  idea,
+  saved,
+  onUp,
+  onDown,
+  onSave,
+}: {
+  idea: string;
+  saved?: boolean;
+  onUp: () => void;
+  onDown: () => void;
+  onSave: () => void;
+}) {
   const { colors } = useGifteez();
   return (
     <Card>
@@ -557,10 +726,83 @@ function IdeaRow({ idea, onUp, onDown, onSave }: { idea: string; onUp: () => voi
       <View style={styles.row}>
         <Button label={t('person.thumbsUp')} tone="secondary" onPress={onUp} />
         <Button label={t('person.thumbsDown')} tone="secondary" onPress={onDown} />
-        <Button label={t('person.saveIdea')} onPress={onSave} />
+        <Button label={saved ? t('person.savedMark') : t('person.saveIdea')} tone={saved ? 'secondary' : 'primary'} onPress={onSave} />
       </View>
     </Card>
   );
+}
+
+function GiftSheet({
+  scheme,
+  title,
+  gift,
+  price,
+  date,
+  giftError,
+  priceError,
+  dateError,
+  occasionId,
+  saveLabel,
+  saveAccessibilityLabel,
+  onGift,
+  onPrice,
+  onDate,
+  onSave,
+  onClose,
+}: {
+  scheme: string | null | undefined;
+  title: string;
+  gift: string;
+  price: string;
+  date: string;
+  giftError: string;
+  priceError: string;
+  dateError: string;
+  occasionId?: string;
+  saveLabel: string;
+  saveAccessibilityLabel?: string;
+  onGift: (value: string) => void;
+  onPrice: (value: string) => void;
+  onDate: (value: string) => void;
+  onSave: () => void | Promise<unknown>;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      key={scheme ?? 'light'}
+      visible
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}>
+      <Screen>
+        <Heading>{title}</Heading>
+        {occasionId ? <PurchaseWarning occasionId={occasionId} date={date} /> : null}
+        <Field label={t('purchase.gift')} value={gift} error={giftError} onChangeText={onGift} />
+        <Field label={t('purchase.price')} value={price} error={priceError} onChangeText={onPrice} keyboardType="decimal-pad" />
+        <Field label={t('purchase.date')} value={date} error={dateError} onChangeText={onDate} />
+        <Button label={saveLabel} accessibilityLabel={saveAccessibilityLabel} onPress={onSave} />
+        <Button label={t('common.cancel')} tone="secondary" onPress={onClose} />
+      </Screen>
+    </Modal>
+  );
+}
+
+function giftFieldErrors(gift: string, price: string, date: string): { gift: string; price: string; date: string } {
+  return {
+    gift: gift.trim() ? '' : t('errors.invalid'),
+    price: parseBudget(price) == null ? t('errors.price') : '',
+    date: date.trim() && !validPurchaseDate(date) ? t('errors.purchaseDate') : '',
+  };
+}
+
+function validPurchaseDate(value: string): boolean {
+  const trimmed = value.trim();
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(trimmed);
+  if (iso) {
+    return isRealMonthDay(Number(iso[2]), Number(iso[3]));
+  }
+  const loose = parseLooseDate(trimmed);
+  return Boolean(loose && isRealMonthDay(loose.month, loose.day));
 }
 
 const styles = StyleSheet.create({

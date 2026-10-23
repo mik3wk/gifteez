@@ -5,16 +5,16 @@ import { t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 
 export function useGroupLabel(): { label: string; emoji: string; color: string } {
-  const { snapshot } = useGifteez();
+  const { snapshot, colors } = useGifteez();
   const group = snapshot.group;
   if (!group) {
-    return { label: t('people.title'), emoji: '🎁', color: '#1F6B4A' };
+    return { label: t('people.title'), emoji: '🎁', color: colors.accentForeground };
   }
   const marker = groupMarker(group.id);
   return {
     label: groupDisplayName(group.name, memberNames(snapshot.members)),
     emoji: marker.emoji,
-    color: marker.color,
+    color: colors.text,
   };
 }
 

@@ -2,6 +2,7 @@ import { classifyStartupError, startupCause } from '../src/domain/startup';
 import { BUNDLED_SKINS, contrastRatio, withColorScheme, type ThemeColors } from '../src/theme/skins';
 
 const MIN_CONTRAST = 4.5;
+const MIN_BOUNDARY = 3;
 
 test('startup failures keep the cause and name config, network, or disabled auth', () => {
   const missing = Object.assign(new Error("No Firebase App '[DEFAULT]' has been created"), { code: 'app/no-app' });
@@ -23,7 +24,7 @@ test('startup failures keep the cause and name config, network, or disabled auth
   expect(startupCause(new Error('keychain refused'))).toBe('keychain refused');
 });
 
-test('every skin keeps text on the background and on the accent at 4.5:1', () => {
+test('every skin and scheme keeps text and boundaries readable', () => {
   const spring = require('../skins/spring.json').colors as ThemeColors;
   const summer = require('../skins/summer.json').colors as ThemeColors;
   const skins: Record<string, ThemeColors> = {
@@ -31,18 +32,28 @@ test('every skin keeps text on the background and on the accent at 4.5:1', () =>
     spring,
     summer,
   };
-  for (const [name, colors] of Object.entries(skins)) {
+  for (const colors of Object.values(skins)) {
     expect(contrastRatio(colors.text, colors.background)).toBeGreaterThanOrEqual(MIN_CONTRAST);
     expect(contrastRatio(colors.accentText, colors.accent)).toBeGreaterThanOrEqual(MIN_CONTRAST);
-    expect(name).toBeTruthy();
+    for (const scheme of ['light', 'dark'] as const) {
+      const resolved = withColorScheme(colors, scheme);
+      expect(contrastRatio(resolved.text, resolved.background)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.text, resolved.surface)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.muted, resolved.background)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.muted, resolved.surface)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.onAccent, resolved.accent)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.accentForeground, resolved.background)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.accentForeground, resolved.surface)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.dangerText, resolved.background)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.dangerText, resolved.surface)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.onDanger, resolved.danger)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.onSuccess, resolved.success)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(resolved.borderStrong, resolved.surface)).toBeGreaterThanOrEqual(MIN_BOUNDARY);
+      expect(contrastRatio(resolved.text, resolved.banner)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(resolved.banner).not.toBe(resolved.background);
+    }
     const dark = withColorScheme(colors, 'dark');
-    expect(contrastRatio(dark.text, dark.background)).toBeGreaterThanOrEqual(MIN_CONTRAST);
-    expect(contrastRatio(dark.muted, dark.background)).toBeGreaterThanOrEqual(MIN_CONTRAST);
-    expect(contrastRatio(dark.accentText, dark.accent)).toBeGreaterThanOrEqual(MIN_CONTRAST);
-    expect(contrastRatio(dark.text, dark.banner)).toBeGreaterThanOrEqual(MIN_CONTRAST);
     expect(contrastRatio(dark.banner, dark.background)).toBeGreaterThan(1.8);
-    expect(dark.banner).not.toBe(dark.background);
-    expect(withColorScheme(colors, 'light')).toBe(colors);
   }
   expect(withColorScheme(BUNDLED_SKINS.fall, 'dark').banner).not.toBe(withColorScheme(BUNDLED_SKINS.winter, 'dark').banner);
 });

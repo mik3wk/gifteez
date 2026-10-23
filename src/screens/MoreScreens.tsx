@@ -11,7 +11,7 @@ import { isHiddenFromViewer } from '../domain/visibility';
 import { deviceLocale, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { useGroupLabel } from '../ui/heading';
-import { AccountSheet, Body, Button, Card, EmptyState, Field, Heading, Row, Screen, Title, UnlockSheet } from '../ui/ui';
+import { AccountSheet, Body, Button, Card, confirmDestructive, EmptyState, Field, Heading, Row, Screen, Title, UnlockSheet } from '../ui/ui';
 
 export function FairnessScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
@@ -62,6 +62,7 @@ export function GroupScreen() {
   const storedCurrency = groupCurrency(snapshot.group);
   const [name, setName] = useState(groupName);
   const [currency, setCurrency] = useState(storedCurrency);
+  const [currencyError, setCurrencyError] = useState('');
   const [code, setCode] = useState<string | null>(null);
   const [upgrade, setUpgrade] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -81,7 +82,10 @@ export function GroupScreen() {
         const active = item.id === snapshot.group?.id;
         return (
           <Row key={item.id} accessibilityLabel={label} onPress={() => switchGroup(item.id)}>
-              <Text style={[styles.name, { color: marker.color }]}>{`${marker.emoji} ${label}`}</Text>
+              <View style={styles.hueRow}>
+                <HueDot color={marker.color} />
+                <Text style={[styles.name, { color: colors.text }]}>{`${marker.emoji} ${label}`}</Text>
+              </View>
               <Text style={{ color: colors.muted }}>{active ? t('groupScreen.current') : t('groupScreen.switchTo')}</Text>
               {item.stale ? <Text style={{ color: colors.muted }}>{t('groupScreen.notCurrent')}</Text> : null}
           </Row>
@@ -103,8 +107,28 @@ export function GroupScreen() {
       <Button label={t('groupScreen.rename')} onPress={() => renameList(name)} />
       {snapshot.profile.uid === snapshot.group?.ownerId ? (
         <>
-          <Field label={t('groupScreen.currency')} value={currency} onChangeText={setCurrency} accessibilityLabel={t('groupScreen.currency')} />
-          <Button label={t('groupScreen.saveCurrency')} accessibilityLabel={t('groupScreen.saveCurrencyLabel')} tone="secondary" onPress={() => setListCurrency(currency)} />
+          <Field
+            label={t('groupScreen.currency')}
+            value={currency}
+            error={currencyError}
+            onChangeText={value => {
+              setCurrency(value);
+              setCurrencyError('');
+            }}
+            accessibilityLabel={t('groupScreen.currency')}
+          />
+          <Button
+            label={t('groupScreen.saveCurrency')}
+            accessibilityLabel={t('groupScreen.saveCurrencyLabel')}
+            tone="secondary"
+            onPress={() => {
+              if (!/^[A-Za-z]{3}$/.test(currency.trim())) {
+                setCurrencyError(t('errors.currency'));
+                return;
+              }
+              return setListCurrency(currency);
+            }}
+          />
         </>
       ) : null}
       <Body>{t('groupScreen.inviteHint', { count: getEnv().groupMaxMembers })}</Body>
@@ -135,7 +159,20 @@ export function GroupScreen() {
                 tone="secondary"
                 onPress={() => transferOwnership(member.uid)}
               />
-              <Button label={t('groupScreen.remove')} tone="danger" onPress={() => removeGroupMember(member.uid)} />
+              <Button
+                label={t('groupScreen.remove')}
+                tone="danger-quiet"
+                onPress={async () => {
+                  const ok = await confirmDestructive(
+                    t('groupScreen.removeConfirm', { name: member.displayName }),
+                    t('groupScreen.removeBody'),
+                    t('groupScreen.remove'),
+                  );
+                  if (ok) {
+                    await removeGroupMember(member.uid);
+                  }
+                }}
+              />
             </>
           ) : null}
         </Card>
@@ -147,7 +184,16 @@ export function GroupScreen() {
         onPress={async () => setCode((await showRecovery()) || t('groupScreen.emptyCode'))}
       />
       {code ? <Body>{code}</Body> : null}
-      <Button label={t('groupScreen.leave')} tone="danger" onPress={leave} />
+      <Button
+        label={t('groupScreen.leave')}
+        tone="danger-quiet"
+        onPress={async () => {
+          const ok = await confirmDestructive(t('groupScreen.leaveConfirm'), t('groupScreen.leaveBody'), t('groupScreen.leave'));
+          if (ok) {
+            await leave();
+          }
+        }}
+      />
       <UnlockSheet visible={unlocking} onClose={() => setUnlocking(false)} />
       <AccountSheet visible={upgrade} allowName={false} showCreate={false} onClose={() => setUpgrade(false)} />
       <AccountSheet
@@ -209,6 +255,10 @@ export function JoinConfirmScreen() {
   );
 }
 
+function HueDot({ color }: { color: string }) {
+  return <View accessibilityElementsHidden style={[styles.hue, { backgroundColor: color }]} />;
+}
+
 export function JoinConfirmView({
   model,
   joining,
@@ -220,15 +270,19 @@ export function JoinConfirmView({
   onJoin: () => void;
   onCancel: () => void;
 }) {
+  const { colors } = useGifteez();
   const heading = model.emoji ? `${model.emoji} ${model.question}` : model.question;
   return (
     <Screen>
-      <Text
-        accessibilityRole="header"
-        accessibilityLabel={model.question}
-        style={[styles.name, model.color ? { color: model.color } : null]}>
-        {heading}
-      </Text>
+      <View style={styles.hueRow}>
+        {model.color ? <HueDot color={model.color} /> : null}
+        <Text
+          accessibilityRole="header"
+          accessibilityLabel={model.question}
+          style={[styles.name, { color: colors.text }]}>
+          {heading}
+        </Text>
+      </View>
       <Button
         label={t('join.confirmJoin')}
         accessibilityLabel={model.joinLabel}
@@ -247,7 +301,7 @@ export function JoinConfirmView({
 }
 
 export function JoinScreen() {
-  const { joinFromLink, restoreWithCode, sendEmail, finishEmail, previewInvite } = useGifteez();
+  const { joinFromLink, restoreWithCode, sendEmail, finishEmail, previewInvite, colors } = useGifteez();
   const [link, setLink] = useState('');
   const [code, setCode] = useState('');
   const [email, setEmail] = useState('');
@@ -255,6 +309,7 @@ export function JoinScreen() {
   const [linkError, setLinkError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [preview, setPreview] = useState<{ label: string; emoji: string; color: string } | null>(null);
+  const [codeError, setCodeError] = useState('');
   useEffect(() => {
     let cancelled = false;
     previewInvite(link).then(next => {
@@ -275,9 +330,12 @@ export function JoinScreen() {
       <Title>{t('join.title')}</Title>
       <Body>{t('join.body')}</Body>
       {preview ? (
-        <Text style={[styles.name, { color: preview.color }]}>
-          {t('join.preview', { name: `${preview.emoji} ${preview.label}` })}
-        </Text>
+        <View style={styles.hueRow}>
+          <HueDot color={preview.color} />
+          <Text style={[styles.name, { color: colors.text }]}>
+            {t('join.preview', { name: `${preview.emoji} ${preview.label}` })}
+          </Text>
+        </View>
       ) : null}
       <Field
         label={t('join.placeholder')}
@@ -324,8 +382,25 @@ export function JoinScreen() {
       />
       <Field label={t('groupCreate.pasteLink')} value={emailLink} onChangeText={setEmailLink} />
       <Button label={t('groupCreate.finishLink')} onPress={() => finishEmail(emailLink)} />
-      <Field label={t('join.recovery')} value={code} onChangeText={setCode} />
-      <Button label={t('join.restore')} tone="secondary" onPress={() => restoreWithCode(code)} />
+      <Field
+        label={t('join.recovery')}
+        value={code}
+        error={codeError}
+        onChangeText={value => {
+          setCode(value);
+          setCodeError('');
+        }}
+      />
+      <Button
+        label={t('join.restore')}
+        tone="secondary"
+        onPress={async () => {
+          const ok = await restoreWithCode(code);
+          if (!ok) {
+            setCodeError(t('errors.invalid'));
+          }
+        }}
+      />
     </Screen>
   );
 }
@@ -333,6 +408,7 @@ export function JoinScreen() {
 export function SettingsScreen() {
   const {
     snapshot,
+    colors,
     exportText,
     setReminders,
     deleteAccount,
@@ -367,7 +443,7 @@ export function SettingsScreen() {
       <Card>
         <Heading>{t('settings.account')}</Heading>
         <Body>{snapshot.profile.upgraded ? t('settings.saved') : t('settings.anonymous')}</Body>
-        <Text style={styles.name}>{snapshot.profile.displayName}</Text>
+        <Text style={[styles.name, { color: colors.text }]}>{snapshot.profile.displayName}</Text>
         {snapshot.profile.upgraded ? null : <Button label={t('settings.upgrade')} onPress={() => setUpgrade(true)} />}
       </Card>
       <Body>{t('settings.exportHint')}</Body>
@@ -437,7 +513,7 @@ export function SettingsScreen() {
         <Button
           label={t('settings.deleteAccount')}
           accessibilityLabel={t('settings.deleteAccountLabel')}
-          tone="danger"
+          tone="danger-quiet"
           onPress={() => setConfirmDelete(true)}
         />
       )}
@@ -477,7 +553,9 @@ async function describeImport(result: number | 'denied'): Promise<string> {
 }
 
 const styles = StyleSheet.create({
-  name: { fontSize: 18, fontWeight: '600' },
+  name: { fontSize: 18, fontWeight: '600', flexShrink: 1 },
+  hueRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  hue: { width: 14, height: 14, borderRadius: 7 },
   track: { height: 8, borderRadius: 8, overflow: 'hidden' },
   bar: { height: 8 },
 });

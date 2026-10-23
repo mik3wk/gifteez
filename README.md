@@ -70,7 +70,7 @@ npm run deploy
 
 Functions secrets must exist before the first deploy of `generateGiftIdeas`, `claimPersonSlot`, `getEntitlement`, `verifyUnlock`, and `createOwnedGroup`. `joinGroup` and `releaseOwnedGroup` do not use those secrets. `FINGERPRINT_PEPPER` is a random string you choose; it salts the device-id hash that keys the AI cap and the paid entitlement. It is not an app `.env` value.
 
-App Check is initialized in the app (debug provider in dev, App Attest / Play Integrity in release) and `enforceAppCheck` is on for every callable. In the Firebase console, turn App Check on for the app, then register the debug token the client prints and set `APP_CHECK_DEBUG_TOKEN` in `.env`. Rebuild after that. Until the token is registered, cloud calls fail and the on-device ideas still show.
+App Check is initialized in the app (debug provider in dev, App Attest / Play Integrity in release) and `enforceAppCheck` is on for every callable. In the Firebase console, turn App Check on for the app, then register the debug token the client prints and set `APP_CHECK_DEBUG_TOKEN` in `.env`. Rebuild after that. Until the token is registered, cloud calls fail and the on-device ideas still show. Gifteez reports that as a permission problem (register the debug token), not as being offline.
 
 Purchase verification reads optional Apple and Play credentials from `functions/.env` (`APPLE_IAP_*`, `GOOGLE_PLAY_SERVICE_ACCOUNT`). Leave them blank until the store products exist. The function then returns `{ verified: false, reason: "not_configured" }` and does not grant the unlock. The app should still launch when the store has no `gifteez_unlock` product. Completing a sandbox purchase on the iOS simulator needs a StoreKit configuration file in Xcode, which is not in this repo.
 

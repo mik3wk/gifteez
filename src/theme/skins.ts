@@ -13,6 +13,16 @@ export type ThemeColors = {
   banner: string;
 };
 
+/** Foreground colors that clear WCAG AA on this scheme. Fills stay as authored. */
+export type ResolvedColors = ThemeColors & {
+  accentForeground: string;
+  dangerText: string;
+  borderStrong: string;
+  onAccent: string;
+  onDanger: string;
+  onSuccess: string;
+};
+
 export const COLOR_KEYS: (keyof ThemeColors)[] = [
   'background',
   'surface',
@@ -154,16 +164,92 @@ export function seasonalDarkBanner(banner: string, accent: string): string {
   return `#${mixChannel(parts, 0)}${mixChannel(parts, 1)}${mixChannel(parts, 2)}`.toUpperCase();
 }
 
-/** Light skins stay as authored. Dark mode keeps the accent and a seasonal banner. */
-export function withColorScheme(colors: ThemeColors, scheme: 'light' | 'dark' | null | undefined): ThemeColors {
-  if (scheme !== 'dark') {
-    return colors;
+function rgb(hex: string): [number, number, number] {
+  return [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ];
+}
+
+function mixHex(from: string, to: string, amount: number): string {
+  const [ar, ag, ab] = rgb(from);
+  const [br, bg, bb] = rgb(to);
+  const channel = (a: number, b: number) => Math.max(0, Math.min(255, Math.round(a + (b - a) * amount))).toString(16).padStart(2, '0');
+  return `#${channel(ar, br)}${channel(ag, bg)}${channel(ab, bb)}`.toUpperCase();
+}
+
+/** Move `color` toward white or black until it clears `min` on every background. */
+export function readable(color: string, backgrounds: string[], min = 4.5): string {
+  const source = color.toUpperCase();
+  if (backgrounds.every(bg => contrastRatio(source, bg) >= min)) {
+    return source;
   }
+  for (let step = 1; step <= 24; step += 1) {
+    const amount = step / 24;
+    const light = mixHex(source, '#FFFFFF', amount);
+    const dark = mixHex(source, '#14120F', amount);
+    if (backgrounds.every(bg => contrastRatio(light, bg) >= min)) {
+      return light;
+    }
+    if (backgrounds.every(bg => contrastRatio(dark, bg) >= min)) {
+      return dark;
+    }
+  }
+  const white = '#FFFFFF';
+  const ink = '#14120F';
+  const score = (candidate: string) => Math.min(...backgrounds.map(bg => contrastRatio(candidate, bg)));
+  return score(white) >= score(ink) ? white : ink;
+}
+
+function onFill(fill: string, candidates: string[]): string {
+  for (const candidate of candidates) {
+    if (contrastRatio(candidate, fill) >= 4.5) {
+      return candidate.toUpperCase();
+    }
+  }
+  return readable('#FFFFFF', [fill]);
+}
+
+function strongerBorder(border: string, surface: string, ink: string): string {
+  if (contrastRatio(border, surface) >= 3) {
+    return border.toUpperCase();
+  }
+  for (let step = 1; step <= 20; step += 1) {
+    const next = mixHex(border, ink, step / 20);
+    if (contrastRatio(next, surface) >= 3) {
+      return next;
+    }
+  }
+  return ink.toUpperCase();
+}
+
+export function resolveColors(colors: ThemeColors): ResolvedColors {
+  const text = readable(colors.text, [colors.background, colors.surface]);
+  const muted = readable(colors.muted, [colors.background, colors.surface]);
   return {
+    ...colors,
+    text,
+    muted,
+    accentForeground: readable(colors.accent, [colors.background, colors.surface]),
+    dangerText: readable(colors.danger, [colors.background, colors.surface]),
+    borderStrong: strongerBorder(colors.border, colors.surface, text),
+    onAccent: onFill(colors.accent, [colors.accentText, '#FFFFFF', text]),
+    onDanger: onFill(colors.danger, [colors.accentText, '#FFFFFF', text]),
+    onSuccess: onFill(colors.success, [colors.accentText, '#FFFFFF', text]),
+  };
+}
+
+/** Light skins keep their fills. Dark mode swaps the paper and keeps a seasonal banner. */
+export function withColorScheme(colors: ThemeColors, scheme: 'light' | 'dark' | null | undefined): ResolvedColors {
+  if (scheme !== 'dark') {
+    return resolveColors(colors);
+  }
+  return resolveColors({
     ...colors,
     ...DARK,
     banner: seasonalDarkBanner(colors.banner, colors.accent),
-  };
+  });
 }
 
 export function contrastRatio(foreground: string, background: string): number {
