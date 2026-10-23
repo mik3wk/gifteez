@@ -47,10 +47,9 @@ const CELEBRATE_ART: Record<CelebrateName, number> = {
 /** Group list mark. The file is the gift sticker, not a face. */
 export const GROUP_AVATAR = require('../assets/art/avatars/group-avatar.png');
 
-/**
- * confetti-burst.png (@2x/@3x) sits beside the celebration art for the motion
- * step. Nothing requires it yet, so it stays out of the bundle.
- */
+/** Confetti for the first person added. Metro includes the @2x and @3x siblings. */
+export const CONFETTI_BURST = require('../assets/art/celebrate/confetti-burst.png');
+
 export function artSource(name: ArtName | EmptyArtName | CelebrateName): number {
   if (Object.prototype.hasOwnProperty.call(EMPTY_ART, name)) {
     return EMPTY_ART[name as EmptyArtName];

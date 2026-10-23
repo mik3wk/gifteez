@@ -18,6 +18,33 @@ jest.mock('@react-native-community/datetimepicker', () => {
   return props => React.createElement(View, props);
 });
 
+jest.mock('react-native-reanimated', () => {
+  const React = require('react');
+  const { Image, Text, View } = require('react-native');
+  const wrap = Component => React.forwardRef((props, ref) => React.createElement(Component, { ...props, ref }));
+  const Animated = {
+    View: wrap(View),
+    Image: wrap(Image),
+    Text: wrap(Text),
+    createAnimatedComponent: Component => wrap(Component),
+  };
+  const pass = value => value;
+  return {
+    __esModule: true,
+    default: Animated,
+    useSharedValue: value => ({ value }),
+    useAnimatedStyle: updater => updater(),
+    withSpring: pass,
+    withTiming: pass,
+    withDelay: (_delay, value) => value,
+    withSequence: (...values) => values[values.length - 1],
+    withRepeat: animation => animation,
+    cancelAnimation: () => undefined,
+    runOnJS: fn => fn,
+    Easing: { linear: pass, ease: pass, inOut: easing => easing, out: easing => easing, cubic: pass },
+  };
+});
+
 jest.mock('react-native-get-random-values', () => {
   const { webcrypto } = require('crypto');
   if (typeof global.crypto !== 'object' || global.crypto == null) {
