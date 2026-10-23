@@ -5,6 +5,7 @@ import {
   OCCASION_PRESETS,
   occasionLabel,
   occasionNeedsDate,
+  openingMonthDay,
   planOccasion,
   presetFor,
   type OccasionPreset,
@@ -54,6 +55,11 @@ export function OccasionPicker({ personId, onAdded }: { personId: string; onAdde
     setNameError('');
     const next = presetFor(id);
     setEveryYear(next ? next.yearly : false);
+    const opening = openingMonthDay(id);
+    setMonth(String(opening.month));
+    setDay(String(opening.day));
+    setYear('');
+    setKnowYear(false);
   }
 
   return (

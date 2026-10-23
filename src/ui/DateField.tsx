@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState, type ComponentRef } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useLayoutEffect, useRef, useState, type ComponentRef } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { formatDate, formatLongDate, t, todayIso } from '../i18n';
 import { useTheme } from '../theme/useTheme';
@@ -71,6 +71,13 @@ export function MonthDayField({
   );
 }
 
+function centeredIndex(offsetY: number, count: number): number {
+  if (count <= 0) {
+    return 0;
+  }
+  return Math.min(count - 1, Math.max(0, Math.round(offsetY / WHEEL_ROW)));
+}
+
 function Wheel({
   label,
   items,
@@ -84,11 +91,32 @@ function Wheel({
 }) {
   const { colors, radius, type, typeScale } = useTheme();
   const list = useRef<ComponentRef<typeof ScrollView>>(null);
+  const fromScroll = useRef(false);
   const index = Math.max(0, items.findIndex(item => item.id === value));
   const offset = index * WHEEL_ROW;
-  useEffect(() => {
-    list.current?.scrollTo({ y: offset, animated: false });
-  }, [offset]);
+  useLayoutEffect(() => {
+    if (fromScroll.current) {
+      fromScroll.current = false;
+      return;
+    }
+    const node = list.current as { scrollTo?: (options: { y: number; animated: boolean }) => void } | null;
+    node?.scrollTo?.({ y: offset, animated: false });
+  }, [offset, items.length]);
+  function selectCentered(offsetY: number) {
+    const id = items[centeredIndex(offsetY, items.length)]?.id;
+    if (!id || id === value) {
+      return;
+    }
+    fromScroll.current = true;
+    onChange(id);
+  }
+  function onScrollEndDrag(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const velocity = event.nativeEvent.velocity?.y ?? 0;
+    if (velocity !== 0) {
+      return;
+    }
+    selectCentered(event.nativeEvent.targetContentOffset?.y ?? event.nativeEvent.contentOffset.y);
+  }
   return (
     <View style={styles.wheel}>
       <Caption>{label}</Caption>
@@ -99,10 +127,12 @@ function Wheel({
         accessibilityLabel={label}
         contentOffset={{ x: 0, y: offset }}
         snapToInterval={WHEEL_ROW}
+        snapToAlignment="start"
         decelerationRate="fast"
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior="never"
-        onLayout={() => list.current?.scrollTo({ y: offset, animated: false })}>
+        onMomentumScrollEnd={event => selectCentered(event.nativeEvent.contentOffset.y)}
+        onScrollEndDrag={onScrollEndDrag}>
         {items.map(item => {
           const selected = item.id === value;
           return (

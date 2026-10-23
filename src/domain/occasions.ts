@@ -265,6 +265,19 @@ export function nextOccasionDate(occasion: Occasion, today: Date): Date | null {
   return null;
 }
 
+/** Wheel default: a preset's own date, or today when the date is one you choose. */
+export function openingMonthDay(type: string, today = new Date()): { month: number; day: number } {
+  const preset = presetFor(type);
+  if (preset && preset.rule.kind !== 'ask') {
+    const year = today.getFullYear();
+    const computed = ruleDate(preset.rule, year) ?? ruleDate(preset.rule, year + 1);
+    if (computed) {
+      return computed;
+    }
+  }
+  return { month: today.getMonth() + 1, day: today.getDate() };
+}
+
 export function occasionNeedsDate(type: string, today = new Date()): boolean {
   if (type === 'custom') {
     return true;

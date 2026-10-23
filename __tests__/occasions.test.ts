@@ -7,6 +7,7 @@ import {
   nextOccasionDate,
   occasionLabel,
   occasionNeedsDate,
+  openingMonthDay,
   planOccasion,
   presetFor,
   ruleDate,
@@ -30,6 +31,16 @@ function occasion(patch: Partial<Occasion> & Pick<Occasion, 'type'>): Occasion {
     ...patch,
   };
 }
+
+test('a new occasion opens on today, or on a preset date when it has one', () => {
+  const today = new Date(2026, 9, 23);
+  expect(openingMonthDay('birthday', today)).toEqual({ month: 10, day: 23 });
+  expect(openingMonthDay('custom', today)).toEqual({ month: 10, day: 23 });
+  expect(openingMonthDay('christmas', today)).toEqual({ month: 12, day: 25 });
+  expect(openingMonthDay('thanksgiving', today)).toEqual({ month: 11, day: 26 });
+  expect(openingMonthDay('eid-fitr', today)).toEqual({ month: 3, day: 20 });
+  expect(planOccasion({ type: 'birthday', today })).toBe('need-date');
+});
 
 test('a blank birthday stays blank instead of becoming today', () => {
   const today = new Date(2026, 8, 15);
