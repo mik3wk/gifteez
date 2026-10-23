@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -31,6 +31,11 @@ export function ReadyApp({ env }: { env: AppEnv }) {
 
 function Navigator() {
   const gifteez = useGifteez();
+  const [holdBrand, setHoldBrand] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setHoldBrand(false), 900);
+    return () => clearTimeout(timer);
+  }, []);
   const linkHandler = useRef(gifteez);
   linkHandler.current = gifteez;
   const pendingUrl = useRef<string | null>(null);
@@ -82,7 +87,7 @@ function Navigator() {
       navigationRef.navigate('Person', { personId });
     }
   }), []);
-  if (!gifteez.ready) {
+  if (!gifteez.ready || holdBrand) {
     return (
       <Screen centered>
         <BrandedLoading />
