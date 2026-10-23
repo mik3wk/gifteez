@@ -47,7 +47,7 @@ class SceneDelegate: RCTDefaultReactNativeFactoryDelegate, UIWindowSceneDelegate
     RCTLinkingManager.scene(scene, continue: userActivity)
   }
 
-  override func customizeRootView(_ rootView: RCTRootView) {
+  override func customize(_ rootView: RCTRootView) {
     rootView.backgroundColor = Self.launchBackground
   }
 
