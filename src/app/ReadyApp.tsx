@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
+import { Linking, StyleSheet, useColorScheme, View } from 'react-native';
 import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -13,7 +13,7 @@ import { PeopleScreen } from '../screens/PeopleScreen';
 import { StartupScreen } from '../screens/StartupScreen';
 import { GifteezProvider, useGifteez } from '../state/GifteezContext';
 import { listenForReminderOpens } from '../platform/reminders';
-import { type as appType } from '../theme/tokens';
+import { sticker, type as appType } from '../theme/tokens';
 import { ConfettiBurst, useReduceMotion } from '../ui/motion';
 import { Body, BrandedLoading, Button, ConfirmHost, Notice, OfflineBanner, Screen, Title } from '../ui/ui';
 import type { AppEnv } from '../config/env';
@@ -33,6 +33,8 @@ export function ReadyApp({ env }: { env: AppEnv }) {
 
 function Navigator() {
   const gifteez = useGifteez();
+  const scheme = useColorScheme();
+  const launchBackground = scheme === 'dark' ? sticker.dark.background : sticker.light.background;
   const reduceMotion = useReduceMotion();
   const [holdBrand, setHoldBrand] = useState(true);
   const [logoMounted, setLogoMounted] = useState(true);
@@ -109,7 +111,7 @@ function Navigator() {
     return () => clearTimeout(timer);
   }, [coverBoot, logoOpacity, reduceMotion, showNav]);
   return (
-    <View style={[styles.fill, { backgroundColor: gifteez.colors.background }]}>
+    <View style={[styles.fill, { backgroundColor: logoMounted ? launchBackground : gifteez.colors.background }]}>
       {showFailure ? (
         <StartupScreen
           kind={gifteez.startupFailure ?? 'unknown'}
@@ -161,7 +163,7 @@ function Navigator() {
       {logoMounted ? (
         <Animated.View
           pointerEvents="none"
-          style={[styles.cover, { backgroundColor: gifteez.colors.background }, logoStyle]}>
+          style={[styles.cover, { backgroundColor: launchBackground }, logoStyle]}>
           <BrandedLoading />
         </Animated.View>
       ) : null}

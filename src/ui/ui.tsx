@@ -12,6 +12,7 @@ import {
   Switch,
   Text,
   TextInput,
+  useColorScheme,
   View,
   type StyleProp,
   type ViewStyle,
@@ -26,10 +27,15 @@ import { formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { useTheme } from '../theme/useTheme';
 import { iconOnSurface, layout, occasionLook, scrim, shadowOffset, space, sticker, stroke, touch, type ArtName, type CelebrateName, type ChipTint, type EmptyArtName } from '../theme/tokens';
-import Animated from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { artSource, GROUP_AVATAR } from './art';
 import { Icon, type IconName } from './icons';
-import { Bob, CelebrateArt, Settle, useReduceMotion, useStickerMotion } from './motion';
+import { CelebrateArt, Settle, useReduceMotion, useStickerMotion } from './motion';
+
+const splashLight = require('../assets/splash/splash-mark.png');
+const splashDark = require('../assets/splash/splash-mark-dark.png');
+const LAUNCH_MARK = 240;
+const LAUNCH_COPY_DELAY = 480;
 
 /** A stack header already includes the status bar, so a second top inset doubles the gap. */
 export function screenTopInset(headerHeight: number | undefined, topInset: number): number {
@@ -752,18 +758,42 @@ export function EmptyState({
   );
 }
 
+function LaunchCopy() {
+  const reduce = useReduceMotion();
+  const opacity = useSharedValue(reduce ? 1 : 0);
+  useEffect(() => {
+    opacity.value = reduce ? 1 : withTiming(1, { duration: 320 });
+  }, [opacity, reduce]);
+  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return (
+    <Animated.View pointerEvents="none" style={[styles.launchCopy, style]}>
+      <Title>{t('appName')}</Title>
+      <Body>{t('common.loading')}</Body>
+    </Animated.View>
+  );
+}
+
+/** First frame is only the splash mark. The words fade in after a delay, with no bob. */
 export function BrandedLoading() {
+  const scheme = useColorScheme();
+  const [showCopy, setShowCopy] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setShowCopy(true), LAUNCH_COPY_DELAY);
+    return () => clearTimeout(timer);
+  }, []);
   return (
     <View accessibilityRole="progressbar" accessibilityLabel={t('common.loading')} style={styles.launch}>
-      <View style={styles.launchLogo}>
-        <Bob>
-          <ArtSlot name="gift" size={240} />
-        </Bob>
+      <View pointerEvents="none" style={styles.launchLogo}>
+        <Image
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          accessibilityIgnoresInvertColors
+          source={scheme === 'dark' ? splashDark : splashLight}
+          resizeMode="contain"
+          style={styles.launchMark}
+        />
       </View>
-      <View style={styles.launchCopy}>
-        <Title>{t('appName')}</Title>
-        <Body>{t('common.loading')}</Body>
-      </View>
+      {showCopy ? <LaunchCopy /> : null}
     </View>
   );
 }
@@ -1468,6 +1498,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  launchMark: { width: LAUNCH_MARK, height: LAUNCH_MARK },
   launchCopy: {
     position: 'absolute',
     left: space.md,
