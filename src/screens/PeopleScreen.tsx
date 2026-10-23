@@ -114,9 +114,13 @@ export function PeopleScreen() {
       </StatRow>
       {people.length === 0 ? (
         <EmptyState kind="people" text={t('people.empty')} action={t('people.add')} onAction={() => navigation.navigate('AddPerson')} />
-      ) : (
+      ) : null}
+      </SessionEntrance>
+      {people.length === 0 ? null : (
         <SectionHeader display title={t('people.title')} action={t('people.addShort')} onAction={() => navigation.navigate('AddPerson')} />
       )}
+      {people.length === 0 ? null : (
+      <SessionEntrance id="people-list">
       {people.map(person => {
         const item = upcomingOccasion(person.id, snapshot.occasions, today);
         const hidden = isHiddenFromViewer(person, snapshot.profile.uid);
@@ -153,6 +157,7 @@ export function PeopleScreen() {
         );
       })}
       </SessionEntrance>
+      )}
       <AccountSheet visible={upgrade} allowName={false} showCreate={false} onClose={() => setUpgrade(false)} />
     </Screen>
   );

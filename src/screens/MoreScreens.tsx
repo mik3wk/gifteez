@@ -55,8 +55,8 @@ export function FairnessScreen() {
   return (
     <Screen tab="fairness">
       <AppHeader title={heading.label} />
-      <SessionEntrance id="fairness">
       <Display>{t('fairness.title')}</Display>
+      <SessionEntrance id="fairness">
       <Body>{t('fairness.intro')}</Body>
       {rows.length === 0 ? (
         <EmptyState
@@ -112,8 +112,8 @@ export function GroupScreen() {
   return (
     <Screen tab="group">
       <AppHeader title={heading.label} />
-      <SessionEntrance id="group">
       <Heading>{t('groupScreen.lists')}</Heading>
+      <SessionEntrance id="group">
       {snapshot.roster.length === 0 ? <EmptyState kind="group" text={t('groupScreen.listsEmpty')} /> : null}
       {snapshot.roster.map(item => {
         const label = groupDisplayName(item.name, item.memberNames);
@@ -483,8 +483,8 @@ export function SettingsScreen() {
   return (
     <Screen tab="settings">
       <AppHeader title={heading.label} />
-      <SessionEntrance id="settings">
       <Heading>{t('settings.title')}</Heading>
+      <SessionEntrance id="settings">
       <Card>
         <Heading>{t('settings.account')}</Heading>
         <Body>{saved ? t('settings.saved') : t('settings.anonymous')}</Body>
