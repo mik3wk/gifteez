@@ -8,6 +8,9 @@ import { Icon } from './icons';
 import { Body, Caption, Toggle } from './ui';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const WHEEL_ROW = touch.minTarget;
+const WHEEL_ROWS = 3;
+const WHEEL_HEIGHT = WHEEL_ROW * WHEEL_ROWS;
 
 export function MonthDayField({
   label,
@@ -82,7 +85,7 @@ function Wheel({
   const { colors, radius, type, typeScale } = useTheme();
   const list = useRef<ComponentRef<typeof ScrollView>>(null);
   const index = Math.max(0, items.findIndex(item => item.id === value));
-  const offset = index * touch.minTarget;
+  const offset = index * WHEEL_ROW;
   useEffect(() => {
     list.current?.scrollTo({ y: offset, animated: false });
   }, [offset]);
@@ -92,10 +95,13 @@ function Wheel({
       <ScrollView
         ref={list}
         style={styles.wheelList}
+        contentContainerStyle={styles.wheelContent}
         accessibilityLabel={label}
         contentOffset={{ x: 0, y: offset }}
-        snapToInterval={touch.minTarget}
+        snapToInterval={WHEEL_ROW}
         decelerationRate="fast"
+        showsVerticalScrollIndicator={false}
+        contentInsetAdjustmentBehavior="never"
         onLayout={() => list.current?.scrollTo({ y: offset, animated: false })}>
         {items.map(item => {
           const selected = item.id === value;
@@ -204,9 +210,11 @@ const styles = StyleSheet.create({
   monthDay: { gap: space.xs },
   wheels: { flexDirection: 'row', gap: space.xs },
   wheel: { flex: 1, gap: space.xxs },
-  wheelList: { maxHeight: 160 },
+  wheelList: { height: WHEEL_HEIGHT, overflow: 'hidden' },
+  wheelContent: { paddingVertical: WHEEL_ROW },
   wheelItem: {
-    minHeight: touch.minTarget,
+    height: WHEEL_ROW,
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.xxs,
