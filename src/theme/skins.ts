@@ -268,10 +268,12 @@ export function resolveColors(colors: ThemeColors): ResolvedColors {
   const secondaryFill = brand.teal;
   const highlightFill = brand.sunshine;
   const onAccent = onFill(colors.accent, [colors.accentText, text, '#FFFFFF']);
-  const button = night ? sticker.dark.pink : sticker.light.pink;
-  const onButton = night ? sticker.dark.onFill : '#FFFFFF';
+  // Buttons, links, and the tab tint follow the skin. Base stays rose; winter and the rest do not.
+  const button = colors.accent;
+  const onButton = onAccent;
   const ink = night ? mixHex(sticker.dark.surface, sticker.dark.text, 0.85) : sticker.light.ink;
-  const pink = brand.pink;
+  const onInk = night ? sticker.dark.onFill : '#FFFFFF';
+  const pink = colors.accent;
   const teal = brand.teal;
   const sunshine = brand.sunshine;
   const lilac = brand.lilac;
@@ -298,11 +300,11 @@ export function resolveColors(colors: ThemeColors): ResolvedColors {
     onWarning: onFill(warningFill, [onBright, text, '#FFFFFF']),
     onInfo: onFill(infoFill, ['#FFFFFF', text, onBright]),
     ink,
-    onInk: onButton,
+    onInk,
     button,
     onButton,
     pink,
-    onPink: onFill(pink, [onBright, text, '#FFFFFF']),
+    onPink: onAccent,
     teal,
     onTeal: onFill(teal, [onBright, text, '#FFFFFF']),
     sunshine,
