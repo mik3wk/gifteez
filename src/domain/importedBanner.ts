@@ -1,9 +1,8 @@
 export type ImportedVisit = { id: string; show: boolean };
 
 /**
- * The first paint of an imported person still has opened false. focusPerson
- * then marks them opened, so a render that reads the live flag never stays.
- * Remember the first sight of this id and keep it for the rest of the visit.
+ * Show the imported hint only until this person has been opened.
+ * The first paint can still see opened false. Once focus marks them opened, the hint goes away.
  */
 export function importedVisitBanner(
   previous: ImportedVisit | null,
@@ -12,8 +11,11 @@ export function importedVisitBanner(
   if (!person) {
     return previous;
   }
+  if (!person.imported || person.opened) {
+    return { id: person.id, show: false };
+  }
   if (previous?.id === person.id) {
     return previous;
   }
-  return { id: person.id, show: person.imported && !person.opened };
+  return { id: person.id, show: true };
 }
