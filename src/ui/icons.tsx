@@ -34,7 +34,7 @@ export function Icon({
       <Path
         d={PATHS[name]}
         stroke={color}
-        strokeWidth={2}
+        strokeWidth={1.5}
         fill={filled ? color : 'none'}
         strokeLinecap="round"
         strokeLinejoin="round"

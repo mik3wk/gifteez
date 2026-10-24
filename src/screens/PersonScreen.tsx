@@ -13,18 +13,19 @@ import { dateIsEstimated, isOneTimeOccasion, nextOccasionDate, occasionLabel, oc
 import { isHiddenFromViewer, isPersonLocked } from '../domain/visibility';
 import { peopleOnOtherLists } from '../domain/merge';
 import type { Occasion, OccasionState } from '../domain/types';
+import { cleanRelationship } from '../domain/relationship';
 import { initialPersonSection, summaryPrimary, summaryPrimaryLabel } from './personSummary';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, t, todayIso } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
-import { groupHue } from '../theme/skins';
 import { occasionLook, space } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { DateField, MonthDayField } from '../ui/DateField';
 import { HeartPop, Moment, Shimmer } from '../ui/motion';
 import { OccasionPicker } from '../ui/OccasionPicker';
+import { RelationshipField } from '../ui/RelationshipField';
+import { MonogramAvatar } from '../ui/stationery';
 import {
   ArtSlot,
-  Avatar,
   Body,
   Button,
   Caption,
@@ -59,6 +60,8 @@ export function AddPersonScreen() {
   const { addPerson } = useGifteez();
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
+  const [relationship, setRelationship] = useState('');
+  const [relationshipError, setRelationshipError] = useState('');
   return (
     <Screen>
       <Title>{t('firstOpen.title')}</Title>
@@ -72,6 +75,14 @@ export function AddPersonScreen() {
           setNameError('');
         }}
       />
+      <RelationshipField
+        value={relationship}
+        error={relationshipError}
+        onChange={value => {
+          setRelationship(value);
+          setRelationshipError('');
+        }}
+      />
       <Button
         label={t('firstOpen.start')}
         onPress={async () => {
@@ -79,7 +90,12 @@ export function AddPersonScreen() {
             setNameError(t('errors.name'));
             return;
           }
-          const id = await addPerson({ name, budget: '', tags: [] });
+          const cleaned = cleanRelationship(relationship);
+          if (cleaned == null) {
+            setRelationshipError(t('relationship.invalid'));
+            return;
+          }
+          const id = await addPerson({ name, budget: '', tags: [], relationship: cleaned });
           if (id) {
             (navigation as { navigate: (screen: string, params: { personId: string }) => void }).navigate('Person', { personId: id });
           }
@@ -111,12 +127,14 @@ export function PersonScreen() {
     undoMerge,
     claimOccasion,
   } = useGifteez();
-  const { scheme, colors } = useTheme();
+  const { colors } = useTheme();
   const person = snapshot.people.find(item => item.id === route.params.personId && !item.deleted);
   const today = new Date();
   const firstUpcoming = person ? upcomingOccasion(person.id, snapshot.occasions, today) : null;
   const [budget, setBudget] = useState(person?.budgetCents == null ? '' : String(person.budgetCents / 100));
   const [name, setName] = useState(person?.name ?? '');
+  const [relationship, setRelationship] = useState(person?.relationship ?? '');
+  const [relationshipError, setRelationshipError] = useState('');
   const [gift, setGift] = useState('');
   const [price, setPrice] = useState('');
   const [date, setDate] = useState(todayIso());
@@ -307,8 +325,11 @@ export function PersonScreen() {
           <Card>
             <View style={styles.summaryName}>
               <View style={styles.avatarName}>
-                <Avatar initials={person.name} hue={groupHue(person.name.length, scheme)} />
-                <Heading>{person.name}</Heading>
+                <MonogramAvatar name={person.name} personId={person.id} />
+                <View style={styles.personCopy}>
+                  <Heading>{person.name}</Heading>
+                  {person.relationship ? <Caption tone="text">{person.relationship}</Caption> : null}
+                </View>
               </View>
               <IconButton label={t('person.editDetails')} name="more" filled onPress={() => setEditingDetails(true)} />
             </View>
@@ -494,15 +515,26 @@ export function PersonScreen() {
           }}
           keyboardType="decimal-pad"
         />
+        <RelationshipField
+          value={relationship}
+          error={relationshipError}
+          onChange={value => {
+            setRelationship(value);
+            setRelationshipError('');
+          }}
+        />
         <Button
           label={t('person.save')}
           onPress={() => {
             const trimmed = name.trim();
             const nextNameError = trimmed ? '' : t('errors.name');
             const nextBudgetError = budget.trim() && parseBudget(budget) == null ? t('errors.price') : '';
+            const cleaned = cleanRelationship(relationship);
+            const nextRelationshipError = cleaned == null ? t('relationship.invalid') : '';
             setNameError(nextNameError);
             setBudgetError(nextBudgetError);
-            if (nextNameError || nextBudgetError) {
+            setRelationshipError(nextRelationshipError);
+            if (nextNameError || nextBudgetError || nextRelationshipError) {
               return;
             }
             toast(t('person.saved'));
@@ -511,6 +543,7 @@ export function PersonScreen() {
               name: trimmed,
               budgetCents: budget.trim() ? parseBudget(budget) : null,
               tags: interestTags,
+              relationship: cleaned ?? '',
             });
           }}
         />
@@ -1143,6 +1176,7 @@ function validPurchaseDate(value: string): boolean {
 const styles = StyleSheet.create({
   summaryName: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.xs },
   avatarName: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flex: 1 },
+  personCopy: { flex: 1, gap: 2 },
   ideaRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   ideaCopy: { flex: 1 },
   occasionRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },

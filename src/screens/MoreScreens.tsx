@@ -121,7 +121,7 @@ export function GroupScreen() {
         return (
           <Row key={item.id} accessibilityLabel={label} onPress={() => switchGroup(item.id)}>
             <RowLine>
-              <GroupAvatar />
+              <GroupAvatar label={label} />
               <Stack>
                 <Body strong>{label}</Body>
                 {item.stale ? <Caption>{t('groupScreen.notCurrent')}</Caption> : null}

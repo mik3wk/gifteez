@@ -15,6 +15,8 @@ export type Person = {
   deleted?: boolean;
   /** Member who must not read this person's gifts, claims, or ideas. Plaintext on the server doc. */
   linkedUid?: string;
+  /** Optional label such as Mom or Neighbor. Stays on this phone and is omitted from group ciphertext. */
+  relationship?: string;
 };
 
 export type Occasion = {

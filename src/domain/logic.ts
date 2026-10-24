@@ -1,6 +1,7 @@
 import { hashToUint } from '../crypto/crypto';
 import { groupHues } from '../theme/skins';
 import { isOneTimeOccasion, nextOccasionDate, occasionLabel, planOccasion } from './occasions';
+import { absorbPerson, cleanRelationship } from './relationship';
 import { DEFAULT_FREE_PEOPLE, lockedPersonIds } from '../../functions/src/peopleCap';
 import {
   dirtyKey,
@@ -602,7 +603,7 @@ export function addPerson(input: {
 export function updatePerson(
   snapshot: AppSnapshot,
   personId: string,
-  patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'opened' | 'deleted' | 'linkedUid'>>,
+  patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'opened' | 'deleted' | 'linkedUid' | 'relationship'>>,
   now: number,
 ): Mutation<Person> {
   const current = snapshot.people.find(person => person.id === personId);
@@ -610,6 +611,17 @@ export function updatePerson(
     return fail('missing');
   }
   const next: Person = { ...current, ...patch, updatedAt: now };
+  if (patch.relationship !== undefined) {
+    const cleaned = cleanRelationship(patch.relationship);
+    if (cleaned == null) {
+      return fail('invalid');
+    }
+    if (!cleaned) {
+      delete next.relationship;
+    } else {
+      next.relationship = cleaned;
+    }
+  }
   const removing = !current.deleted && next.deleted;
   const group =
     snapshot.group && removing
@@ -991,8 +1003,11 @@ function readRecord(
 function writeRecord(snapshot: AppSnapshot, record: RemoteRecord): AppSnapshot {
   const data = { ...record.data, id: record.id, updatedAt: record.updatedAt, deleted: record.deleted };
   switch (record.collection) {
-    case 'people':
-      return replace(snapshot, 'people', data as Person);
+    case 'people': {
+      const incoming = data as Person;
+      const previous = snapshot.people.find(person => person.id === record.id);
+      return replace(snapshot, 'people', absorbPerson(previous, incoming));
+    }
     case 'occasions':
       return replace(snapshot, 'occasions', data as Occasion);
     case 'states':

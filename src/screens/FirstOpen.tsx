@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { describeIncomingLink } from '../app/incomingLink';
+import { cleanRelationship } from '../domain/relationship';
 import { t } from '../i18n';
 import { haptic } from '../platform/haptics';
 import { useGifteez } from '../state/GifteezContext';
+import { RelationshipField } from '../ui/RelationshipField';
 import { Body, Button, Field, Screen, Title } from '../ui/ui';
 import type { RootStack } from '../app/navigation';
 
@@ -13,6 +15,8 @@ export function FirstOpenScreen() {
   const { startGroup, addPerson, openPerson } = useGifteez();
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
+  const [relationship, setRelationship] = useState('');
+  const [relationshipError, setRelationshipError] = useState('');
   const [inviteOpen, setInviteOpen] = useState(false);
   const [invite, setInvite] = useState('');
   const [inviteError, setInviteError] = useState('');
@@ -30,6 +34,14 @@ export function FirstOpenScreen() {
           setNameError('');
         }}
       />
+      <RelationshipField
+        value={relationship}
+        error={relationshipError}
+        onChange={value => {
+          setRelationship(value);
+          setRelationshipError('');
+        }}
+      />
       <Button
         label={t('firstOpen.start')}
         onPress={async () => {
@@ -38,11 +50,16 @@ export function FirstOpenScreen() {
             setNameError(t('errors.name'));
             return;
           }
+          const cleaned = cleanRelationship(relationship);
+          if (cleaned == null) {
+            setRelationshipError(t('relationship.invalid'));
+            return;
+          }
           const started = await startGroup('', '');
           if (!started) {
             return;
           }
-          const id = await addPerson({ name: trimmed, budget: '', tags: [] });
+          const id = await addPerson({ name: trimmed, budget: '', tags: [], relationship: cleaned });
           if (id) {
             openPerson(id);
             haptic('success');

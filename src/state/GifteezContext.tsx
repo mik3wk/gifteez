@@ -109,6 +109,7 @@ import { buyUnlock, connectStore, finishOwned, listenToPurchases, loadOwned, pur
 import { applyReminderPlan, cancelReminderPlan, requestReminderPermission } from '../platform/reminders';
 import { deleteSecret, loadSecret, saveSecret } from '../platform/secure';
 import { occasionLabel, planOccasion, presetFor } from '../domain/occasions';
+import { cleanRelationship, omitRelationship } from '../domain/relationship';
 import { classifySyncError } from '../domain/syncStatus';
 import { haptic } from '../platform/haptics';
 import type { CelebrateName } from '../theme/tokens';
@@ -152,8 +153,8 @@ type GifteezApi = {
   confirmPhone: (code: string) => Promise<void>;
   joinFromLink: (url: string) => Promise<boolean>;
   restoreWithCode: (code: string) => Promise<boolean>;
-  addPerson: (input: { name: string; budget: string; tags: string[]; imported?: boolean }) => Promise<string | null>;
-  savePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags'>>) => Promise<void>;
+  addPerson: (input: { name: string; budget: string; tags: string[]; imported?: boolean; relationship?: string }) => Promise<string | null>;
+  savePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'relationship'>>) => Promise<void>;
   removePerson: (id: string) => Promise<void>;
   addOccasion: (
     personId: string,
@@ -842,6 +843,11 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       const hadPeople = snapshotRef.current.people.some(person => !person.deleted);
       const now = Date.now();
+      const relationship = cleanRelationship(input.relationship ?? '');
+      if (relationship == null) {
+        fail('invalid');
+        return null;
+      }
       const person: Person = {
         id: randomId(),
         name,
@@ -851,6 +857,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         opened: !input.imported,
         createdAt: now,
         updatedAt: now,
+        ...(relationship ? { relationship } : {}),
       };
       const result = addPerson({ snapshot: snapshotRef.current, person, freeLimit: env.freeTierMaxPeople });
       if (!result.ok) {
@@ -1846,7 +1853,8 @@ function recordsFor(snapshot: AppSnapshot, name: (typeof COLLECTIONS)[number]): 
   const source = snapshot[name] as Array<{ id: string; updatedAt: number; deleted?: boolean; hiddenFrom?: string }>;
   return source.map(item => {
     const { id, updatedAt, deleted, hiddenFrom, ...body } = item;
-    return { id, updatedAt, deleted, hiddenFrom, body: body as Record<string, unknown> };
+    const shared = name === 'people' ? omitRelationship(body as Person) : body;
+    return { id, updatedAt, deleted, hiddenFrom, body: shared as Record<string, unknown> };
   });
 }
 

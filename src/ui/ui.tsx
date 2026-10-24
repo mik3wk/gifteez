@@ -27,9 +27,11 @@ import { formatMoney, t } from '../i18n';
 import { hideNativeSplash } from '../platform/splash';
 import { useGifteez } from '../state/GifteezContext';
 import { useTheme } from '../theme/useTheme';
-import { iconOnSurface, layout, occasionLook, scrim, shadowOffset, space, sticker, stroke, touch, type ArtName, type CelebrateName, type ChipTint, type EmptyArtName } from '../theme/tokens';
+import { iconOnSurface, layout, occasionLook, scrim, space, sticker, stroke, touch, type ArtName, type CelebrateName, type ChipTint, type EmptyArtName } from '../theme/tokens';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { artSource, GROUP_AVATAR } from './art';
+import { artSource } from './art';
+import { BowMark, MonogramAvatar, WaxSeal } from './stationery';
+import type { SealState } from '../domain/seal';
 import { Icon, type IconName } from './icons';
 import { CelebrateArt, Settle, useReduceMotion, useStickerMotion } from './motion';
 
@@ -65,18 +67,25 @@ function StickerBox({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
-  const { face, shade } = useStickerMotion(Boolean(pressed), shadow);
+  const { face } = useStickerMotion(Boolean(pressed), shadow);
+  const soft = shadow
+    ? {
+        shadowColor: colors.shadow,
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 2,
+      }
+    : null;
   return (
-    <View style={[styles.stickerWrap, style]}>
-      {shadow ? (
-        <Animated.View pointerEvents="none" style={[styles.stickerShadow, { backgroundColor: colors.shadow, borderRadius: radius }, shade]} />
-      ) : null}
+    <View style={style}>
       <Animated.View
         style={[
           face,
+          soft,
           {
             backgroundColor: fill,
-            borderColor: borderColor ?? colors.outline,
+            borderColor: borderColor ?? colors.border,
             borderWidth,
             borderStyle: dashed ? 'dashed' : 'solid',
             borderRadius: radius,
@@ -379,7 +388,7 @@ export function Button({
   accessibilityLabel?: string;
   hint?: string;
 }) {
-  const { colors, type, typeScale } = useTheme();
+  const { colors, type, typeScale, radius } = useTheme();
   const [pending, setPending] = useState(false);
   const working = pending || Boolean(busy);
   const blocked = Boolean(disabled) || working;
@@ -387,8 +396,9 @@ export function Button({
   const danger = tone === 'danger' || tone === 'danger-quiet';
   const ghost = tone === 'ghost';
   const hero = tone === 'hero';
-  const fill = hero ? sticker.light.ink : quiet ? colors.surfaceAlt : tone === 'primary' ? colors.button : colors.surface;
-  const text = hero ? sticker.dark.ink : quiet ? colors.muted : tone === 'primary' ? colors.onButton : danger ? colors.dangerText : colors.text;
+  const primary = tone === 'primary' || hero;
+  const fill = quiet ? colors.surfaceAlt : primary ? colors.button : colors.surface;
+  const text = quiet ? colors.muted : primary ? colors.onButton : danger ? colors.dangerText : colors.text;
   return (
     <View style={flex ? styles.buttonFlex : compact ? styles.compact : null}>
     <Pressable
@@ -428,9 +438,9 @@ export function Button({
       {({ pressed }) => (
         <StickerBox
           fill={ghost ? 'transparent' : fill}
-          radius={999}
+          radius={radius.button}
           borderWidth={ghost ? 0 : stroke.control}
-          borderColor={hero ? sticker.light.ink : undefined}
+          borderColor={quiet || !primary ? colors.outline : colors.button}
           pressed={pressed && !blocked}
           dashed={quiet && !ghost}
           shadow={!ghost && !quiet}>
@@ -724,17 +734,8 @@ export function ArtRow({
   );
 }
 
-export function GroupAvatar({ size = 48 }: { size?: number }) {
-  return (
-    <Image
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      accessibilityIgnoresInvertColors
-      source={GROUP_AVATAR}
-      resizeMode="contain"
-      style={{ width: size, height: size }}
-    />
-  );
+export function GroupAvatar({ size = 48, label = '' }: { size?: number; label?: string }) {
+  return <MonogramAvatar name={label} personId={label || 'group'} size={size} crest />;
 }
 
 export function EmptyState({
@@ -981,26 +982,28 @@ export function StatRow({ children }: { children: React.ReactNode }) {
 
 export function PersonRow({
   name,
-  initials,
-  hue,
+  personId,
+  relationship,
   occasionId,
   occasionLabel,
   trailing,
   budget,
   progress,
   note,
+  seal,
   onPress,
   accessibilityLabel,
 }: {
   name: string;
-  initials: string;
-  hue: string;
+  personId: string;
+  relationship?: string;
   occasionId?: string;
   occasionLabel?: string;
   trailing?: string;
   budget: string;
   progress: number | null;
   note?: string;
+  seal?: SealState;
   onPress: () => void;
   accessibilityLabel: string;
 }) {
@@ -1008,18 +1011,20 @@ export function PersonRow({
   return (
     <Row accessibilityLabel={accessibilityLabel} onPress={onPress}>
       <View style={styles.person}>
-        <Avatar initials={initials} hue={hue} />
+        <MonogramAvatar name={name} personId={personId} />
         <View style={styles.personCopy}>
-          <Body strong>{name}</Body>
+          <Heading>{name}</Heading>
+          {relationship ? <Caption tone="text">{relationship}</Caption> : null}
           {occasionId && occasionLabel ? (
             <OccasionChip occasionId={occasionId} label={occasionLabel} trailing={trailing} />
           ) : (
             <Caption>{note || ''}</Caption>
           )}
           {budget ? <Caption tone="text">{budget}</Caption> : null}
-          <ProgressBar value={progress} />
+          {progress != null ? <ProgressBar value={progress} /> : null}
+          {seal ? <WaxSeal state={seal} /> : null}
         </View>
-        <Icon name="chevron" color={colors.text} />
+        <Icon name="chevron" color={colors.muted} />
       </View>
     </Row>
   );
@@ -1032,7 +1037,7 @@ export function AppHeader({ title, greeting }: { title: string; greeting?: strin
   return (
     <View style={styles.header}>
       <View style={styles.headerCopy}>
-        <GroupAvatar size={64} />
+        <GroupAvatar size={64} label={title} />
         <View style={styles.personCopy}>
           {greeting ? <Caption>{greeting}</Caption> : null}
           <Display lines={1}>{title}</Display>
@@ -1053,7 +1058,7 @@ export function AppHeader({ title, greeting }: { title: string; greeting?: strin
 }
 
 const TABS: Array<{ id: TabId; icon: IconName; label: string; route: 'People' | 'Fairness' | 'Group' | 'Settings' }> = [
-  { id: 'people', icon: 'people', label: t('people.title'), route: 'People' },
+  { id: 'people', icon: 'people', label: t('people.home'), route: 'People' },
   { id: 'fairness', icon: 'scale', label: t('people.fairness'), route: 'Fairness' },
   { id: 'group', icon: 'gift', label: t('people.group'), route: 'Group' },
   { id: 'settings', icon: 'gear', label: t('people.settings'), route: 'Settings' },
@@ -1061,44 +1066,33 @@ const TABS: Array<{ id: TabId; icon: IconName; label: string; route: 'People' | 
 
 export function TabBar({ active }: { active: TabId }) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { colors, type, typeScale, radius } = useTheme();
+  const { colors, type, typeScale } = useTheme();
   return (
-    <StickerBox fill={colors.surface} radius={radius.card} borderWidth={stroke.card}>
-      <View accessibilityRole="tablist" style={styles.tabs}>
-        {TABS.map(tab => {
-          const selected = tab.id === active;
-          const ink = selected ? colors.onPink : colors.text;
-          return (
-            <Pressable
-              key={tab.id}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-              accessibilityLabel={tab.label}
-              onPress={() => {
-                if (!selected) {
-                  openTab(navigation, tab.route);
-                }
-              }}
-              style={styles.tab}>
-              {({ pressed }) => (
-                <StickerBox
-                  fill={selected ? colors.pink : 'transparent'}
-                  radius={radius.chip}
-                  borderWidth={selected ? stroke.card : 0}
-                  pressed={pressed}
-                  shadow={selected}
-                  style={styles.tabFlex}>
-                  <View style={styles.tabInner}>
-                    <Icon name={tab.icon} color={ink} size={20} />
-                    <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: ink }]}>{tab.label}</Text>
-                  </View>
-                </StickerBox>
-              )}
-            </Pressable>
-          );
-        })}
-      </View>
-    </StickerBox>
+    <View accessibilityRole="tablist" style={[styles.tabs, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+      {TABS.map(tab => {
+        const selected = tab.id === active;
+        const ink = selected ? colors.pink : colors.muted;
+        return (
+          <Pressable
+            key={tab.id}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            accessibilityLabel={tab.label}
+            onPress={() => {
+              if (!selected) {
+                openTab(navigation, tab.route);
+              }
+            }}
+            style={styles.tab}>
+            <View style={styles.tabInner}>
+              <Icon name={tab.icon} color={ink} size={20} />
+              {selected ? <BowMark color={colors.pink} size={14} /> : null}
+              <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: ink }]}>{tab.label}</Text>
+            </View>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -1447,7 +1441,7 @@ export function Toggle({
 }) {
   const { colors, scheme, type, typeScale } = useTheme();
   const off = scheme === 'dark' ? '#3A3142' : '#5C5266';
-  const thumb = scheme === 'dark' ? '#FFF6E9' : '#FFFFFF';
+  const thumb = scheme === 'dark' ? '#FBF8F3' : '#FFFFFF';
   return (
     <Pressable
       accessibilityRole="switch"
@@ -1484,8 +1478,7 @@ const styles = StyleSheet.create({
   split: { flexDirection: 'row', gap: space.xs },
   splitItem: { flex: 1 },
   ink: { flexShrink: 1 },
-  stickerWrap: { marginRight: shadowOffset, marginBottom: shadowOffset },
-  stickerShadow: { position: 'absolute', left: shadowOffset, top: shadowOffset, right: -shadowOffset, bottom: -shadowOffset },
+  stickerWrap: {},
   pad: { padding: space.md, gap: space.xs },
   buttonInner: { minHeight: touch.minTarget, paddingHorizontal: space.md, alignItems: 'center', justifyContent: 'center' },
   buttonRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
@@ -1533,7 +1526,7 @@ const styles = StyleSheet.create({
   },
   track: { height: 14, borderWidth: stroke.inner, overflow: 'hidden', justifyContent: 'center' },
   bar: { height: 10, marginHorizontal: 1 },
-  chip: { borderWidth: stroke.inner, borderRadius: 12, minHeight: 32, paddingHorizontal: space.xs, paddingVertical: space.xxs, justifyContent: 'center' },
+  chip: { borderWidth: stroke.inner, borderRadius: 999, minHeight: 32, paddingHorizontal: space.xs, paddingVertical: space.xxs, justifyContent: 'center' },
   chipPress: { minHeight: touch.minTarget, flexDirection: 'row', alignItems: 'center', gap: space.xxs },
   chipBlock: { minHeight: touch.minTarget, alignItems: 'center' },
   blockChip: { alignSelf: 'stretch' },
@@ -1553,7 +1546,7 @@ const styles = StyleSheet.create({
   artRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.xs },
   headerCopy: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flex: 1 },
-  tabs: { flexDirection: 'row', paddingVertical: space.xs, paddingHorizontal: space.xxs },
+  tabs: { flexDirection: 'row', paddingVertical: space.xs, paddingHorizontal: space.xxs, borderTopWidth: 1 },
   tab: { flex: 1, minHeight: touch.minTarget },
   tabFlex: { flex: 1 },
   tabInner: { minHeight: touch.minTarget, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: space.xxs },

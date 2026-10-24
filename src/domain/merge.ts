@@ -313,6 +313,11 @@ export function applyMerge(input: {
   const createdGiftIds: string[] = [];
   const replacedStates: OccasionState[] = [];
   const sourcePersonCopy: Person = { ...sourcePerson };
+  if (sourcePerson.relationship && !targetPerson.relationship) {
+    target.people = target.people.map(person => (
+      person.id === targetPerson.id ? { ...person, relationship: sourcePerson.relationship } : person
+    ));
+  }
   const sourceOccasions = source.occasions.filter(item => item.personId === sourcePerson.id).map(item => ({ ...item }));
   const sourceStates = source.states.filter(item => item.personId === sourcePerson.id).map(item => ({ ...item }));
   const sourceGifts = source.gifts.filter(item => item.personId === sourcePerson.id).map(item => ({ ...item }));

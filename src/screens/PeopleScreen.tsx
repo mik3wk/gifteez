@@ -2,25 +2,23 @@ import React, { useLayoutEffect, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { openTab, type RootStack } from '../app/navigation';
-import { daysUntil, groupCurrency, occurrenceYear, sortPeople, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
+import { daysUntil, groupCurrency, occurrenceYear, sortPeople, statusFor, upcomingOccasion, yearSpentCents, fairnessRows } from '../domain/logic';
+import { personSeal } from '../domain/seal';
 import type { Occasion, OccasionState } from '../domain/types';
 import { isOneTimeOccasion, occasionLabel } from '../domain/occasions';
 import { isHiddenFromViewer, isPersonLocked } from '../domain/visibility';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
-import { groupHue } from '../theme/skins';
-import { useTheme } from '../theme/useTheme';
-import { occasionLook } from '../theme/tokens';
 import { useGroupLabel } from '../ui/heading';
 import { SessionEntrance } from '../ui/motion';
-import { AccountSheet, AppHeader, Banner, EmptyState, HeroCard, PersonRow, Screen, SectionHeader, StatRow, StatTile } from '../ui/ui';
+import { FairnessCard, GiftTagCard, RibbonDivider } from '../ui/stationery';
+import { AccountSheet, AppHeader, Banner, Button, EmptyState, PersonRow, Screen, SectionHeader, StatRow, StatTile } from '../ui/ui';
 import { DuplicateOffers } from './mergeUi';
 import { summaryPrimaryLabel } from './personSummary';
 
 export function PeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
   const { snapshot, showBanner, dismissBanner, duplicateOffers, dismissDuplicateOffer, resumePersonId, clearResumePerson } = useGifteez();
-  const { scheme } = useTheme();
   const heading = useGroupLabel();
   const [upgrade, setUpgrade] = useState(false);
   const today = new Date();
@@ -85,22 +83,36 @@ export function PeopleScreen() {
         />
       ) : null}
       {next && nextPerson ? (
-        <HeroCard
-          kicker={t('people.nextUp')}
+        <GiftTagCard
+          personId={nextPerson.id}
+          name={nextPerson.name}
           title={t('people.nextTitle', { name: nextPerson.name, occasion: occasionLabel(next.occasion) })}
-          figure={daysUntil(next.date, today) === 0 ? t('people.today') : String(daysUntil(next.date, today))}
-          unit={daysUntil(next.date, today) === 0 ? undefined : t('people.daysUnit', { count: daysUntil(next.date, today) })}
-          detail={heroDetail(nextPerson.id, nextPerson.budgetCents, snapshot.gifts, year, snapshot.group)}
-          action={heroLabel}
-          art={occasionLook(next.occasion.type).art}
-          initials={nextPerson.name}
-          hue={groupHue(nextPerson.name.length, scheme)}
-          progress={nextPerson.budgetCents && nextPerson.budgetCents > 0
-            ? yearSpentCents(nextPerson.id, snapshot.gifts, year) / nextPerson.budgetCents
-            : null}
-          onAction={() => navigation.navigate('Person', { personId: nextPerson.id })}
+          when={isOneTimeOccasion(next.occasion) ? formatLongDate(next.date) : formatDate(next.date)}
+          countdown={daysUntil(next.date, today) === 0 ? t('people.today') : t('people.inDays', { count: daysUntil(next.date, today) })}
+          budgetLabel={isHiddenFromViewer(nextPerson, snapshot.profile.uid)
+            ? undefined
+            : heroDetail(nextPerson.id, nextPerson.budgetCents, snapshot.gifts, year, snapshot.group)}
+          progress={isHiddenFromViewer(nextPerson, snapshot.profile.uid) || !nextPerson.budgetCents
+            ? null
+            : yearSpentCents(nextPerson.id, snapshot.gifts, year) / nextPerson.budgetCents}
+          seal={isHiddenFromViewer(nextPerson, snapshot.profile.uid) ? undefined : personSeal({
+            status: nextHero?.status ?? 'not-started',
+            claimed: Boolean(nextHero?.claimedBy),
+            logged: snapshot.gifts.some(gift => gift.personId === nextPerson.id && gift.occasionId === next.occasion.id && gift.year === occurrenceYear(next.occasion, today) && !gift.deleted),
+          })}
+          action={heroLabel ? (
+            <Button label={heroLabel} onPress={() => navigation.navigate('Person', { personId: nextPerson.id })} />
+          ) : null}
         />
       ) : null}
+      <FairnessCard
+        rows={fairnessRows(snapshot, today).filter(row => {
+          const person = snapshot.people.find(item => item.id === row.personId);
+          return !isHiddenFromViewer(person, snapshot.profile.uid);
+        })}
+        money={cents => formatMoney(cents, deviceLocale(), groupCurrency(snapshot.group), true)}
+      />
+      <RibbonDivider />
       <StatRow>
         <StatTile value={String(people.length)} label={t('people.statPeople')} icon="people" tint="pink" />
         <StatTile value={String(upcomingCount)} label={t('people.statUpcoming')} icon="calendar" tint="teal" />
@@ -131,27 +143,37 @@ export function PeopleScreen() {
           : person.budgetCents == null
             ? t('people.spent', { used: money(spent) })
             : t('people.budgetLeft', { used: money(spent), budget: money(person.budgetCents) });
+        const state = hidden || !item ? undefined : heroState(item.occasion, snapshot.states, today);
         const status = hidden || !item ? null : statusFor(item.occasion, snapshot.states, today);
+        const logged = Boolean(item && snapshot.gifts.some(gift => (
+          gift.personId === person.id && gift.occasionId === item.occasion.id && gift.year === occurrenceYear(item.occasion, today) && !gift.deleted
+        )));
+        const seal = hidden || !status ? undefined : personSeal({
+          status,
+          claimed: Boolean(state?.claimedBy),
+          logged,
+        });
         const when = item
           ? `${occasionLabel(item.occasion)} ${isOneTimeOccasion(item.occasion) ? formatLongDate(item.date) : formatDate(item.date)}`
           : t('people.noOccasion');
         const days = item ? daysUntil(item.date, today) : null;
         const trailing = days == null ? undefined : days === 0 ? t('people.today') : t('people.inDays', { count: days });
-        const statusText = status ? t(statusKey(status)) : '';
+        const statusText = seal ? t(`seal.${seal}`) : '';
         const progress = hidden || person.budgetCents == null || person.budgetCents <= 0 ? null : spent / person.budgetCents;
         return (
           <PersonRow
             key={person.id}
             name={person.name}
-            initials={person.name}
-            hue={groupHue(person.name.length, scheme)}
+            personId={person.id}
+            relationship={person.relationship}
             occasionId={item?.occasion.type}
             occasionLabel={item ? occasionLabel(item.occasion) : undefined}
             trailing={trailing}
             budget={budget}
             progress={progress}
+            seal={seal}
             note={person.imported && !person.opened ? t('people.imported') : t('people.noOccasion')}
-            accessibilityLabel={[person.name, when, budget, statusText].filter(Boolean).join(', ')}
+            accessibilityLabel={[person.name, person.relationship, when, budget, statusText].filter(Boolean).join(', ')}
             onPress={() => navigation.navigate('Person', { personId: person.id })}
           />
         );
@@ -180,14 +202,4 @@ function heroDetail(
 
 function heroState(occasion: Occasion, states: OccasionState[], today: Date): OccasionState | undefined {
   return states.find(item => item.occasionId === occasion.id && item.year === occurrenceYear(occasion, today) && !item.deleted);
-}
-
-function statusKey(status: string): string {
-  if (status === 'idea-saved') {
-    return 'person.statusIdea';
-  }
-  if (status === 'purchased') {
-    return 'person.statusPurchased';
-  }
-  return 'person.statusNotStarted';
 }
