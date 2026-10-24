@@ -1,7 +1,9 @@
+import { Platform } from 'react-native';
 import Contacts from 'react-native-contacts';
 import CalendarEvents from 'react-native-calendar-events';
 import { draftsFromEvents, type CalendarDraft } from '../domain/calendarImport';
 import { monthDayFromStored } from '../domain/calendarDate';
+import { contactMonthDay } from '../domain/contactImport';
 import { birthdayNameFromTitle } from '../domain/logic';
 import type { ImportedPerson } from '../domain/logic';
 
@@ -16,14 +18,7 @@ export async function importContacts(): Promise<ImportedPerson[] | 'denied'> {
     if (!name) {
       return [];
     }
-    const birthday = contact.birthday;
-    const person: ImportedPerson = { name, budgetCents: null, tags: [] };
-    if (birthday?.month != null) {
-      person.month = birthday.month + 1;
-    }
-    if (birthday?.day != null) {
-      person.day = birthday.day;
-    }
+    const person: ImportedPerson = { name, budgetCents: null, tags: [], ...contactMonthDay(Platform.OS, contact.birthday) };
     return [person];
   });
 }

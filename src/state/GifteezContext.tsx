@@ -34,6 +34,7 @@ import { isIncomingBackup, pickBackupText, readBackupUri, shareBackupFile } from
 import { readCacheBlob, readSnapshotSlots, writeSnapshotSlots } from '../platform/cache';
 import { deviceId } from '../platform/device';
 import { activeSkinParam, callFunction, downloadSkin, ensureAnonymousUser, initFirebase } from '../platform/firebase';
+import { planImported } from '../domain/contactImport';
 import { importContacts, sweepBirthdays } from '../platform/importers';
 import { buyUnlock, connectStore, finishOwned, listenToPurchases, loadOwned, purchaseProof, type StoreProduct } from '../platform/iap';
 import { applyReminderPlan, cancelReminderPlan, requestReminderPermission } from '../platform/reminders';
@@ -471,18 +472,41 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   }, [commit, env, fail]);
 
   const addImported = useCallback(async (rows: Array<{ name: string; budgetCents: number | null; month?: number; day?: number; tags: string[] }>) => {
+    const created = new Map<string, string>();
     let count = 0;
-    for (const row of rows) {
-      const name = row.name.trim();
-      if (!name) {
+    for (const step of planImported(rows, snapshotRef.current)) {
+      if (step.kind === 'occasion') {
+        const personId = created.get(step.personId) ?? step.personId;
+        if (personId.startsWith('new:')) {
+          continue;
+        }
+        const already = snapshotRef.current.occasions.some(occasion => (
+          !occasion.deleted
+          && occasion.personId === personId
+          && occasion.type === 'birthday'
+          && occasion.month === step.month
+          && occasion.day === step.day
+        ));
+        if (already) {
+          continue;
+        }
+        await commit(addOccasion(snapshotRef.current, {
+          id: randomId(),
+          personId,
+          type: 'birthday',
+          month: step.month,
+          day: step.day,
+          updatedAt: Date.now(),
+        }));
+        sync().catch(() => undefined);
         continue;
       }
       const now = Date.now();
       const person: Person = {
         id: randomId(),
-        name,
-        budgetCents: row.budgetCents,
-        tags: row.tags,
+        name: step.name,
+        budgetCents: step.budgetCents,
+        tags: step.tags,
         imported: true,
         opened: false,
         createdAt: now,
@@ -498,14 +522,15 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         }
         break;
       }
+      created.set(`new:${step.name.trim().toLowerCase()}`, person.id);
       let next = result.snapshot;
-      if (row.month && row.day) {
+      if (step.month != null && step.day != null && isRealMonthDay(step.month, step.day)) {
         next = addOccasion(next, {
           id: randomId(),
           personId: person.id,
           type: 'birthday',
-          month: row.month,
-          day: row.day,
+          month: step.month,
+          day: step.day,
           updatedAt: Date.now(),
         });
       }
