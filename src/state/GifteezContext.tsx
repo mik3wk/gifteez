@@ -487,10 +487,22 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     return stop;
   }, [commit, env, fail]);
 
-  const addImported = useCallback(async (rows: Array<{ name: string; budgetCents: number | null; month?: number; day?: number; tags: string[] }>) => {
+  const addImported = useCallback(async (rows: Array<{ name: string; budgetCents: number | null; month?: number; day?: number; tags: string[]; birthYear?: number | null }>) => {
     const created = new Map<string, string>();
     let count = 0;
     for (const step of planImported(rows, snapshotRef.current)) {
+      if (step.kind === 'birthYear') {
+        const personId = created.get(step.personId) ?? step.personId;
+        if (personId.startsWith('new:')) {
+          continue;
+        }
+        const updated = updatePerson(snapshotRef.current, personId, { birthYear: step.birthYear }, Date.now());
+        if (updated.ok) {
+          await commit(updated.snapshot);
+          sync().catch(() => undefined);
+        }
+        continue;
+      }
       if (step.kind === 'occasion') {
         const personId = created.get(step.personId) ?? step.personId;
         if (personId.startsWith('new:')) {
@@ -503,17 +515,27 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           && occasion.month === step.month
           && occasion.day === step.day
         ));
-        if (already) {
+        if (already && step.birthYear == null) {
           continue;
         }
-        await commit(addOccasion(snapshotRef.current, {
-          id: randomId(),
-          personId,
-          type: 'birthday',
-          month: step.month,
-          day: step.day,
-          updatedAt: Date.now(),
-        }));
+        let next = snapshotRef.current;
+        if (!already) {
+          next = addOccasion(next, {
+            id: randomId(),
+            personId,
+            type: 'birthday',
+            month: step.month,
+            day: step.day,
+            updatedAt: Date.now(),
+          });
+        }
+        if (step.birthYear != null) {
+          const updated = updatePerson(next, personId, { birthYear: step.birthYear }, Date.now());
+          if (updated.ok) {
+            next = updated.snapshot;
+          }
+        }
+        await commit(next);
         sync().catch(() => undefined);
         continue;
       }
@@ -527,6 +549,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         opened: false,
         createdAt: now,
         updatedAt: now,
+        ...(step.birthYear != null ? { birthYear: step.birthYear } : {}),
       };
       const result = addPerson({ snapshot: snapshotRef.current, person, freeLimit: env.freeTierMaxPeople });
       if (!result.ok) {

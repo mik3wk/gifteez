@@ -1,5 +1,5 @@
 import Contacts from 'react-native-contacts';
-import { contactAddDecision, contactMonthDay, freeSlotsLeft, planImported, withDefaultBudget } from '../src/domain/contactImport';
+import { contactAddDecision, contactBirthYear, contactMonthDay, freeSlotsLeft, planImported, withDefaultBudget } from '../src/domain/contactImport';
 import { importContacts } from '../src/platform/importers';
 
 test('free slots count down from the cap and disappear once unlocked', () => {
@@ -75,6 +75,24 @@ test('the same person and birthday are not imported twice', () => {
     [{ name: 'Bea', budgetCents: null, tags: [], month: 13, day: 1 }],
     { people: [], occasions: [] },
   )).toEqual([{ kind: 'create', name: 'Bea', budgetCents: null, tags: [] }]);
+  expect(planImported(
+    [{ name: 'Sam', budgetCents: null, tags: [], month: 6, day: 10, birthYear: 2020 }],
+    { people: [], occasions: [] },
+  )).toEqual([{ kind: 'create', name: 'Sam', budgetCents: null, tags: [], month: 6, day: 10, birthYear: 2020 }]);
+  expect(planImported(
+    [{ ...ada, birthYear: 2020 }],
+    existing,
+  )).toEqual([{ kind: 'birthYear', personId: 'ada', birthYear: 2020 }]);
+  expect(planImported(
+    [{ ...ada, birthYear: 2014 }],
+    {
+      people: [{ id: 'ada', name: 'Ada Lovelace', birthYear: 1990 }],
+      occasions: [{ personId: 'ada', type: 'birthday', month: 3, day: 14 }],
+    },
+  )).toEqual([]);
+  expect(contactBirthYear(2020, new Date(2026, 5, 10))).toBe(2020);
+  expect(contactBirthYear(1899, new Date(2026, 5, 10))).toBeNull();
+  expect(contactBirthYear(0)).toBeNull();
 });
 
 test('reading contacts never writes and keeps a 1-based birthday', async () => {
@@ -83,14 +101,18 @@ test('reading contacts never writes and keeps a 1-based birthday', async () => {
   request.mockResolvedValueOnce('authorized');
   read.mockResolvedValueOnce([
     { givenName: 'Ada', familyName: 'Lovelace', birthday: { year: 1990, month: 3, day: 14 } },
+    { givenName: 'Sam', familyName: '', birthday: { year: 2020, month: 6, day: 10 } },
     { givenName: 'Grace', familyName: 'Hopper', birthday: { month: 12, day: 9 } },
     { givenName: 'Bad', familyName: 'Date', birthday: { month: 13, day: 2 } },
+    { givenName: 'Year', familyName: 'Only', birthday: { year: 2018, month: 13, day: 2 } },
     { givenName: ' ', familyName: '' },
   ]);
   await expect(importContacts()).resolves.toEqual([
-    { name: 'Ada Lovelace', budgetCents: null, tags: [], month: 3, day: 14 },
+    { name: 'Ada Lovelace', budgetCents: null, tags: [], month: 3, day: 14, birthYear: 1990 },
+    { name: 'Sam', budgetCents: null, tags: [], month: 6, day: 10, birthYear: 2020 },
     { name: 'Grace Hopper', budgetCents: null, tags: [], month: 12, day: 9 },
     { name: 'Bad Date', budgetCents: null, tags: [] },
+    { name: 'Year Only', budgetCents: null, tags: [], birthYear: 2018 },
   ]);
   expect(read).toHaveBeenCalled();
   expect('updateContact' in Contacts || 'addContact' in Contacts).toBe(false);

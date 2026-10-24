@@ -3,7 +3,7 @@ import Contacts from 'react-native-contacts';
 import CalendarEvents from 'react-native-calendar-events';
 import { draftsFromEvents, type CalendarDraft } from '../domain/calendarImport';
 import { monthDayFromStored } from '../domain/calendarDate';
-import { contactMonthDay } from '../domain/contactImport';
+import { contactBirthYear, contactMonthDay } from '../domain/contactImport';
 import { birthdayNameFromTitle } from '../domain/logic';
 import type { ImportedPerson } from '../domain/logic';
 
@@ -18,7 +18,14 @@ export async function importContacts(): Promise<ImportedPerson[] | 'denied'> {
     if (!name) {
       return [];
     }
-    const person: ImportedPerson = { name, budgetCents: null, tags: [], ...contactMonthDay(Platform.OS, contact.birthday) };
+    const birthYear = contactBirthYear(contact.birthday?.year);
+    const person: ImportedPerson = {
+      name,
+      budgetCents: null,
+      tags: [],
+      ...contactMonthDay(Platform.OS, contact.birthday),
+      ...(birthYear != null ? { birthYear } : {}),
+    };
     return [person];
   });
 }

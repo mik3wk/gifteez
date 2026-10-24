@@ -993,6 +993,8 @@ export type ImportedPerson = {
   budgetCents: number | null;
   month?: number;
   day?: number;
+  /** Copied from a contact birthday when that date includes a year. */
+  birthYear?: number;
   tags: string[];
 };
 

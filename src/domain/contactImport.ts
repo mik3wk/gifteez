@@ -1,4 +1,4 @@
-import { isRealMonthDay, type ImportedPerson } from './logic';
+import { isRealMonthDay, parseBirthYear, type ImportedPerson } from './logic';
 
 export type ContactBirthday = {
   month?: number | null;
@@ -29,19 +29,28 @@ export function contactMonthDay(
   return { month, day: birthday.day };
 }
 
-type ExistingPerson = { id: string; name: string; deleted?: boolean };
+/** A contact birthday year, such as 2020 from 2020-06-10. Missing and out-of-range years stay off the person. */
+export function contactBirthYear(year: number | null | undefined, today = new Date()): number | null {
+  if (typeof year !== 'number' || !Number.isInteger(year)) {
+    return null;
+  }
+  return parseBirthYear(String(year), today);
+}
+
+type ExistingPerson = { id: string; name: string; deleted?: boolean; birthYear?: number | null };
 type ExistingOccasion = { personId: string; type: string; month: number; day: number; deleted?: boolean };
 
 export type PlannedImport =
-  | { kind: 'create'; name: string; budgetCents: number | null; tags: string[]; month?: number; day?: number }
-  | { kind: 'occasion'; personId: string; month: number; day: number };
+  | { kind: 'create'; name: string; budgetCents: number | null; tags: string[]; month?: number; day?: number; birthYear?: number }
+  | { kind: 'occasion'; personId: string; month: number; day: number; birthYear?: number }
+  | { kind: 'birthYear'; personId: string; birthYear: number };
 
 /**
  * One person per name. A birthday already stored for that person is not added again,
  * including when the same date arrived earlier from the calendar.
  */
 export function planImported(
-  rows: Array<{ name: string; budgetCents: number | null; tags: string[]; month?: number; day?: number }>,
+  rows: Array<{ name: string; budgetCents: number | null; tags: string[]; month?: number; day?: number; birthYear?: number | null }>,
   existing: { people: ExistingPerson[]; occasions: ExistingOccasion[] },
 ): PlannedImport[] {
   const byName = new Map<string, string>();
@@ -69,13 +78,25 @@ export function planImported(
     const dated = row.month != null && row.day != null && isRealMonthDay(row.month, row.day)
       ? { month: row.month, day: row.day }
       : null;
+    const birthYear = contactBirthYear(row.birthYear);
     const known = byName.get(key);
     if (known) {
+      const stored = existing.people.find(person => person.id === known);
+      const fillYear = birthYear != null && (stored?.birthYear == null);
       if (!dated || birthdays.has(`${known}|${dated.month}|${dated.day}`)) {
+        if (fillYear) {
+          planned.push({ kind: 'birthYear', personId: known, birthYear });
+        }
         return;
       }
       birthdays.add(`${known}|${dated.month}|${dated.day}`);
-      planned.push({ kind: 'occasion', personId: known, month: dated.month, day: dated.day });
+      planned.push({
+        kind: 'occasion',
+        personId: known,
+        month: dated.month,
+        day: dated.day,
+        ...(fillYear ? { birthYear } : {}),
+      });
       return;
     }
     const token = `new:${key}`;
@@ -89,6 +110,7 @@ export function planImported(
       budgetCents: row.budgetCents,
       tags: row.tags,
       ...(dated ?? {}),
+      ...(birthYear != null ? { birthYear } : {}),
     });
   });
   return planned;
