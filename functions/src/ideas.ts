@@ -50,7 +50,6 @@ export async function requestIdeas(apiKey: string, model: string, prompt: IdeaPr
     },
     body: JSON.stringify({
       model,
-      temperature: 0.7,
       response_format: { type: 'json_object' },
       messages: [
         {
@@ -62,6 +61,14 @@ export async function requestIdeas(apiKey: string, model: string, prompt: IdeaPr
     }),
   });
   if (!response.ok) {
+    let message = '';
+    try {
+      const failed = await response.json() as { error?: { message?: unknown } };
+      message = typeof failed.error?.message === 'string' ? failed.error.message : '';
+    } catch {
+      message = '';
+    }
+    console.error('openai request failed', { status: response.status, message });
     throw new Error(`openai_${response.status}`);
   }
   const body = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };

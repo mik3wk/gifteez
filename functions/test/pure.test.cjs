@@ -51,6 +51,50 @@ test('idea parser accepts JSON and lines', () => {
   assert.deepEqual(parseIdeas('1. A book\n- A mug'), ['A book', 'A mug']);
 });
 
+test('idea requests omit temperature and log only the OpenAI error', async () => {
+  const { requestIdeas } = require('../lib/ideas');
+  const originalFetch = global.fetch;
+  const originalError = console.error;
+  const logged = [];
+  console.error = (...args) => {
+    logged.push(args);
+  };
+  try {
+    const bodies = [];
+    global.fetch = async (_url, init) => {
+      bodies.push(JSON.parse(init.body));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ message: { content: '{"ideas":["A wool scarf"]}' } }] }),
+      };
+    };
+    const ideas = await requestIdeas('sk-test-key', 'gpt-test', { name: 'Ada', tags: ['books'] });
+    assert.deepEqual(ideas, ['A wool scarf']);
+    assert.equal(Object.hasOwn(bodies[0], 'temperature'), false);
+    assert.deepEqual(bodies[0].response_format, { type: 'json_object' });
+
+    global.fetch = async () => ({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: { message: "Unsupported value: 'temperature' does not support 0.7 with this model. Only the default (1) value is supported." } }),
+    });
+    await assert.rejects(
+      () => requestIdeas('sk-test-key', 'gpt-test', { name: 'Ada', tags: ['books'] }),
+      /openai_400/,
+    );
+    const text = JSON.stringify(logged);
+    assert.match(text, /400/);
+    assert.match(text, /Unsupported value/);
+    assert.equal(text.includes('sk-test-key'), false);
+    assert.equal(text.includes('Ada'), false);
+    assert.equal(text.includes('books'), false);
+  } finally {
+    global.fetch = originalFetch;
+    console.error = originalError;
+  }
+});
+
 test('store receipts grant only a matching unrevoked purchase', () => {
   assert.equal(appleTransactionGrants({ productId: 'gifteez_unlock', bundleId: 'com.gifteez' }, 'gifteez_unlock', 'com.gifteez'), true);
   assert.equal(appleTransactionGrants({ productId: 'other', bundleId: 'com.gifteez' }, 'gifteez_unlock', 'com.gifteez'), false);
