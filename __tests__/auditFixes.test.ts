@@ -150,7 +150,7 @@ test('the linked member does not keep gifts in the visible snapshot', () => {
   snapshot.people = [{ ...person('p', 'Ada'), linkedUid: 'ada' }];
   snapshot.gifts = [{ id: 'g', personId: 'p', occasionId: 'o', year: 2026, title: 'Secret', priceCents: 1, purchasedOn: '2026-01-01', updatedAt: 1 }];
   snapshot.states = [{ id: 's', occasionId: 'o', personId: 'p', year: 2026, status: 'purchased', savedIdea: null, updatedAt: 1 }];
-  snapshot.ideas = [{ id: 'i', personId: 'p', occasionKey: 'k', ideas: ['x'], source: 'on-device', salt: 0, generatedAt: 1, updatedAt: 1 }];
+  snapshot.ideas = [{ id: 'i', personId: 'p', occasionKey: 'k', ideas: [{ title: 'x', priceMin: 15, priceMax: 40, reason: 'A small useful thing.', searchQuery: 'small useful gift' }], source: 'on-device', salt: 0, generatedAt: 1, updatedAt: 1 }];
   expect(isHiddenFromViewer(snapshot.people[0], 'ada')).toBe(true);
   const stripped = stripSensitiveForViewer(snapshot);
   expect(stripped.gifts).toHaveLength(0);

@@ -5,7 +5,8 @@ import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
 import { INTEREST_TAGS } from '../domain/catalog';
-import { ideaCacheId } from '../domain/ideas';
+import { asGiftIdea, ideaCacheId, ideaKey } from '../domain/ideas';
+import type { GiftIdea } from '../domain/types';
 import { canEditSharedGift } from '../domain/edits';
 import { allTimeSpentCents, daysUntil, isRealMonthDay, listCurrency, occurrenceYear, parseBudget, parseLooseDate, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
 import { dateIsEstimated, isOneTimeOccasion, nextOccasionDate, occasionLabel, occasionNeedsDate, presetFor } from '../domain/occasions';
@@ -142,12 +143,13 @@ export function PersonScreen() {
     deleteGift,
     setPersonCircle,
   } = useGifteez();
-  const { colors } = useTheme();
   const person = snapshot.people.find(item => item.id === route.params.personId && !item.deleted);
   const today = new Date();
   const [budget, setBudget] = useState(person?.budgetCents == null ? '' : String(person.budgetCents / 100));
   const [name, setName] = useState(person?.name ?? '');
   const [relationship, setRelationship] = useState(person?.relationship ?? '');
+  const [notes, setNotes] = useState(person?.notes ?? '');
+  const [freshCloud, setFreshCloud] = useState<GiftIdea[]>([]);
   const [relationshipError, setRelationshipError] = useState('');
   const [gift, setGift] = useState('');
   const [price, setPrice] = useState('');
@@ -224,8 +226,12 @@ export function PersonScreen() {
   const showSpend = person.budgetCents != null || history.length > 0;
   const ideas = onDevice?.ideas ?? [];
   const cloudList = cloud?.ideas ?? [];
-  const shownIdeas = showAllIdeas ? ideas : ideas.slice(0, 3);
-  const hiddenIdeaCount = Math.max(0, ideas.length - shownIdeas.length);
+  const hiddenIdeas = new Set(snapshot.feedback.filter(item => item.personId === person.id && item.vote === 'down').map(item => item.idea));
+  const visibleDevice = ideas.filter(idea => !hiddenIdeas.has(ideaKey(idea)));
+  const visibleCloud = cloudList.filter(idea => !hiddenIdeas.has(ideaKey(idea)));
+  const shownIdeas = showAllIdeas ? visibleDevice : visibleDevice.slice(0, 3);
+  const hiddenIdeaCount = Math.max(0, visibleDevice.length - shownIdeas.length);
+  const artName = next ? occasionLook(next.occasion.type).art : 'gift';
   const year = today.getFullYear();
   const spent = yearSpentCents(person.id, snapshot.gifts, year);
   const nextState = next
@@ -241,6 +247,11 @@ export function PersonScreen() {
 
   function savedFor(idea: string): boolean {
     return Boolean(next && nextState?.savedIdea === idea);
+  }
+
+  const personId = person.id;
+  function hearted(idea: string): boolean {
+    return savedFor(idea) || snapshot.feedback.some(item => item.personId === personId && item.idea === idea && item.vote === 'up');
   }
 
   function openPurchase(occasionId: string, idea: string) {
@@ -323,15 +334,29 @@ export function PersonScreen() {
       {section === 'ideas' && !hidden && !locked ? (
         <>
           {findingIdeas && ideas.length === 0 ? <Shimmer label={t('person.ideasLoading')} /> : null}
-          {!findingIdeas && ideas.length === 0 && cloudList.length === 0 ? <EmptyState kind="ideas" text={t('person.ideasEmpty')} /> : null}
+          {!findingIdeas && visibleDevice.length === 0 && visibleCloud.length === 0 ? <EmptyState kind="ideas" text={t('person.ideasEmpty')} /> : null}
           {shownIdeas.map(idea => (
-            <IdeaRow
-              key={idea}
+            <IdeaCard
+              key={`device-${ideaKey(idea)}`}
               idea={idea}
-              saved={savedFor(idea)}
-              color={savedFor(idea) ? colors.pink : colors.text}
-              onSave={() => onSaveIdea(idea)}
-              onMenu={() => setMenu({ kind: 'idea', idea })}
+              art={artName}
+              saved={savedFor(ideaKey(idea))}
+              onSave={() => onSaveIdea(ideaKey(idea))}
+              onUp={() => { vote(person.id, ideaKey(idea), 'up').catch(() => undefined); }}
+              onDown={() => { vote(person.id, ideaKey(idea), 'down').catch(() => undefined); }}
+              onShop={() => undefined}
+            />
+          ))}
+          {visibleCloud.map(idea => (
+            <IdeaCard
+              key={`cloud-${ideaKey(idea)}`}
+              idea={idea}
+              art={artName}
+              saved={savedFor(ideaKey(idea))}
+              onSave={() => onSaveIdea(ideaKey(idea))}
+              onUp={() => { vote(person.id, ideaKey(idea), 'up').catch(() => undefined); }}
+              onDown={() => { vote(person.id, ideaKey(idea), 'down').catch(() => undefined); }}
+              onShop={() => undefined}
             />
           ))}
           <Cluster>
@@ -405,7 +430,10 @@ export function PersonScreen() {
 
       <Sheet
         visible={tuning}
-        onClose={() => setTuning(false)}
+        onClose={() => {
+          setFreshCloud(current => current.filter(idea => hearted(idea.title)));
+          setTuning(false);
+        }}
         onDismiss={() => {
           const nextMenu = queuedMenu.current;
           queuedMenu.current = null;
@@ -424,7 +452,6 @@ export function PersonScreen() {
           }}
         />
         <Button label={t('person.refresh')} tone="secondary" onPress={() => refreshIdeas(person.id)} />
-        {cloudRemaining[person.id] != null ? <Body>{t('person.cloudLeft', { count: cloudRemaining[person.id] })}</Body> : null}
         {cloudBusy ? <Shimmer label={t('person.ideasLoading')} /> : null}
         {cloudError ? <Body>{t('person.ideasError')}</Body> : null}
         <Button
@@ -434,7 +461,7 @@ export function PersonScreen() {
             setCloudBusy(true);
             setCloudError(false);
             try {
-              await cloudIdeas(person.id);
+              setFreshCloud(await cloudIdeas(person.id));
             } catch {
               setCloudError(true);
             } finally {
@@ -442,33 +469,20 @@ export function PersonScreen() {
             }
           }}
         />
+        {freshCloud.filter(idea => !hiddenIdeas.has(idea.title)).map(idea => (
+          <IdeaCard
+            key={`fresh-${idea.title}`}
+            idea={idea}
+            art={artName}
+            saved={savedFor(idea.title)}
+            onSave={() => onSaveIdea(idea.title)}
+            onUp={() => { vote(person.id, idea.title, 'up').catch(() => undefined); }}
+            onDown={() => { vote(person.id, idea.title, 'down').catch(() => undefined); }}
+            onShop={() => undefined}
+          />
+        ))}
+        {cloudRemaining[person.id] != null ? <Body>{t('person.cloudLeft', { count: cloudRemaining[person.id] })}</Body> : null}
         <Body>{t('person.cloudHint')}</Body>
-        {ideas.map(idea => (
-          <IdeaRow
-            key={`device-${idea}`}
-            idea={idea}
-            saved={savedFor(idea)}
-            color={savedFor(idea) ? colors.pink : colors.text}
-            onSave={() => onSaveIdea(idea)}
-            onMenu={() => {
-              queuedMenu.current = { kind: 'idea', idea };
-              setTuning(false);
-            }}
-          />
-        ))}
-        {cloudList.map(idea => (
-          <IdeaRow
-            key={`cloud-${idea}`}
-            idea={idea}
-            saved={savedFor(idea)}
-            color={savedFor(idea) ? colors.pink : colors.text}
-            onSave={() => onSaveIdea(idea)}
-            onMenu={() => {
-              queuedMenu.current = { kind: 'idea', idea };
-              setTuning(false);
-            }}
-          />
-        ))}
       </Sheet>
       <Sheet visible={addingOccasion} onClose={() => setAddingOccasion(false)}>
         <OccasionPicker personId={person.id} onAdded={() => setAddingOccasion(false)} />
@@ -526,6 +540,12 @@ export function PersonScreen() {
             setRelationshipError('');
           }}
         />
+        <Field
+          label={t('person.notes')}
+          value={notes}
+          onChangeText={value => setNotes(value.slice(0, 300))}
+        />
+        <Caption>{t('person.notesHint')}</Caption>
         <Button
           label={t('person.save')}
           onPress={() => {
@@ -547,6 +567,7 @@ export function PersonScreen() {
               budgetCents: budget.trim() ? parseBudget(budget) : null,
               tags: interestTags,
               relationship: cleaned ?? '',
+              notes,
             });
           }}
         />
@@ -927,49 +948,51 @@ function TagPicker({ tags, onChange }: { tags: string[]; onChange: (tags: string
   );
 }
 
-function IdeaRow({
+function IdeaCard({
   idea,
+  art,
   saved,
-  color,
   onSave,
-  onMenu,
+  onUp,
+  onDown,
+  onShop,
 }: {
-  idea: string;
+  idea: GiftIdea | string;
+  art: ReturnType<typeof occasionLook>['art'];
   saved: boolean;
-  color: string;
   onSave: () => void | Promise<unknown> | undefined;
-  onMenu: () => void;
+  onUp: () => void;
+  onDown: () => void;
+  onShop: () => void;
 }) {
+  const gift = asGiftIdea(idea);
+  const { colors } = useTheme();
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={idea}
-      accessibilityHint={t('person.ideaMenuHint')}
-      accessibilityActions={[{ name: 'open-menu', label: t('person.ideaMenu') }]}
-      onAccessibilityAction={event => {
-        if (event.nativeEvent.actionName === 'activate' || event.nativeEvent.actionName === 'open-menu') {
-          onMenu();
-        }
-      }}
-      onPress={onMenu}>
-      <Card>
-        <View style={styles.ideaRow}>
-          <View style={styles.ideaCopy}>
-            <Body>{idea}</Body>
-          </View>
-          <HeartPop saved={saved}>
-            <IconButton
-              label={saved ? t('person.unsaveIdea') : t('person.saveIdea')}
-              name="heart"
-              color={color}
-              filled={saved}
-              size={28}
-              onPress={() => { onSave(); }}
-            />
-          </HeartPop>
+    <Card>
+      <View style={styles.ideaRow}>
+        <ArtSlot name={art} size={48} />
+        <View style={styles.ideaCopy}>
+          <Heading>{gift.title}</Heading>
+          <Caption>{`$${gift.priceMin}–${gift.priceMax}`}</Caption>
+          <Body>{gift.reason}</Body>
         </View>
-      </Card>
-    </Pressable>
+      </View>
+      <Cluster>
+        <Button compact label={t('person.thumbsUp')} tone="secondary" onPress={onUp} />
+        <Button compact label={t('person.thumbsDown')} tone="secondary" onPress={onDown} />
+        <HeartPop saved={saved}>
+          <IconButton
+            label={saved ? t('person.unsaveIdea') : t('person.saveIdea')}
+            name="heart"
+            color={saved ? colors.pink : colors.text}
+            filled={saved}
+            size={28}
+            onPress={() => { onSave(); }}
+          />
+        </HeartPop>
+      </Cluster>
+      <Button label={t('person.shopIdea')} tone="secondary" onPress={onShop} />
+    </Card>
   );
 }
 

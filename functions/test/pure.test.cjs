@@ -46,9 +46,20 @@ test('fingerprint ignores the anonymous uid', () => {
   assert.equal(one.length, 64);
 });
 
-test('idea parser accepts JSON and lines', () => {
-  assert.deepEqual(parseIdeas('{"ideas":["A book","A mug"]}'), ['A book', 'A mug']);
-  assert.deepEqual(parseIdeas('1. A book\n- A mug'), ['A book', 'A mug']);
+test('idea parser keeps valid objects and drops malformed ones', () => {
+  const parsed = parseIdeas(JSON.stringify({
+    ideas: [
+      { title: 'A wool scarf', priceMin: 20, priceMax: 40, reason: 'A warm layer for cold days.', searchQuery: 'wool scarf cold weather' },
+      'A mug',
+      { title: 'Broken', priceMin: 10, priceMax: 20, reason: 'Nope.', searchQuery: 'too short' },
+      { title: 'Reversed', priceMin: 80, priceMax: 30, reason: 'Prices get ordered.', searchQuery: 'ceramic everyday mug' },
+    ],
+  }));
+  assert.deepEqual(parsed, [
+    { title: 'A wool scarf', priceMin: 20, priceMax: 40, reason: 'A warm layer for cold days.', searchQuery: 'wool scarf cold weather' },
+    { title: 'Reversed', priceMin: 30, priceMax: 80, reason: 'Prices get ordered.', searchQuery: 'ceramic everyday mug' },
+  ]);
+  assert.deepEqual(parseIdeas('1. A book\n- A mug'), []);
 });
 
 test('idea requests omit temperature and log only the OpenAI error', async () => {
@@ -66,13 +77,14 @@ test('idea requests omit temperature and log only the OpenAI error', async () =>
       return {
         ok: true,
         status: 200,
-        json: async () => ({ choices: [{ message: { content: '{"ideas":["A wool scarf"]}' } }] }),
+        json: async () => ({ choices: [{ message: { content: '{"ideas":[{"title":"A wool scarf","priceMin":20,"priceMax":40,"reason":"A warm layer for cold days.","searchQuery":"wool scarf cold weather"}]}' } }] }),
       };
     };
     const ideas = await requestIdeas('sk-test-key', 'gpt-test', { name: 'Ada', tags: ['books'] });
-    assert.deepEqual(ideas, ['A wool scarf']);
+    assert.deepEqual(ideas, [{ title: 'A wool scarf', priceMin: 20, priceMax: 40, reason: 'A warm layer for cold days.', searchQuery: 'wool scarf cold weather' }]);
     assert.equal(Object.hasOwn(bodies[0], 'temperature'), false);
     assert.deepEqual(bodies[0].response_format, { type: 'json_object' });
+    assert.equal(JSON.stringify(bodies[0].messages).includes('Ada'), false);
 
     global.fetch = async () => ({
       ok: false,

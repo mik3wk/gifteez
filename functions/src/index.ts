@@ -43,7 +43,10 @@ export const generateGiftIdeas = onCall(callable, async request => {
   const cacheRef = db.collection('aiCache').doc(id).collection('entries').doc(hashKey(promptHash(personId, prompt)));
   const [usageSnap, cacheSnap] = await Promise.all([usageRef.get(), cacheRef.get()]);
   const usage = usageSnap.exists ? (usageSnap.data() as Usage) : emptyUsage();
-  const cachedIdeas = cacheSnap.exists ? ((cacheSnap.data()?.ideas as string[]) ?? []) : [];
+  const cachedRaw = cacheSnap.exists ? cacheSnap.data()?.ideas : [];
+  const cachedIdeas = Array.isArray(cachedRaw) && cachedRaw.every(item => item && typeof item === 'object' && typeof (item as { title?: unknown }).title === 'string')
+    ? cachedRaw
+    : [];
   const decision = canRefresh({
     usage,
     paid,

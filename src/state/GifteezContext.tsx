@@ -24,7 +24,7 @@ import {
   withAccountUnlock,
   withProfile,
 } from '../domain/logic';
-import { emptySnapshot, type AppSnapshot, type Occasion, type OccasionType, type Person } from '../domain/types';
+import { emptySnapshot, type AppSnapshot, type GiftIdea, type Occasion, type OccasionType, type Person } from '../domain/types';
 import { formatDate, t } from '../i18n';
 import { applyAppearance, loadAppearance, saveAppearance, type AppearanceChoice } from '../platform/appearance';
 import { isIncomingBackup, pickBackupText, readBackupUri, shareBackupFile } from '../platform/backupFile';
@@ -38,13 +38,13 @@ import { loadSecret, saveSecret } from '../platform/secure';
 import { occasionLabel, planOccasion, presetFor } from '../domain/occasions';
 import { exportBackup, migrateToLocal, parseBackup, summarizeBackup, type BackupFailure } from '../domain/backup';
 import { normalizeStoredDate, parseLocalDate } from '../domain/calendarDate';
-import { relationshipCircleName, storeRelationship, type RelationshipPresetKey } from '../domain/relationship';
+import { relationshipCircleName, relationshipLabel, storeRelationship, type RelationshipPresetKey } from '../domain/relationship';
 import { acceptSuggestion, addCircle, assignCircle, cleanCircleName, removeCircle, renameCircle as renameStoredCircle } from '../domain/circles';
 import { haptic } from '../platform/haptics';
 import type { CelebrateName } from '../theme/tokens';
 import { colorsFor, parseSkin, resolveSkin, withColorScheme, type ResolvedColors, type SkinId, type ThemeColors } from '../theme/skins';
 
-type CloudResult = { ideas: string[]; counted: boolean; remaining: number };
+type CloudResult = { ideas: GiftIdea[]; counted: boolean; remaining: number };
 
 type GifteezApi = {
   ready: boolean;
@@ -70,7 +70,7 @@ type GifteezApi = {
   clearNotice: () => void;
   clearError: () => void;
   addPerson: (input: { name: string; budget: string; tags: string[]; imported?: boolean; relationship?: string; circleId?: string }) => Promise<string | null>;
-  savePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'relationship'>>) => Promise<void>;
+  savePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'relationship' | 'notes'>>) => Promise<void>;
   createCircle: (name: string) => Promise<string | null>;
   renameCircle: (circleId: string, name: string) => Promise<void>;
   deleteCircle: (circleId: string) => Promise<void>;
@@ -96,7 +96,7 @@ type GifteezApi = {
   vote: (personId: string, idea: string, vote: 'up' | 'down') => Promise<void>;
   focusPerson: (personId: string) => Promise<void>;
   refreshIdeas: (personId: string) => Promise<void>;
-  cloudIdeas: (personId: string) => Promise<void>;
+  cloudIdeas: (personId: string) => Promise<GiftIdea[]>;
   cloudRemaining: Record<string, number>;
   setReminders: (enabled: boolean) => Promise<void>;
   exportBackup: () => string;
@@ -811,7 +811,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     cloudIdeas: async personId => {
       const person = snapshotRef.current.people.find(item => item.id === personId);
       if (!person?.opened) {
-        return;
+        return [];
       }
       const occasion = upcomingOccasion(personId, snapshotRef.current.occasions, new Date());
       const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
@@ -823,13 +823,15 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           personId,
           refresh: Boolean(existing),
           prompt: {
-            name: person.name,
+            relationship: relationshipLabel(person.relationship),
             occasion: occasion ? occasionLabel(occasion.occasion) : null,
             tags: person.tags,
             budgetCents: person.budgetCents,
             year: occasion?.date.getFullYear() ?? new Date().getFullYear(),
             likes: snapshotRef.current.feedback.filter(item => item.personId === personId && item.vote === 'up').map(item => item.idea),
             dislikes: snapshotRef.current.feedback.filter(item => item.personId === personId && item.vote === 'down').map(item => item.idea),
+            notes: (person.notes ?? '').slice(0, 300),
+            pastGifts: snapshotRef.current.gifts.filter(gift => gift.personId === personId && !gift.deleted).map(gift => gift.title),
           },
         }));
         setCloudRemaining(current => ({ ...current, [personId]: result.remaining }));
@@ -843,6 +845,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           generatedAt: Date.now(),
           updatedAt: Date.now(),
         }));
+        return result.ideas;
       } catch (caught) {
         // Every failure, including App Check, a 404, a timeout, and a network error, is shown in the sheet.
         throw caught;

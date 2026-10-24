@@ -540,7 +540,7 @@ export function addPerson(input: {
 export function updatePerson(
   snapshot: AppSnapshot,
   personId: string,
-  patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'opened' | 'deleted' | 'linkedUid' | 'relationship'>>,
+  patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'opened' | 'deleted' | 'linkedUid' | 'relationship' | 'notes'>>,
   now: number,
 ): Mutation<Person> {
   const current = snapshot.people.find(person => person.id === personId);
@@ -548,6 +548,14 @@ export function updatePerson(
     return fail('missing');
   }
   const next: Person = { ...current, ...patch, updatedAt: now };
+  if (patch.notes !== undefined) {
+    const notes = patch.notes.trim().slice(0, 300);
+    if (notes) {
+      next.notes = notes;
+    } else {
+      delete next.notes;
+    }
+  }
   if (patch.relationship !== undefined) {
     const cleaned = storeRelationship(patch.relationship);
     if (cleaned == null) {

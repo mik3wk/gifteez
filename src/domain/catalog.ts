@@ -2,6 +2,10 @@ export type CatalogIdea = {
   text: string;
   tags: string[];
   occasions: string[] | 'any';
+  priceMin: number;
+  priceMax: number;
+  reason: string;
+  searchQuery: string;
 };
 
 export const INTEREST_TAGS = [
@@ -31,7 +35,7 @@ export const INTEREST_TAGS = [
   'foodie',
 ] as const;
 
-export const CATALOG: CatalogIdea[] = [
+const RAW_CATALOG: Array<Pick<CatalogIdea, 'text' | 'tags' | 'occasions'>> = [
   { text: 'A hardcover novel from an author they already love', tags: ['books'], occasions: 'any' },
   { text: 'A cozy reading light and a bookmark set', tags: ['books', 'cozy'], occasions: 'any' },
   { text: 'A cookbook focused on weeknight meals', tags: ['cooking', 'foodie'], occasions: 'any' },
@@ -100,3 +104,36 @@ export const CATALOG: CatalogIdea[] = [
   { text: 'A small surprise from a shared wish list', tags: ['games'], occasions: ['secret-santa', 'christmas'] },
   { text: 'A card and a favorite treat to start the year', tags: ['foodie'], occasions: ['new-year'] },
 ];
+
+const QUERY_STOP = new Set(['a', 'an', 'the', 'and', 'or', 'for', 'to', 'of', 'with', 'from', 'their', 'they', 'them', 'that', 'this', 'you', 'your', 'just', 'plus', 'one', 'into', 'can', 'use']);
+
+function searchQueryFor(text: string): string {
+  const words = text.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(word => word.length > 2 && !QUERY_STOP.has(word));
+  const picked = words.slice(0, 6);
+  while (picked.length < 3) {
+    picked.push('gift');
+  }
+  return picked.join(' ');
+}
+
+function priceBand(tags: string[]): [number, number] {
+  if (tags.some(tag => tag === 'jewelry' || tag === 'tech' || tag === 'experiences')) {
+    return [40, 120];
+  }
+  if (tags.some(tag => tag === 'home' || tag === 'cooking')) {
+    return [25, 80];
+  }
+  return [15, 45];
+}
+
+export const CATALOG: CatalogIdea[] = RAW_CATALOG.map(item => {
+  const [priceMin, priceMax] = priceBand(item.tags);
+  const topic = item.tags[0] ?? 'everyday';
+  return {
+    ...item,
+    priceMin,
+    priceMax,
+    reason: `A practical ${topic} gift they can enjoy more than once.`,
+    searchQuery: searchQueryFor(item.text),
+  };
+});

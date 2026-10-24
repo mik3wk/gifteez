@@ -53,7 +53,7 @@ function idea(): IdeaCacheEntry {
     id: 'ideas',
     personId: 'ada',
     occasionKey: 'bday:2026',
-    ideas: ['A novel'],
+    ideas: [{ title: 'A novel', priceMin: 15, priceMax: 40, reason: 'A book they can keep.', searchQuery: 'hardcover novel gift' }],
     source: 'on-device',
     salt: 0,
     generatedAt: 1,
@@ -88,7 +88,7 @@ test('a backup round trip keeps people, occasions, ideas, gifts, budgets, and re
   }
   expect(parsed.snapshot.people[0]).toMatchObject({ name: 'Ada', relationship: 'Mom', budgetCents: 20000 });
   expect(parsed.snapshot.occasions[0].month).toBe(5);
-  expect(parsed.snapshot.ideas[0].ideas).toEqual(['A novel']);
+  expect(parsed.snapshot.ideas[0].ideas[0]).toMatchObject({ title: 'A novel' });
   expect(parsed.snapshot.gifts[0]).toMatchObject({ title: 'Mug', priceCents: 1200 });
   expect(parsed.snapshot.profile.currency).toBe('USD');
   expect(parsed.snapshot.entitlementPaid).toBe(false);
@@ -121,7 +121,10 @@ test('a restore preview counts people, occasions, ideas, and the backup date', (
   const snapshot = emptySnapshot(1);
   snapshot.people = [person(), { ...person(), id: 'gone', name: 'Gone', deleted: true }];
   snapshot.occasions = [occasion()];
-  snapshot.ideas = [{ ...idea(), ideas: ['A novel', 'A mug'] }];
+  snapshot.ideas = [{ ...idea(), ideas: [
+    { title: 'A novel', priceMin: 15, priceMax: 40, reason: 'A book they can keep.', searchQuery: 'hardcover novel gift' },
+    { title: 'A mug', priceMin: 15, priceMax: 40, reason: 'A mug they will use.', searchQuery: 'everyday ceramic mug' },
+  ] }];
   snapshot.gifts = [gift()];
   const text = exportBackup(snapshot, new Date('2026-10-24T15:00:00Z'));
   const summary = summarizeBackup(text);

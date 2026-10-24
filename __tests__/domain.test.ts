@@ -131,16 +131,18 @@ test('on-device ideas stay on device, follow tags, and skip thumbs down', () => 
     salt: 0,
   });
   expect(again).toEqual(first);
-  expect(first.some(idea => /coffee|beans|mug/i.test(idea))).toBe(true);
+  expect(first.some(idea => /coffee|beans|mug/i.test(idea.title))).toBe(true);
+  expect(first[0].priceMin).toBeGreaterThan(0);
+  expect(first[0].searchQuery.split(' ').length).toBeGreaterThanOrEqual(3);
   const blocked = suggestIdeas({
     personId: 'p',
     name: 'Ada',
     tags: ['coffee'],
     occasion: 'birthday',
-    feedback: [{ id: 'f', personId: 'p', idea: first[0], vote: 'down', createdAt: 1 }],
+    feedback: [{ id: 'f', personId: 'p', idea: first[0].title, vote: 'down', createdAt: 1 }],
     salt: 0,
   });
-  expect(blocked).not.toContain(first[0]);
+  expect(blocked.map(idea => idea.title)).not.toContain(first[0].title);
 });
 
 test('free tier stops at five people unless this phone is unlocked', () => {

@@ -131,7 +131,7 @@ test('reminders, labels, ideas, and spending follow any occasion', () => {
     feedback: [],
     salt: 1,
   });
-  expect(ideas.some(idea => idea.includes('new place'))).toBe(true);
+  expect(ideas.some(idea => idea.title.includes('new place'))).toBe(true);
   const general = suggestIdeas({
     personId: 'a',
     name: 'Ada',

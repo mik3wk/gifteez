@@ -19,6 +19,16 @@ export type Person = {
   relationship?: string;
   /** At most one fairness circle. Missing means this person is not compared with anyone. */
   circleId?: string;
+  /** Private notes for ideas. Never sent with the person's name. Capped at 300 characters. */
+  notes?: string;
+};
+
+export type GiftIdea = {
+  title: string;
+  priceMin: number;
+  priceMax: number;
+  reason: string;
+  searchQuery: string;
 };
 
 export type Circle = {
@@ -101,7 +111,7 @@ export type IdeaCacheEntry = {
   id: string;
   personId: string;
   occasionKey: string;
-  ideas: string[];
+  ideas: GiftIdea[];
   source: IdeaSource;
   salt: number;
   generatedAt: number;

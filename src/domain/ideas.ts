@@ -1,6 +1,17 @@
 import { hashToUint } from '../crypto/crypto';
 import { CATALOG, type CatalogIdea } from './catalog';
-import type { FeedbackEntry, OccasionType } from './types';
+import type { FeedbackEntry, GiftIdea, OccasionType } from './types';
+
+export function ideaKey(idea: GiftIdea | string): string {
+  return typeof idea === 'string' ? idea : idea.title;
+}
+
+export function asGiftIdea(idea: GiftIdea | string): GiftIdea {
+  if (typeof idea === 'string') {
+    return { title: idea, priceMin: 15, priceMax: 45, reason: 'Something useful they can enjoy more than once.', searchQuery: 'thoughtful practical gift' };
+  }
+  return idea;
+}
 
 export function suggestIdeas(input: {
   personId: string;
@@ -10,7 +21,7 @@ export function suggestIdeas(input: {
   feedback: FeedbackEntry[];
   salt: number;
   limit?: number;
-}): string[] {
+}): GiftIdea[] {
   const limit = input.limit ?? 5;
   const tags = new Set(input.tags.map(tag => tag.toLowerCase()));
   const mine = input.feedback.filter(entry => entry.personId === input.personId);
@@ -26,15 +37,26 @@ export function suggestIdeas(input: {
   }))
     .filter(item => item.score > -50)
     .sort((a, b) => b.score - a.score || a.tie - b.tie);
-  const picked = ranked.slice(0, limit).map(item => item.idea.text);
+  const picked = ranked.slice(0, limit).map(item => toGiftIdea(item.idea));
   if (picked.length >= limit) {
     return picked;
   }
-  const filler = CATALOG.filter(idea => !picked.includes(idea.text) && !blocked.has(idea.text))
+  const titles = new Set(picked.map(idea => idea.title));
+  const filler = CATALOG.filter(idea => !titles.has(idea.text) && !blocked.has(idea.text))
     .sort((a, b) => hashToUint(`${input.salt}|${a.text}`) - hashToUint(`${input.salt}|${b.text}`))
     .slice(0, limit - picked.length)
-    .map(idea => idea.text);
+    .map(toGiftIdea);
   return [...picked, ...filler];
+}
+
+function toGiftIdea(idea: CatalogIdea): GiftIdea {
+  return {
+    title: idea.text,
+    priceMin: idea.priceMin,
+    priceMax: idea.priceMax,
+    reason: idea.reason,
+    searchQuery: idea.searchQuery,
+  };
 }
 
 function scoreIdea(
@@ -69,5 +91,5 @@ function scoreIdea(
 }
 
 export function ideaCacheId(personId: string, occasionKey: string, source: string): string {
-  return `${personId}:${occasionKey}:${source}`;
+  return `${personId}:${occasionKey}:${source}:v2`;
 }

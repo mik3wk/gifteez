@@ -88,7 +88,7 @@ test('a rejected cloud ideas callable shows retry and keeps on-device ideas', as
   await ReactTestRenderer.act(async () => {
     renderer = ReactTestRenderer.create(<PersonScreen />);
   });
-  expect(ideaCacheId('ada', 'general', 'on-device')).toBe('ada:general:on-device');
+  expect(ideaCacheId('ada', 'general', 'on-device')).toBe('ada:general:on-device:v2');
   const tune = buttonLabeled(renderer!, 'Tune ideas');
   expect(tune).toBeDefined();
   await ReactTestRenderer.act(async () => {
