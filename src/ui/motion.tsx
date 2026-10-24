@@ -85,7 +85,7 @@ export function Settle({ children, distance = 16, delay = 0 }: { children: React
   const style = useAnimatedStyle(() => ({
     opacity: progress.value,
     transform: [{ translateY: (1 - progress.value) * distance }],
-  }), [distance]);
+  }));
   if (reduce) {
     return <View>{children}</View>;
   }
