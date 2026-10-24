@@ -11,6 +11,7 @@ import {
   uncircledPeople,
   type CircleSuggestion,
 } from '../domain/circles';
+import { keptEvenView, type KeptPerson } from '../domain/keepEven';
 import { listCurrency, yearSpentCents } from '../domain/logic';
 import { relationshipCircleName } from '../domain/relationship';
 import { deviceLocale, formatMoney, t } from '../i18n';
@@ -32,12 +33,14 @@ import {
   Heading,
   Screen,
   Sheet,
+  Toggle,
 } from '../ui/ui';
 
 export function FairnessScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
   const {
     snapshot,
+    savePerson,
     createCircle,
     renameCircle,
     deleteCircle,
@@ -54,6 +57,8 @@ export function FairnessScreen() {
   const others = uncircledPeople(snapshot);
   const people = snapshot.people.filter(person => !person.deleted);
   const [hidden, setHidden] = useState<string[]>([]);
+  const [editingSet, setEditingSet] = useState(false);
+  const kept = keptEvenView(snapshot, year);
   const [editor, setEditor] = useState<string | 'new' | null>(null);
   const [draft, setDraft] = useState('');
   const [nameError, setNameError] = useState('');
@@ -91,6 +96,34 @@ export function FairnessScreen() {
     <Screen tab="fairness">
       <AppHeader title={t('fairness.title')} />
       <SessionEntrance id="fairness">
+        <Heading>{t('fairness.keptHeading')}</Heading>
+        {kept.status === 'need-more' ? (
+          <EmptyState
+            kind="fairness"
+            text={t('fairness.keptEmpty')}
+            action={t('fairness.keptEdit')}
+            onAction={() => setEditingSet(true)}
+          />
+        ) : (
+          <Card>
+            {kept.status === 'even' ? <WaxSeal state="balanced" label={t('fairness.evenStatus')} /> : null}
+            {kept.marked.map(member => (
+              <KeptRow key={member.personId} member={member} money={money} behind={kept.behind.some(item => item.personId === member.personId)} />
+            ))}
+            <Button label={t('fairness.keptEdit')} tone="secondary" onPress={() => setEditingSet(true)} />
+          </Card>
+        )}
+        {kept.others.length > 0 ? (
+          <Card>
+            <Heading>{t('fairness.everyoneElse')}</Heading>
+            {kept.others.map(member => (
+              <View key={member.personId}>
+                <Caption tone="text">{member.name}</Caption>
+                <Caption>{budgetLine(member, money)}</Caption>
+              </View>
+            ))}
+          </Card>
+        ) : null}
         <Body>{t('fairness.intro')}</Body>
         {people.length === 0 && sections.length === 0 ? (
           <EmptyState
@@ -158,6 +191,17 @@ export function FairnessScreen() {
           </>
         )}
       </SessionEntrance>
+      <Sheet visible={editingSet} onClose={() => setEditingSet(false)}>
+        <Heading>{t('fairness.keptEdit')}</Heading>
+        {people.map(person => (
+          <Toggle
+            key={person.id}
+            label={person.name}
+            value={person.keepEven === true}
+            onValueChange={value => { savePerson(person.id, { keepEven: value }).catch(() => undefined); }}
+          />
+        ))}
+      </Sheet>
       <Sheet visible={editor != null} onClose={() => setEditor(null)}>
         <Heading>{editor === 'new' ? t('fairness.newCircle') : editing?.name ?? t('fairness.edit')}</Heading>
         <Field
@@ -210,6 +254,35 @@ export function FairnessScreen() {
         ) : null}
       </Sheet>
     </Screen>
+  );
+}
+
+function budgetLine(member: KeptPerson, money: (cents: number) => string): string {
+  if (member.budgetCents == null) {
+    return t('fairness.year', { amount: money(member.yearSpentCents) });
+  }
+  return t('fairness.ownBudget', {
+    used: money(member.yearSpentCents),
+    budget: money(member.budgetCents),
+    left: money(Math.max(0, member.budgetCents - member.yearSpentCents)),
+  });
+}
+
+function KeptRow({
+  member,
+  money,
+  behind,
+}: {
+  member: KeptPerson;
+  money: (cents: number) => string;
+  behind: boolean;
+}) {
+  return (
+    <View>
+      <Caption tone="text">{member.name}</Caption>
+      <Caption>{t('fairness.year', { amount: money(member.yearSpentCents) })}</Caption>
+      {behind ? <Caption>{t('fairness.behind', { amount: money(member.behindCents) })}</Caption> : null}
+    </View>
   );
 }
 

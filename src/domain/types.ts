@@ -19,6 +19,8 @@ export type Person = {
   relationship?: string;
   /** At most one fairness circle. Missing means this person is not compared with anyone. */
   circleId?: string;
+  /** When true, this person is in the keep-even set. Missing means false. */
+  keepEven?: boolean;
   /** Private notes for ideas. Never sent with the person's name. Capped at 300 characters. */
   notes?: string;
 };

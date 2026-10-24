@@ -43,6 +43,7 @@ import {
   Segment,
   Sheet,
   Title,
+  Toggle,
 } from '../ui/ui';
 
 type Menu =
@@ -352,6 +353,11 @@ export function PersonScreen() {
               <Caption tone="text">{personMeta(person, snapshot.circles)}</Caption>
             </Pressable>
             {budgetLabel ? <Caption tone="text">{budgetLabel}</Caption> : null}
+            <Toggle
+              label={t('fairness.keepEven')}
+              value={person.keepEven === true}
+              onValueChange={value => { savePerson(person.id, { keepEven: value }).catch(() => undefined); }}
+            />
             {moment ? <Moment kind="wrap" name="purchase" onDone={() => setMoment(null)} /> : null}
           </View>
           <Segment
