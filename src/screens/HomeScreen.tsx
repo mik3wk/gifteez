@@ -3,7 +3,7 @@ import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
-import { keptEvenHome, keptEvenView } from '../domain/keepEven';
+import { circleHomeLine, circleSections } from '../domain/circles';
 import { daysUntil, listCurrency, occurrenceYear, yearSpentCents } from '../domain/logic';
 import { isOneTimeOccasion, nextOccasionDate, occasionLabel } from '../domain/occasions';
 import type { AppSnapshot, GiftRecord, Occasion, OccasionState, Person } from '../domain/types';
@@ -177,28 +177,24 @@ function HomeFairness({
   money: (cents: number) => string;
   onPress: () => void;
 }) {
-  const people = snapshot.people.filter(person => !person.deleted);
-  if (people.length === 0) {
+  const lines = circleSections(snapshot, year).flatMap(section => {
+    const line = circleHomeLine(section);
+    if (!line) {
+      return [];
+    }
+    const text = line.status === 'even'
+      ? t('fairness.homeEven', { name: section.name })
+      : t('fairness.homeBehind', { name: section.name, person: line.personName ?? '', amount: money(line.behindCents ?? 0) });
+    return [{ id: section.circleId, text }];
+  }).slice(0, 3);
+  if (lines.length === 0) {
     return null;
   }
-  const home = keptEvenHome(keptEvenView(snapshot, year));
-  if (home.kind === 'prompt') {
-    return (
-      <Pressable accessibilityRole="button" accessibilityLabel={t('fairness.homePrompt')} onPress={onPress}>
-        <Card>
-          <Caption tone="text">{t('fairness.homePrompt')}</Caption>
-        </Card>
-      </Pressable>
-    );
-  }
-  const status = home.kind === 'even'
-    ? t('fairness.evenStatus')
-    : t('fairness.homeGap', { name: home.name, amount: money(home.behindCents) });
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={t('fairness.keptHeading')} onPress={onPress}>
+    <Pressable accessibilityRole="button" accessibilityLabel={t('fairness.title')} onPress={onPress}>
       <Card>
-        <Heading>{t('fairness.keptHeading')}</Heading>
-        <Caption>{status}</Caption>
+        <Heading>{t('fairness.title')}</Heading>
+        {lines.map(line => <Caption key={line.id} tone="text">{line.text}</Caption>)}
         <Caption>{t('fairness.seeAll')}</Caption>
       </Card>
     </Pressable>

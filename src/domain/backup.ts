@@ -42,9 +42,6 @@ function peopleOk(value: unknown): value is Person[] {
     if (item.circleId != null && !stringId(item.circleId)) {
       return false;
     }
-    if (item.keepEven != null && typeof item.keepEven !== 'boolean') {
-      return false;
-    }
     return true;
   });
 }
@@ -78,9 +75,6 @@ export function exportBackup(snapshot: AppSnapshot, now = new Date()): string {
     people: snapshot.people.filter(person => !person.deleted).map(person => {
       const next = { ...person };
       delete next.linkedUid;
-      if (!next.keepEven) {
-        delete next.keepEven;
-      }
       return next;
     }),
     occasions: snapshot.occasions.filter(item => !item.deleted),

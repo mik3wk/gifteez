@@ -540,7 +540,7 @@ export function addPerson(input: {
 export function updatePerson(
   snapshot: AppSnapshot,
   personId: string,
-  patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'opened' | 'deleted' | 'linkedUid' | 'relationship' | 'notes' | 'keepEven'>>,
+  patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'opened' | 'deleted' | 'linkedUid' | 'relationship' | 'notes'>>,
   now: number,
 ): Mutation<Person> {
   const current = snapshot.people.find(person => person.id === personId);
@@ -554,13 +554,6 @@ export function updatePerson(
       next.notes = notes;
     } else {
       delete next.notes;
-    }
-  }
-  if (patch.keepEven !== undefined) {
-    if (patch.keepEven) {
-      next.keepEven = true;
-    } else {
-      delete next.keepEven;
     }
   }
   if (patch.relationship !== undefined) {
