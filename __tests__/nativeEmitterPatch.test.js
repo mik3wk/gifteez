@@ -111,6 +111,7 @@ test('NativeEventEmitter stays a class, and Device Info and Notifee gain listene
   const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   new NativeEventEmitter(first);
   new NativeEventEmitter(notifee);
+  new NativeEventEmitter(Object.freeze({}));
   expect(warn).not.toHaveBeenCalled();
   warn.mockRestore();
 });
