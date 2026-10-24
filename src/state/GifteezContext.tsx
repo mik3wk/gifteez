@@ -123,8 +123,8 @@ type GifteezApi = {
   clearCompletedPerson: () => void;
   appearance: AppearanceChoice;
   setAppearance: (choice: AppearanceChoice) => Promise<void>;
-  skinPreview: SkinId | 'remote';
-  previewSkin: (id: SkinId | 'remote') => void;
+  skinPreview: SkinId | 'remote' | 'auto';
+  previewSkin: (id: SkinId | 'remote' | 'auto') => void;
   updateProfile: (patch: Partial<AppSnapshot['profile']>) => Promise<void>;
   finishWelcome: () => Promise<void>;
   buy: () => Promise<void>;
@@ -184,8 +184,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [completedPersonId, setCompletedPersonId] = useState<string | null>(null);
   const [appearance, setAppearanceChoice] = useState<AppearanceChoice>('system');
-  const skinOverride = useRef<SkinId | 'remote'>('remote');
-  const [skinPreview, setSkinPreview] = useState<SkinId | 'remote'>('remote');
+  const skinOverride = useRef<SkinId | 'remote' | 'auto'>('remote');
+  const [skinPreview, setSkinPreview] = useState<SkinId | 'remote' | 'auto'>('remote');
+  const remoteSkin = useRef('auto');
   const [incomingBackup, setIncomingBackup] = useState<{ text: string; preview: string } | null>(null);
   const pendingAdd = useRef<{ person: Person; hadPeople: boolean } | null>(null);
   const finishPendingRef = useRef<() => Promise<void>>(async () => undefined);
@@ -365,6 +366,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         }
         try {
           const skinValue = await activeSkinParam(env);
+          remoteSkin.current = skinValue || 'auto';
           const resolved = resolveSkin({ remoteValue: skinValue, today: new Date(), downloaded: downloadedRef.current });
           if (!cancelled && skinOverride.current === 'remote') {
             setSkinId(resolved.id);
@@ -1033,24 +1035,17 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     },
     skinPreview,
     previewSkin: id => {
-      skinOverride.current = id;
+      skinOverride.current = id === 'remote' ? 'remote' : id;
       setSkinPreview(id);
-      if (id === 'remote') {
-        const resolved = resolveSkin({ remoteValue: 'auto', today: new Date(), downloaded: downloadedRef.current });
-        setSkinId(resolved.id);
-        paint(resolved.colors);
-        return;
-      }
-      const bundled = id === 'spring'
-        ? parseSkin(require('../../skins/spring.json'))
-        : id === 'summer'
-          ? parseSkin(require('../../skins/summer.json'))
-          : null;
-      const downloaded = bundled ? { ...downloadedRef.current, [id]: bundled } : downloadedRef.current;
-      if (bundled) {
+      const remoteValue = id === 'remote' ? remoteSkin.current : id === 'auto' ? 'auto' : id;
+      const season = id === 'spring' || id === 'summer'
+        ? parseSkin(id === 'spring' ? require('../../skins/spring.json') : require('../../skins/summer.json'))
+        : null;
+      const downloaded = season ? { ...downloadedRef.current, [id]: season } : downloadedRef.current;
+      if (season) {
         setDownloaded(downloaded);
       }
-      const resolved = colorsFor(id, downloaded);
+      const resolved = resolveSkin({ remoteValue, today: new Date(), downloaded });
       setSkinId(resolved.id);
       paint(resolved.colors);
     },

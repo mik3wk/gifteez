@@ -9,7 +9,7 @@ import type { SealState } from '../domain/seal';
 import { t } from '../i18n';
 import { tint } from '../theme/tint';
 import { useTheme } from '../theme/useTheme';
-import { space, touch } from '../theme/tokens';
+import { chrome, space, touch } from '../theme/tokens';
 import { bowSource, crestSource, dividerSource, sealSource, type SealArtName } from './art';
 import { Icon } from './icons';
 
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
     padding: space.md,
     gap: space.sm,
     overflow: 'visible',
-    shadowColor: '#2B2522',
+    shadowColor: chrome.shadow,
     shadowOpacity: 0.06,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },

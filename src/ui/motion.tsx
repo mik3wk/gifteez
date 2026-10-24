@@ -13,7 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { artSource, CONFETTI_BURST } from './art';
 import { useTheme } from '../theme/useTheme';
-import { motion, shadowOffset, space, stroke, type CelebrateName } from '../theme/tokens';
+import { chrome, motion, shadowOffset, space, stroke, type CelebrateName } from '../theme/tokens';
 
 const PRESS = { damping: 18, stiffness: 420, mass: 0.35 };
 const SETTLE = { damping: 16, stiffness: 220, mass: 0.6 };
@@ -151,7 +151,7 @@ export function Shimmer({ label }: { label: string }) {
           key={index}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
-          style={[styles.bar, width, { backgroundColor: scheme === 'dark' ? '#6E625A' : colors.surfaceAlt, borderColor: colors.outline }, reduce ? styles.steady : style]}
+          style={[styles.bar, width, { backgroundColor: scheme === 'dark' ? chrome.shimmer : colors.surfaceAlt, borderColor: colors.outline }, reduce ? styles.steady : style]}
         />
       ))}
     </View>

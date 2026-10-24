@@ -8,6 +8,7 @@ export type RootStack = {
   AddPerson: undefined;
   Fairness: undefined;
   Settings: undefined;
+  ThemeGallery: undefined;
 };
 
 export const TAB_ROUTES = ['Home', 'People', 'Fairness', 'Settings'] as const;

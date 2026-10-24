@@ -76,14 +76,14 @@ const PAPER: Pick<ThemeColors, 'background' | 'surface' | 'text' | 'muted' | 'bo
 
 export const BUNDLED_SKINS: Record<'base' | 'fall' | 'winter', ThemeColors> = {
   base: { ...PAPER, accent: sticker.light.pink, accentText: '#FFFFFF', banner: '#F6E7E8' },
-  fall: { ...PAPER, accent: '#FF7A1A', accentText: sticker.light.ink, banner: '#FFE8D2' },
-  winter: { ...PAPER, accent: '#5D7290', accentText: '#FFFFFF', banner: '#E4EAF2' },
+  fall: { ...PAPER, accent: '#9A4A2E', accentText: '#FFFFFF', banner: '#F8E6DC' },
+  winter: { ...PAPER, accent: '#2F5D50', accentText: '#FFFFFF', banner: '#F6E7C8' },
 };
 
 /** Dots beside list names. Text stays colors.text. */
 export const groupHues = {
-  light: [sticker.light.pink, sticker.light.teal, sticker.light.lilac, sticker.light.sunshine, sticker.light.plum, '#FF7A1A'],
-  dark: [sticker.dark.pink, sticker.dark.teal, sticker.dark.lilac, sticker.dark.sunshine, sticker.dark.plum, '#FDBA74'],
+  light: [sticker.light.pink, sticker.light.teal, sticker.light.lilac, sticker.light.sunshine, sticker.light.plum, '#9A4A2E'],
+  dark: [sticker.dark.pink, sticker.dark.teal, sticker.dark.lilac, sticker.dark.sunshine, sticker.dark.plum, '#F0B090'],
 };
 
 export function groupHue(index: number, scheme: 'light' | 'dark' | null | undefined): string {
@@ -172,10 +172,13 @@ const DARK_ROLE = {
 const DARK_FILLS: Record<string, Pick<ThemeColors, 'accent' | 'accentText' | 'danger' | 'success' | 'banner'>> = {
   '#A93F55': { ...DARK_ROLE, accent: sticker.dark.pink, banner: '#6B3E4C' },
   '#FF7A1A': { ...DARK_ROLE, accent: '#FDBA74', banner: '#6B442C' },
+  '#9A4A2E': { ...DARK_ROLE, accent: '#F0B090', banner: '#6B4034' },
   '#5D7290': { ...DARK_ROLE, accent: '#A9B9CE', banner: '#3A4A60' },
-  '#4F6F57': { ...DARK_ROLE, accent: sticker.dark.teal, banner: '#2C4034' },
+  '#2F5D50': { ...DARK_ROLE, accent: '#9FCBBC', banner: '#5C4A28' },
+  '#4F6F57': { ...DARK_ROLE, accent: sticker.dark.teal, banner: '#3E5A48' },
   '#B8A4FF': { ...DARK_ROLE, accent: '#C4B5FD', banner: '#5A4480' },
   '#FFD23F': { ...DARK_ROLE, accent: '#D9B866', banner: '#6A5420' },
+  '#B45348': { ...DARK_ROLE, accent: '#F0B2A6', banner: '#6B4538' },
 };
 
 function mixChannel(parts: Array<[string, number]>, index: number): string {

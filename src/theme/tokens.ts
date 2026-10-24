@@ -53,6 +53,30 @@ export const sticker = {
   },
 } as const;
 
+/**
+ * Chrome that is not a sticker role: soft buttons, segments, the switch,
+ * the purchased seal, and the shimmer bar. Screens read these, not raw hexes.
+ */
+export const chrome = {
+  white: '#FFFFFF',
+  inkOnFill: '#1C1816',
+  goldFill: '#B8913A',
+  shadow: '#2B2522',
+  shimmer: '#6E625A',
+  sealIdleDark: '#C8BFB6',
+  softFill: '#F6E3E6',
+  softInk: '#8E2F43',
+  softFillDark: '#4A2A32',
+  softInkDark: '#F2B3BF',
+  segmentTrack: '#F1E8DE',
+  segmentPill: '#FFFDF9',
+  segmentTrackDark: '#2A2320',
+  segmentPillDark: '#40362F',
+  switchOff: '#5C5266',
+  switchOffDark: '#3A3142',
+  switchThumbDark: '#FBF8F3',
+} as const;
+
 export const space = { xxs: 4, xs: 8, sm: 12, md: 16, lg: 24, xl: 32 } as const;
 export const radius = { chip: 999, card: 14, button: 10, pill: 999 } as const;
 export const stroke = { card: 1, control: 1, inner: 1 } as const;
@@ -127,7 +151,7 @@ export const motion = {
 /** Soft stationery shadow. Press travel still uses shadowOffset and is unchanged. */
 export const elevation = {
   card: {
-    shadowColor: '#2B2522',
+    shadowColor: chrome.shadow,
     shadowOpacity: 0.06,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },

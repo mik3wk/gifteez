@@ -55,9 +55,18 @@ type Queue =
   | { kind: 'purchase'; id: string; idea: string }
   | { kind: 'edit'; id: string; privateGift: boolean };
 
+function budgetField(cents: number | null | undefined): string {
+  if (cents == null) {
+    return '';
+  }
+  const dollars = cents / 100;
+  return Number.isInteger(dollars) ? String(dollars) : dollars.toFixed(2);
+}
+
 export function AddPersonScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { addPerson, completedPersonId, clearCompletedPerson, cancelPendingAdd } = useGifteez();
+  const { snapshot, addPerson, completedPersonId, clearCompletedPerson, cancelPendingAdd } = useGifteez();
+  const presetBudget = budgetField(snapshot.profile.defaultBudgetCents);
   const cancelAdd = useRef(cancelPendingAdd);
   cancelAdd.current = cancelPendingAdd;
   const [name, setName] = useState('');
@@ -65,14 +74,14 @@ export function AddPersonScreen() {
   const [relationship, setRelationship] = useState('');
   const [relationshipError, setRelationshipError] = useState('');
   const [circleId, setCircleId] = useState('');
-  const [budget, setBudget] = useState('');
+  const [budget, setBudget] = useState(presetBudget);
   const [budgetError, setBudgetError] = useState('');
   const [birthYear, setBirthYear] = useState('');
   const [birthError, setBirthError] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [allowLeave, setAllowLeave] = useState(false);
   const nextId = useRef<string | null>(null);
-  const dirty = Boolean(name.trim() || relationship.trim() || circleId || budget.trim() || birthYear.trim() || tags.length);
+  const dirty = Boolean(name.trim() || relationship.trim() || circleId || budget.trim() !== presetBudget || birthYear.trim() || tags.length);
   usePreventRemove(dirty && !allowLeave, ({ data }) => {
     confirmDestructive(
       t('firstOpen.discardTitle'),

@@ -1,16 +1,16 @@
 {
   "id": "summer",
-  "version": 2,
+  "version": 3,
   "colors": {
     "background": "#FBF8F3",
     "surface": "#FFFFFF",
     "text": "#2B2522",
     "muted": "#6F6660",
-    "accent": "#FFD23F",
-    "accentText": "#2B2522",
+    "accent": "#B45348",
+    "accentText": "#FFFFFF",
     "border": "#E7DFD6",
     "danger": "#C62828",
     "success": "#4F6F57",
-    "banner": "#FFF4CC"
+    "banner": "#F8E8E4"
   }
 }

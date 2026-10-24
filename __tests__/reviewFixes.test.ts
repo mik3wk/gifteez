@@ -84,6 +84,20 @@ test('light icon ink clears 3:1 on white and the scrim stays black', () => {
   expect(contrastRatio('#1C1816', '#E58A9C')).toBeGreaterThanOrEqual(4.5);
 });
 
+test('seasonal accents keep white labels and read on ivory', () => {
+  const ivory = '#FBF8F3';
+  const plum = '#6E4A6B';
+  const spring = require('../skins/spring.json').colors as ThemeColors;
+  const summer = require('../skins/summer.json').colors as ThemeColors;
+  const accents = [BUNDLED_SKINS.fall.accent, BUNDLED_SKINS.winter.accent, spring.accent, summer.accent];
+  accents.forEach(accent => {
+    expect(contrastRatio('#FFFFFF', accent)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    expect(contrastRatio(accent, ivory)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+  });
+  expect(contrastRatio('#FFFFFF', plum)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+  expect(contrastRatio(ivory, plum)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+});
+
 test('every occasion preset has a sticker skin', () => {
   OCCASION_PRESETS.forEach(preset => {
     expect(occasionLook(preset.id).art).toBeTruthy();

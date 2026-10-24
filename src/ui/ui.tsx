@@ -27,7 +27,7 @@ import { t } from '../i18n';
 import { hideNativeSplash } from '../platform/splash';
 import { useGifteez } from '../state/GifteezContext';
 import { useTheme } from '../theme/useTheme';
-import { iconOnSurface, layout, occasionLook, scrim, space, sticker, stroke, touch, type ArtName, type CelebrateName, type ChipTint, type EmptyArtName } from '../theme/tokens';
+import { chrome, iconOnSurface, layout, occasionLook, scrim, space, sticker, stroke, touch, type ArtName, type CelebrateName, type ChipTint, type EmptyArtName } from '../theme/tokens';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { artSource, bowSource } from './art';
 import { MonogramAvatar } from './stationery';
@@ -405,8 +405,8 @@ export function Button({
   const hero = tone === 'hero';
   const soft = tone === 'soft';
   const primary = tone === 'primary' || hero || soft;
-  const softFill = scheme === 'dark' ? '#4A2A32' : '#F6E3E6';
-  const softInk = scheme === 'dark' ? '#F2B3BF' : '#8E2F43';
+  const softFill = scheme === 'dark' ? chrome.softFillDark : chrome.softFill;
+  const softInk = scheme === 'dark' ? chrome.softInkDark : chrome.softInk;
   const fill = quiet ? colors.surfaceAlt : soft ? softFill : primary ? colors.button : colors.surface;
   const text = quiet ? colors.muted : soft ? softInk : primary ? colors.onButton : danger ? colors.dangerText : colors.text;
   return (
@@ -510,6 +510,7 @@ export function Field({
   textContentType,
   autoComplete,
   onSubmitEditing,
+  onBlur,
 }: {
   label: string;
   value: string;
@@ -523,6 +524,7 @@ export function Field({
   textContentType?: 'name' | 'emailAddress' | 'telephoneNumber' | 'oneTimeCode' | 'none';
   autoComplete?: 'name' | 'email' | 'tel' | 'sms-otp' | 'off';
   onSubmitEditing?: () => void;
+  onBlur?: () => void;
 }) {
   const { colors, type, typeScale, radius } = useTheme();
   const bad = Boolean(error) || Boolean(invalid);
@@ -543,6 +545,7 @@ export function Field({
         textContentType={textContentType}
         autoComplete={autoComplete}
         onSubmitEditing={onSubmitEditing}
+        onBlur={onBlur}
         maxFontSizeMultiplier={typeScale.body}
         style={[
           type.body,
@@ -1362,9 +1365,9 @@ export function Segment({
   onChange: (id: string) => void;
 }) {
   const { colors, scheme, type, typeScale } = useTheme();
-  const track = scheme === 'dark' ? '#2A2320' : '#F1E8DE';
-  const pill = scheme === 'dark' ? '#40362F' : '#FFFDF9';
-  const rose = scheme === 'dark' ? '#F2B3BF' : '#8E2F43';
+  const track = scheme === 'dark' ? chrome.segmentTrackDark : chrome.segmentTrack;
+  const pill = scheme === 'dark' ? chrome.segmentPillDark : chrome.segmentPill;
+  const rose = scheme === 'dark' ? chrome.softInkDark : chrome.softInk;
   return (
     <View accessibilityRole="tablist" style={[styles.segment, { backgroundColor: track, borderColor: track }]}>
       {options.map(option => {
@@ -1432,8 +1435,8 @@ export function Toggle({
   onValueChange: (value: boolean) => void;
 }) {
   const { colors, scheme, type, typeScale } = useTheme();
-  const off = scheme === 'dark' ? '#3A3142' : '#5C5266';
-  const thumb = scheme === 'dark' ? '#FBF8F3' : '#FFFFFF';
+  const off = scheme === 'dark' ? chrome.switchOffDark : chrome.switchOff;
+  const thumb = scheme === 'dark' ? chrome.switchThumbDark : chrome.white;
   return (
     <Pressable
       accessibilityRole="switch"

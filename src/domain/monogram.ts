@@ -1,9 +1,11 @@
+import { chrome, sticker } from '../theme/tokens';
+
 export const MONOGRAM_SWATCHES = [
-  { fill: '#A93F55', ink: '#FFFFFF' },
-  { fill: '#4F6F57', ink: '#FFFFFF' },
-  { fill: '#8A6A22', ink: '#FFFFFF' },
-  { fill: '#5D7290', ink: '#FFFFFF' },
-  { fill: '#6E4A6B', ink: '#FFFFFF' },
+  { fill: sticker.light.pink, ink: chrome.white },
+  { fill: sticker.light.teal, ink: chrome.white },
+  { fill: sticker.light.sunshine, ink: chrome.white },
+  { fill: sticker.light.lilac, ink: chrome.white },
+  { fill: sticker.light.plum, ink: chrome.white },
 ] as const;
 
 export function monogramIndex(id: string): number {

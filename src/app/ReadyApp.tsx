@@ -7,6 +7,7 @@ import { t } from '../i18n';
 import { AddPersonScreen, PersonScreen } from '../screens/PersonScreen';
 import { FirstOpenScreen } from '../screens/FirstOpen';
 import { FairnessScreen, SettingsScreen } from '../screens/MoreScreens';
+import { ThemeGalleryScreen } from '../screens/ThemeGallery';
 import { HomeScreen } from '../screens/HomeScreen';
 import { PeopleScreen } from '../screens/PeopleScreen';
 import { DataRecoveryScreen, StartupScreen } from '../screens/StartupScreen';
@@ -119,6 +120,7 @@ function Navigator() {
               <Stack.Screen name="AddPerson" component={AddPersonScreen} options={{ title: t('person.addTitle') }} />
               <Stack.Screen name="Fairness" component={FairnessScreen} options={tabOptions} />
               <Stack.Screen name="Settings" component={SettingsScreen} options={tabOptions} />
+              <Stack.Screen name="ThemeGallery" component={ThemeGalleryScreen} options={{ title: t('settings.gallery') }} />
             </>
           ) : (
             <>
