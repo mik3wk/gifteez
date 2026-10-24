@@ -47,6 +47,15 @@ export function circleBudgetFrom(name: string): string {
   return `from the ${trimmed} circle`;
 }
 
+/** Dollars for a budget field. $75 stays "75", not "75.00". */
+export function budgetDraft(cents: number | null | undefined): string {
+  if (cents == null) {
+    return '';
+  }
+  const dollars = cents / 100;
+  return Number.isInteger(dollars) ? String(dollars) : dollars.toFixed(2);
+}
+
 function withCustom(person: Person, budgetCents: number | null): Person {
   return { ...person, budgetCents, budgetCustom: true };
 }

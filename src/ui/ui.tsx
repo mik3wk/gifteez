@@ -587,6 +587,8 @@ export function Field({
   onBlur,
   prefix,
   suffix,
+  inputRef,
+  onLayoutY,
 }: {
   label: string;
   value: string;
@@ -607,6 +609,9 @@ export function Field({
   prefix?: string;
   /** Shown on the same line, after the value. */
   suffix?: string;
+  inputRef?: React.Ref<React.ComponentRef<typeof TextInput>>;
+  /** Y of this field inside its parent, so a sheet can scroll it into view. */
+  onLayoutY?: (y: number) => void;
 }) {
   const { colors, type, typeScale, radius } = useTheme();
   const bad = Boolean(error) || Boolean(invalid);
@@ -636,16 +641,16 @@ export function Field({
     maxFontSizeMultiplier: typeScale.body,
   };
   return (
-    <View style={styles.field}>
+    <View style={styles.field} onLayout={event => onLayoutY?.(event.nativeEvent.layout.y)}>
       <Caption>{label}</Caption>
       {adorned ? (
         <View style={[styles.input, styles.inputRow, box]}>
           {prefix ? <Text accessibilityElementsHidden style={[type.body, { color: colors.muted }]}>{prefix}</Text> : null}
-          <TextInput {...inputProps} style={[type.body, styles.inputFill, { color: colors.text }]} />
+          <TextInput ref={inputRef} {...inputProps} style={[type.body, styles.inputFill, { color: colors.text }]} />
           {suffix ? <Text accessibilityElementsHidden style={[type.caption, { color: colors.muted }]}>{suffix}</Text> : null}
         </View>
       ) : (
-        <TextInput {...inputProps} style={[type.body, styles.input, box]} />
+        <TextInput ref={inputRef} {...inputProps} style={[type.body, styles.input, box]} />
       )}
       {error ? <Caption tone="danger">{error}</Caption> : null}
     </View>
@@ -1488,6 +1493,7 @@ export function Sheet({
   title,
   dirty = false,
   compact,
+  scrollRef,
   children,
 }: {
   visible: boolean;
@@ -1499,6 +1505,7 @@ export function Sheet({
   dirty?: boolean;
   /** Bottom card sized to its content, for short forms such as reminders. */
   compact?: boolean;
+  scrollRef?: React.Ref<React.ComponentRef<typeof ScrollView>>;
   children: React.ReactNode;
 }) {
   const { colors, type, typeScale } = useTheme();
@@ -1581,7 +1588,7 @@ export function Sheet({
             </Text>
             <IconButton label={t('common.close')} name="close" onPress={requestClose} />
           </View>
-          <ScrollView contentContainerStyle={[styles.content, { flexGrow: compact ? 0 : 1, paddingBottom: footer ? space.md : compact ? space.md : insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled">
+          <ScrollView ref={scrollRef} contentContainerStyle={[styles.content, { flexGrow: compact ? 0 : 1, paddingBottom: footer ? space.md : compact ? space.md : insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled">
             <Settle distance={10}>
               <View style={styles.column}>{children}</View>
             </Settle>

@@ -1,4 +1,4 @@
-import { applyCircleBudget, budgetOrigin, circleBudgetFrom, circleLabel, migrateBudgetSources } from '../src/domain/budget';
+import { applyCircleBudget, budgetDraft, budgetOrigin, circleBudgetFrom, circleLabel, migrateBudgetSources } from '../src/domain/budget';
 import { assignCircle } from '../src/domain/circles';
 import { emptySnapshot, type Person } from '../src/domain/types';
 import { t } from '../src/i18n';
@@ -47,6 +47,14 @@ test('a per-person budget that differs from the circle becomes custom', () => {
   expect(t('fairness.applyBudget', { amount: '$200', names: 'Leo and Maya' })).toBe('Apply $200 to Leo and Maya?');
   expect(t('fairness.applyEveryone')).toBe('Apply to everyone');
   expect(t('fairness.applyNew')).toBe('Only new people');
+});
+
+test('override starts from the circle amount, not a stale personal amount', () => {
+  const circles = [{ id: 'sibs', name: 'Siblings', createdAt: 1, budgetCents: 7500 }];
+  const sam = person('sam', 'Sam', { circleId: 'sibs', budgetCents: 5000 });
+  expect(budgetOrigin(sam, circles)).toMatchObject({ kind: 'circle', cents: 7500 });
+  expect(budgetDraft(budgetOrigin(sam, circles).cents)).toBe('75');
+  expect(budgetDraft(sam.budgetCents)).toBe('50');
 });
 
 test('applying a circle budget can update everyone or leave current people custom', () => {

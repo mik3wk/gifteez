@@ -1,11 +1,11 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CommonActions, useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { cancelAddAction, homeTabReset, personBackLabel, type RootStack } from '../app/navigation';
 import { amazonSearchUrl, shopSearchQuery } from '../domain/amazon';
-import { budgetOrigin, circleBudgetFrom, circleLabel } from '../domain/budget';
+import { budgetDraft, budgetOrigin, circleBudgetFrom, circleLabel } from '../domain/budget';
 import { describeImport } from '../domain/importNote';
 import { mainAppOpen } from '../domain/onboarding';
 import { importedVisitBanner, type ImportedVisit } from '../domain/importedBanner';
@@ -313,6 +313,10 @@ export function PersonScreen() {
     }
   }, [route.params.personId, route.params.section]);
   const [editingDetails, setEditingDetails] = useState(false);
+  const [focusBudget, setFocusBudget] = useState(false);
+  const detailScroll = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const budgetInput = useRef<React.ComponentRef<typeof TextInput>>(null);
+  const budgetY = useRef(0);
   const [editCircleId, setEditCircleId] = useState(person?.circleId ?? '');
   const [addingOccasion, setAddingOccasion] = useState(false);
   const [occasionDraft, setOccasionDraft] = useState(false);
@@ -350,7 +354,18 @@ export function PersonScreen() {
     navigation.setOptions({ headerShown: false, title: '' });
   }, [navigation]);
 
-  const savedBudget = person?.budgetCents == null ? '' : String(person.budgetCents / 100);
+  useEffect(() => {
+    if (!editingDetails || !focusBudget) {
+      return undefined;
+    }
+    const timer = setTimeout(() => {
+      detailScroll.current?.scrollTo({ y: Math.max(0, budgetY.current - 24), animated: false });
+      budgetInput.current?.focus();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [editingDetails, focusBudget]);
+
+  const savedBudget = budgetDraft(person ? budgetOrigin(person, snapshot.circles).cents : null);
   const detailsDirty = Boolean(
     person
     && editingDetails
@@ -528,13 +543,16 @@ export function PersonScreen() {
     return savePerson(personId, { savedIdeas: kept }).then(() => saveIdeaFor(next.occasion.id, gift.title));
   }
 
-  function openDetails() {
+  function openDetails(focus = false) {
     if (!person) {
       return;
     }
     setEditCircleId(person.circleId ?? '');
     setBirthYear(person.birthYear ? String(person.birthYear) : '');
     setBirthError('');
+    setBudget(budgetDraft(budgetOrigin(person, snapshot.circles).cents));
+    setBudgetError('');
+    setFocusBudget(focus);
     setEditingDetails(true);
   }
 
@@ -584,7 +602,7 @@ export function PersonScreen() {
       return;
     }
     setName(person.name);
-    setBudget(person.budgetCents == null ? '' : String(person.budgetCents / 100));
+    setBudget(budgetDraft(budgetOrigin(person, snapshot.circles).cents));
     setBirthYear(person.birthYear ? String(person.birthYear) : '');
     setRelationship(person.relationship ?? '');
     setNotes(person.notes ?? '');
@@ -594,6 +612,7 @@ export function PersonScreen() {
     setBudgetError('');
     setBirthError('');
     setRelationshipError('');
+    setFocusBudget(false);
     setEditingDetails(false);
   }
 
@@ -607,7 +626,7 @@ export function PersonScreen() {
           {locked ? <Body>{t('person.readOnly')}</Body> : null}
           <View style={styles.navRow}>
             <BackLink label={backLabelFor(navigation)} onPress={() => leavePerson(navigation)} />
-            <Pressable accessibilityRole="button" accessibilityLabel={t('person.editDetails')} onPress={openDetails} style={styles.backLink}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('person.editDetails')} onPress={() => openDetails()} style={styles.backLink}>
               <Text maxFontSizeMultiplier={1.4} style={[type.body, { color: colors.pink }]}>{t('person.editShort')}</Text>
             </Pressable>
           </View>
@@ -623,11 +642,11 @@ export function PersonScreen() {
                 spent={spent}
                 budgetCents={budgetOrigin(person, snapshot.circles).cents}
                 money={money}
-                onSetBudget={openDetails}
+                onSetBudget={() => openDetails()}
               />
               <BudgetSource
                 person={person}
-                onOverride={openDetails}
+                onOverride={() => openDetails(true)}
                 onUseCircle={() => {
                   const circle = snapshot.circles.find(item => item.id === person.circleId);
                   savePerson(person.id, {
@@ -781,7 +800,7 @@ export function PersonScreen() {
       ) : null}
       {section === 'history' && !hidden ? (
         <>
-          {showSpend ? <SpendBreakdown personId={person.id} budgetCents={person.budgetCents} money={money} onSetBudget={openDetails} /> : null}
+          {showSpend ? <SpendBreakdown personId={person.id} budgetCents={person.budgetCents} money={money} onSetBudget={() => openDetails()} /> : null}
           {history.length === 0 ? (
             <EmptyState
               kind="ideas"
@@ -858,7 +877,7 @@ export function PersonScreen() {
           }}
         />
       </Sheet>
-      <Sheet visible={editingDetails} title={t('person.details')} dirty={detailsDirty} onClose={closeDetails}>
+      <Sheet visible={editingDetails} title={t('person.details')} dirty={detailsDirty} scrollRef={detailScroll} onClose={closeDetails}>
         <Field
           label={t('person.name')}
           value={name}
@@ -892,6 +911,10 @@ export function PersonScreen() {
             setBudgetError('');
           }}
           keyboardType="decimal-pad"
+          inputRef={budgetInput}
+          onLayoutY={y => {
+            budgetY.current = y;
+          }}
         />
         <Field
           label={t('person.birthYear')}
