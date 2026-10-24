@@ -73,6 +73,7 @@ test('the native spinner, holiday chips, and Include year replace the wheels', a
   });
   const picker = renderer!.root.findByProps({ display: 'spinner' });
   expect(picker.props.mode).toBe('date');
+  expect(renderer!.root.findAllByProps({ testID: 'year-mask' }, { deep: false })).toHaveLength(1);
   const holidays = commonDates();
   const labels = holidays.map(item => chipLabel(item.type, item.date));
   expect(buttons(renderer!).map(node => node.props.accessibilityLabel)).toEqual(expect.arrayContaining(labels));
@@ -109,6 +110,7 @@ test('the native spinner, holiday chips, and Include year replace the wheels', a
   });
   expect(knowYear).toBe(true);
   expect(year).toBe('2026');
+  expect(renderer!.root.findAllByProps({ testID: 'year-mask' }, { deep: false })).toHaveLength(0);
 
   await ReactTestRenderer.act(() => {
     renderer!.root.findByProps({ accessibilityRole: 'switch', accessibilityLabel: 'Include year' }).props.onPress();
@@ -118,6 +120,7 @@ test('the native spinner, holiday chips, and Include year replace the wheels', a
   });
   expect(knowYear).toBe(false);
   expect(year).toBe('');
+  expect(renderer!.root.findAllByProps({ testID: 'year-mask' }, { deep: false })).toHaveLength(1);
 });
 
 test('a birthday uses the spinner, and Christmas keeps its own date', async () => {

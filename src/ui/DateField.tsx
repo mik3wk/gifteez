@@ -74,7 +74,18 @@ export function MonthDayField({
         })}
       </Cluster>
       {Platform.OS === 'ios' ? (
-        <View style={styles.pickerHost}>{picker}</View>
+        <View style={styles.pickerHost}>
+          {picker}
+          {knowYear ? null : (
+            <View
+              testID="year-mask"
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              pointerEvents="box-only"
+              style={[styles.yearMask, { backgroundColor: colors.background }]}
+            />
+          )}
+        </View>
       ) : (
         <>
           <Pressable
@@ -180,6 +191,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   monthDay: { gap: space.xs },
-  pickerHost: { height: 216, flexShrink: 0, justifyContent: 'center' },
+  pickerHost: { height: 216, flexShrink: 0, justifyContent: 'center', overflow: 'hidden' },
   picker: { height: 216 },
+  yearMask: { position: 'absolute', top: 0, bottom: 0, right: 0, width: '34%' },
 });
