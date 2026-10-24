@@ -120,6 +120,7 @@ jest.mock('react-native-calendar-events', () => ({
   __esModule: true,
   default: {
     requestPermissions: jest.fn(async () => 'denied'),
+    checkPermissions: jest.fn(async () => 'undetermined'),
     fetchAllEvents: jest.fn(async () => []),
   },
 }));

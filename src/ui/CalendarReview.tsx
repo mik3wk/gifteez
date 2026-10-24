@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import CalendarEvents from 'react-native-calendar-events';
 import { getEnv } from '../config/env';
 import { calendarAddLabel, calendarSelection, draftStatus, initiallyChosen, type CalendarDraft } from '../domain/calendarImport';
 import { contactAddDecision, freeSlotCaption, freeSlotsLeft } from '../domain/contactImport';
@@ -119,12 +120,21 @@ export function CalendarReviewLink({
     }
   }
 
-  const startReview = () => {
-    if (Platform.OS === 'ios') {
-      setAsk(true);
+  const startReview = async () => {
+    if (Platform.OS !== 'ios') {
+      await openReview();
       return;
     }
-    openReview().catch(() => undefined);
+    try {
+      const status = await CalendarEvents.checkPermissions(true);
+      if (status === 'authorized') {
+        await openReview();
+        return;
+      }
+      setAsk(true);
+    } catch {
+      setAsk(true);
+    }
   };
   return (
     <>

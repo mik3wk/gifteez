@@ -32,6 +32,7 @@ jest.mock('../src/state/GifteezContext', () => {
 });
 
 import { CalendarReviewLink } from '../src/ui/CalendarReview';
+import CalendarEvents from 'react-native-calendar-events';
 
 const { scanCalendar } = jest.requireMock('../src/platform/importers') as {
   scanCalendar: jest.Mock;
@@ -54,8 +55,8 @@ test('iOS explains calendar access before the system prompt', async () => {
   await ReactTestRenderer.act(() => {
     renderer = ReactTestRenderer.create(<CalendarReviewLink label="Find birthdays in Calendar" />);
   });
-  await ReactTestRenderer.act(() => {
-    labeled(renderer!, 'Find birthdays in Calendar')?.props.onPress();
+  await ReactTestRenderer.act(async () => {
+    await labeled(renderer!, 'Find birthdays in Calendar')?.props.onPress();
   });
   const copy = renderer!.root.findAllByType(Text).map(node => node.props.children);
   expect(copy).toContain(sentence);
@@ -63,6 +64,25 @@ test('iOS explains calendar access before the system prompt', async () => {
   await ReactTestRenderer.act(async () => {
     await labeled(renderer!, 'Continue')?.props.onPress();
   });
+  expect(scanCalendar).toHaveBeenCalledTimes(1);
+  Platform.OS = previous;
+});
+
+test('iOS skips the calendar explanation when access is already granted', async () => {
+  const previous = Platform.OS;
+  Platform.OS = 'ios';
+  scanCalendar.mockClear();
+  const check = CalendarEvents.checkPermissions as jest.Mock;
+  check.mockResolvedValueOnce('authorized');
+  let renderer: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    renderer = ReactTestRenderer.create(<CalendarReviewLink label="Find birthdays in Calendar" />);
+  });
+  await ReactTestRenderer.act(async () => {
+    await labeled(renderer!, 'Find birthdays in Calendar')?.props.onPress();
+  });
+  const copy = renderer!.root.findAllByType(Text).map(node => node.props.children);
+  expect(copy).not.toContain(sentence);
   expect(scanCalendar).toHaveBeenCalledTimes(1);
   Platform.OS = previous;
 });
