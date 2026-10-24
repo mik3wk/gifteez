@@ -6,6 +6,8 @@ export type CatalogIdea = {
   priceMax: number;
   reason: string;
   searchQuery: string;
+  /** Adult-only gifts stay off a child's list. Child gifts stay off an adult's list. */
+  audience?: 'adult' | 'child';
 };
 
 export const INTEREST_TAGS = [
@@ -126,14 +128,34 @@ function priceBand(tags: string[]): [number, number] {
   return [15, 45];
 }
 
+const ADULT_ONLY = new Set([
+  'Tickets to a small live show',
+  'A class pass for something they have mentioned',
+  'A gift card to the shop they already browse',
+  'A small set of everyday fragrance or lotion',
+  'A nice comb, balm, or other everyday care item',
+  'Simple studs, a chain, or a repair of a piece they own',
+  'A reservation at a place they have mentioned',
+  'A meal out, just the two of you',
+]);
+
+const CHILD_ONLY = new Set([
+  'A toy or kit you can use together',
+  'A book they can grow into, with a note in the front',
+  'A small treat bag or a pumpkin to carve together',
+  'A soft keepsake for the new baby, plus a note for the parents',
+]);
+
 export const CATALOG: CatalogIdea[] = RAW_CATALOG.map(item => {
   const [priceMin, priceMax] = priceBand(item.tags);
   const topic = item.tags[0] ?? 'everyday';
+  const audience = ADULT_ONLY.has(item.text) ? 'adult' as const : CHILD_ONLY.has(item.text) ? 'child' as const : undefined;
   return {
     ...item,
     priceMin,
     priceMax,
     reason: `A practical ${topic} gift they can enjoy more than once.`,
     searchQuery: searchQueryFor(item.text),
+    ...(audience ? { audience } : {}),
   };
 });

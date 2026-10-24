@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { Appearance, Linking, Platform } from 'react-native';
 import type { AppEnv } from '../config/env';
 import { keyFromString, keyToString, openJson, randomId, randomKey, sealJson } from '../crypto/crypto';
-import { ageYears, ideaCacheId, mergeIdeaBatches, suggestIdeas } from '../domain/ideas';
+import { ideaCacheId, mergeIdeaBatches, resolveAge, suggestIdeas } from '../domain/ideas';
 import { deleteOccasion, deletePrivateGift, deleteSharedGift, updateOccasionDate, updatePrivateGift, updateSharedGift } from '../domain/edits';
 import { planReminders } from '../domain/reminders';
 import { classifyStartupError, startupCause, type StartupFailure } from '../domain/startup';
@@ -14,6 +14,7 @@ import {
   recordGift,
   occurrenceYear,
   parkActive,
+  parseBirthYear,
   parseBudget,
   parseImport,
   clearIdea,
@@ -67,10 +68,11 @@ type GifteezApi = {
   clearResumePerson: () => void;
   storeProduct: StoreProduct | null;
   storeReady: boolean;
+  storeBusy: boolean;
   clearNotice: () => void;
   clearError: () => void;
-  addPerson: (input: { name: string; budget: string; tags: string[]; imported?: boolean; relationship?: string; circleId?: string }) => Promise<string | null>;
-  savePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'relationship' | 'notes'>>) => Promise<void>;
+  addPerson: (input: { name: string; budget: string; tags: string[]; imported?: boolean; relationship?: string; circleId?: string; birthYear?: string }) => Promise<string | null>;
+  savePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'relationship' | 'notes'>> & { birthYear?: number | null }) => Promise<void>;
   createCircle: (name: string) => Promise<string | null>;
   renameCircle: (circleId: string, name: string) => Promise<void>;
   deleteCircle: (circleId: string) => Promise<void>;
@@ -108,6 +110,7 @@ type GifteezApi = {
   acceptIncomingBackup: () => Promise<void>;
   clearIncomingBackup: () => void;
   paywallOpen: boolean;
+  openPaywall: () => void;
   dismissPaywall: () => void;
   cancelPendingAdd: () => void;
   completedPersonId: string | null;
@@ -161,6 +164,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const [downloaded, setDownloaded] = useState<Partial<Record<SkinId, ThemeColors>>>({});
   const [storeProduct, setStoreProduct] = useState<StoreProduct | null>(null);
   const [storeReady, setStoreReady] = useState(false);
+  const [storeBusy, setStoreBusy] = useState(false);
   const [cloudRemaining, setCloudRemaining] = useState<Record<string, number>>({});
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [completedPersonId, setCompletedPersonId] = useState<string | null>(null);
@@ -203,7 +207,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       undoRestore.current = null;
       remoteTimer.current = null;
       commitRemote?.().catch(() => undefined);
-    }, 5200);
+    }, 6000);
   }, [showNotice]);
 
   const runUndo = useCallback(async () => {
@@ -372,7 +376,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         })
         .catch(() => fail('notConfigured'));
     }, message => {
-      setError(message);
+      setStoreBusy(false);
+      setError(t('settings.storeUnreachable'));
       if (message) {
         haptic('error');
       }
@@ -510,6 +515,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     clearResumePerson,
     storeProduct,
     storeReady,
+    storeBusy,
     cloudRemaining,
     clearNotice: () => setNotice(null),
     clearError: () => setError(null),
@@ -530,6 +536,11 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         fail('invalid');
         return null;
       }
+      const birthYear = (input.birthYear ?? '').trim() ? parseBirthYear(input.birthYear ?? '') : null;
+      if ((input.birthYear ?? '').trim() && birthYear == null) {
+        fail('invalid');
+        return null;
+      }
       const person: Person = {
         id: randomId(),
         name,
@@ -541,6 +552,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         updatedAt: now,
         ...(relationship ? { relationship } : {}),
         ...(input.circleId ? { circleId: input.circleId } : {}),
+        ...(birthYear != null ? { birthYear } : {}),
       };
       const result = addPerson({ snapshot: snapshotRef.current, person, freeLimit: env.freeTierMaxPeople });
       if (!result.ok) {
@@ -773,14 +785,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
       const cacheId = ideaCacheId(personId, occasionKey, 'on-device');
       if (!next.ideas.some(item => item.id === cacheId && !item.deleted)) {
-        const ideas = suggestIdeas({
-          personId,
-          name: person.name,
-          tags: person.tags,
-          occasion: occasion && occasion.occasion.type !== 'custom' ? occasion.occasion.type : null,
-          feedback: next.feedback,
-          salt: 0,
-        });
+        const ideas = suggestIdeas(ideaRequest(person, next, 0));
         next = upsertIdeas(next, {
           id: cacheId,
           personId,
@@ -805,14 +810,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       const cacheId = ideaCacheId(personId, occasionKey, 'on-device');
       const previous = snapshotRef.current.ideas.find(item => item.id === cacheId);
       const salt = (previous?.salt ?? 0) + 1;
-      const ideas = suggestIdeas({
-        personId,
-        name: person.name,
-        tags: person.tags,
-        occasion: occasion && occasion.occasion.type !== 'custom' ? occasion.occasion.type : null,
-        feedback: snapshotRef.current.feedback,
-        salt,
-      });
+      const ideas = suggestIdeas(ideaRequest(person, snapshotRef.current, salt));
       await commit(upsertIdeas(snapshotRef.current, {
         id: cacheId,
         personId,
@@ -833,7 +831,15 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
       const cacheId = ideaCacheId(personId, occasionKey, 'cloud');
       const existing = snapshotRef.current.ideas.find(item => item.id === cacheId && !item.deleted);
-      const age = ageYears(snapshotRef.current.occasions, personId);
+      const age = resolveAge({
+        occasions: snapshotRef.current.occasions,
+        personId,
+        birthYear: person.birthYear,
+        notes: person.notes,
+        relationship: person.relationship,
+      });
+      const onDevice = snapshotRef.current.ideas.find(item => item.id === ideaCacheId(personId, occasionKey, 'on-device') && !item.deleted);
+      const avoid = [...(onDevice?.ideas ?? []), ...(existing?.ideas ?? [])].map(idea => idea.title).slice(0, 24);
       try {
         const result = await withTimeout(callFunction<CloudResult>(env, 'generateGiftIdeas', {
           deviceId: await deviceId(),
@@ -841,7 +847,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           refresh: Boolean(existing),
           prompt: {
             relationship: relationshipLabel(person.relationship),
-            ...(age == null ? {} : { age }),
+            ...(age.years == null ? {} : { age: age.years }),
+            ...(age.band ? { ageBand: age.band } : {}),
+            ...(avoid.length ? { avoid } : {}),
             occasion: occasion ? occasionLabel(occasion.occasion) : null,
             tags: person.tags,
             budgetCents: person.budgetCents,
@@ -915,6 +923,10 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     },
     clearIncomingBackup: () => setIncomingBackup(null),
     paywallOpen,
+    openPaywall: () => {
+      setError(null);
+      setPaywallOpen(true);
+    },
     dismissPaywall: () => setPaywallOpen(false),
     cancelPendingAdd: () => {
       pendingAdd.current = null;
@@ -992,11 +1004,27 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }, () => sync());
     },
     buy: async () => {
+      setStoreBusy(true);
+      setError(null);
       try {
+        let product = storeProduct;
+        if (!product) {
+          const store = await connectStore(env.iapProductId);
+          if (!store.ok || !store.product) {
+            setError(t('settings.storeUnreachable'));
+            haptic('error');
+            return;
+          }
+          product = store.product;
+          setStoreReady(true);
+          setStoreProduct(product);
+        }
         await buyUnlock(env.iapProductId);
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : t('settings.storeMissing'));
+      } catch {
+        setError(t('settings.storeUnreachable'));
         haptic('error');
+      } finally {
+        setStoreBusy(false);
       }
     },
     restorePurchases: async () => {
@@ -1023,7 +1051,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         }
         fail('notConfigured');
       } catch {
-        setError(t('settings.storeMissing'));
+        setError(t('settings.storeUnreachable'));
         haptic('error');
       }
     },
@@ -1051,7 +1079,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       return addImported(rows);
     },
-  }), [addImported, appearance, applyRestore, canUndo, clearResumePerson, cloudRemaining, colors, commit, completedPersonId, confetti, env, error, fail, incomingBackup, notice, noticeArt, offerUndo, offline, onNavigate, paywallOpen, ready, resumePersonId, runUndo, setNotice, showNotice, skinId, snapshot, stageRestore, startupDetail, startupFailure, storeProduct, storeReady, sync]);
+  }), [addImported, appearance, applyRestore, canUndo, clearResumePerson, cloudRemaining, colors, commit, completedPersonId, confetti, env, error, fail, incomingBackup, notice, noticeArt, offerUndo, offline, onNavigate, paywallOpen, ready, resumePersonId, runUndo, setNotice, showNotice, skinId, snapshot, stageRestore, startupDetail, startupFailure, storeBusy, storeProduct, storeReady, sync]);
 
   return <GifteezContext.Provider value={api}>{children}</GifteezContext.Provider>;
 }
@@ -1110,6 +1138,27 @@ async function scheduleReminders(snapshot: AppSnapshot): Promise<void> {
   await applyReminderPlan(slots);
 }
 
+function ideaRequest(person: Person, snapshot: AppSnapshot, salt: number) {
+  const occasion = upcomingOccasion(person.id, snapshot.occasions, new Date());
+  const age = resolveAge({
+    occasions: snapshot.occasions,
+    personId: person.id,
+    birthYear: person.birthYear,
+    notes: person.notes,
+    relationship: person.relationship,
+  });
+  return {
+    personId: person.id,
+    name: person.name,
+    tags: person.tags,
+    occasion: occasion && occasion.occasion.type !== 'custom' ? occasion.occasion.type : null,
+    feedback: snapshot.feedback,
+    salt,
+    notes: person.notes,
+    band: age.band,
+  };
+}
+
 function withOnDeviceIdeas(snapshot: AppSnapshot, personId: string): AppSnapshot {
   const person = snapshot.people.find(item => item.id === personId && !item.deleted);
   if (!person) {
@@ -1119,14 +1168,7 @@ function withOnDeviceIdeas(snapshot: AppSnapshot, personId: string): AppSnapshot
   const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
   const cacheId = ideaCacheId(personId, occasionKey, 'on-device');
   const previous = snapshot.ideas.find(item => item.id === cacheId);
-  const ideas = suggestIdeas({
-    personId,
-    name: person.name,
-    tags: person.tags,
-    occasion: occasion && occasion.occasion.type !== 'custom' ? occasion.occasion.type : null,
-    feedback: snapshot.feedback,
-    salt: previous?.salt ?? 0,
-  });
+  const ideas = suggestIdeas(ideaRequest(person, snapshot, previous?.salt ?? 0));
   return upsertIdeas(snapshot, {
     id: cacheId,
     personId,

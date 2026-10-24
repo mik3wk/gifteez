@@ -120,11 +120,14 @@ test('idea prompt stresses relationship and age and still omits the name', async
     };
   };
   try {
-    await requestIdeas('sk-test-key', 'gpt-test', { name: 'Ada', relationship: 'Sister', age: 34, tags: ['books'] });
+    await requestIdeas('sk-test-key', 'gpt-test', { name: 'Ada', relationship: 'Sister', age: 34, ageBand: 'adult', avoid: ['Pottery wheel class'], tags: ['books'] });
     const message = JSON.stringify(bodies[0].messages);
     assert.equal(message.includes('Ada'), false);
     assert.match(message, /Sister/);
     assert.match(message, /34/);
+    assert.match(message, /adult/);
+    assert.match(message, /Pottery wheel class/);
+    assert.match(message, /Avoid these/);
     assert.match(bodies[0].messages[0].content, /life stage/);
     assert.match(bodies[0].messages[0].content, /kids' toys/);
     assert.match(bodies[0].messages[0].content, /same opening/);
@@ -137,7 +140,11 @@ test('idea prompt stresses relationship and age and still omits the name', async
     assert.equal(hashed.includes('Ada'), false);
     assert.match(hashed, /Sister/);
     assert.match(hashed, /34/);
-    assert.match(hashed, /"v":3/);
+    assert.match(hashed, /"v":4/);
+    const withBand = modelPrompt({ name: 'Ada', relationship: 'Sister', ageBand: 'adult', avoid: ['Pottery wheel class'] });
+    assert.equal(JSON.stringify(withBand).includes('Ada'), false);
+    assert.equal(withBand.ageBand, 'adult');
+    assert.deepEqual(withBand.avoid, ['Pottery wheel class']);
   } finally {
     global.fetch = originalFetch;
   }

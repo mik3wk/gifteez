@@ -200,6 +200,19 @@ export function accountUnlocked(snapshot: AppSnapshot): boolean {
   return snapshot.entitlementPaid;
 }
 
+/** Empty is allowed. A typed year must be four digits from 1900 through this year. */
+export function parseBirthYear(value: string, today = new Date()): number | null {
+  const trimmed = value.trim();
+  if (!/^\d{4}$/.test(trimmed)) {
+    return null;
+  }
+  const year = Number(trimmed);
+  if (year < 1900 || year > today.getFullYear()) {
+    return null;
+  }
+  return year;
+}
+
 export function canAddPerson(snapshot: AppSnapshot, freeLimit: number): boolean {
   if (listOwnerEntitled(snapshot)) {
     return true;
@@ -540,20 +553,30 @@ export function addPerson(input: {
 export function updatePerson(
   snapshot: AppSnapshot,
   personId: string,
-  patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'opened' | 'deleted' | 'linkedUid' | 'relationship' | 'notes'>>,
+  patch: Partial<Omit<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'opened' | 'deleted' | 'linkedUid' | 'relationship' | 'notes' | 'birthYear'>, 'birthYear'>> & { birthYear?: number | null },
   now: number,
 ): Mutation<Person> {
   const current = snapshot.people.find(person => person.id === personId);
   if (!current) {
     return fail('missing');
   }
-  const next: Person = { ...current, ...patch, updatedAt: now };
+  const { birthYear, ...rest } = patch;
+  const next: Person = { ...current, ...rest, updatedAt: now };
   if (patch.notes !== undefined) {
     const notes = patch.notes.trim().slice(0, 300);
     if (notes) {
       next.notes = notes;
     } else {
       delete next.notes;
+    }
+  }
+  if (birthYear !== undefined) {
+    if (birthYear == null) {
+      delete next.birthYear;
+    } else if (!Number.isInteger(birthYear) || birthYear < 1900 || birthYear > new Date().getFullYear()) {
+      return fail('invalid');
+    } else {
+      next.birthYear = birthYear;
     }
   }
   if (patch.relationship !== undefined) {

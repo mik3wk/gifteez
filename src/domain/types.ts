@@ -21,6 +21,8 @@ export type Person = {
   circleId?: string;
   /** Private notes for ideas. Never sent with the person's name. Capped at 300 characters. */
   notes?: string;
+  /** Optional birth year. A birthday occasion's year wins when both are set. */
+  birthYear?: number;
 };
 
 export type GiftIdea = {

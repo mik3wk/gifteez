@@ -42,6 +42,9 @@ function peopleOk(value: unknown): value is Person[] {
     if (item.circleId != null && !stringId(item.circleId)) {
       return false;
     }
+    if (item.birthYear != null && (typeof item.birthYear !== 'number' || !Number.isInteger(item.birthYear) || item.birthYear < 1900 || item.birthYear > 2100)) {
+      return false;
+    }
     return true;
   });
 }

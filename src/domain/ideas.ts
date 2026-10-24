@@ -1,6 +1,27 @@
 import { hashToUint } from '../crypto/crypto';
 import { CATALOG, type CatalogIdea } from './catalog';
+import { relationshipKey } from './relationship';
 import type { FeedbackEntry, GiftIdea, OccasionType } from './types';
+
+export type AgeBand = 'baby' | 'kid' | 'teen' | 'adult';
+
+const CHILD_RELATIONSHIPS = new Set(['son', 'daughter', 'child', 'niece', 'nephew']);
+const ADULT_RELATIONSHIPS = new Set([
+  'mom', 'dad', 'parent', 'sister', 'brother', 'sibling', 'wife', 'husband', 'partner',
+  'grandma', 'grandpa', 'aunt', 'uncle', 'inLaw', 'friend', 'bestFriend', 'coworker', 'boss', 'teacher', 'neighbor',
+]);
+
+const SIMILAR_STOP = new Set([
+  'gift', 'gifts', 'the', 'and', 'for', 'with', 'from', 'this', 'that', 'their', 'they', 'them',
+  'your', 'you', 'just', 'plus', 'into', 'can', 'use', 'something', 'small', 'nice', 'set', 'day',
+  'more', 'than', 'once', 'about', 'have', 'been', 'will', 'not', 'but', 'are', 'was', 'her', 'his',
+  'she', 'him', 'who', 'what', 'when', 'where', 'also', 'very', 'really', 'some', 'other', 'only',
+]);
+
+const NOTE_STOP = new Set([
+  'age', 'loves', 'love', 'likes', 'like', 'and', 'the', 'with', 'for', 'who', 'has', 'into',
+  'really', 'very', 'just', 'their', 'they', 'from', 'this', 'that', 'about', 'year', 'years', 'old',
+]);
 
 export function ideaKey(idea: GiftIdea | string): string {
   return typeof idea === 'string' ? idea : idea.title;
@@ -11,25 +32,46 @@ export function normalizeIdeaTitle(title: string): string {
   return title.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 }
 
-/** Keep earlier ideas. A later batch only adds titles that are not already saved. */
+/** Tokens that can mark two titles as the same gift. Short words and "gift" do not count. */
+export function ideaTokens(title: string): string[] {
+  return title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(word => word.length > 3 && !SIMILAR_STOP.has(word));
+}
+
+/** True when two titles share enough distinctive words, such as pottery + class. */
+export function ideasTooSimilar(a: string, b: string): boolean {
+  const left = new Set(ideaTokens(a));
+  const right = new Set(ideaTokens(b));
+  if (left.size === 0 || right.size === 0) {
+    return false;
+  }
+  let shared = 0;
+  left.forEach(token => {
+    if (right.has(token)) {
+      shared += 1;
+    }
+  });
+  const min = Math.min(left.size, right.size);
+  return shared >= 2 && shared / min >= 0.5;
+}
+
+function sameIdea(a: string, b: string): boolean {
+  return normalizeIdeaTitle(a) === normalizeIdeaTitle(b) || ideasTooSimilar(a, b);
+}
+
+/** Keep earlier ideas. A later batch drops exact and near-duplicate titles. */
 export function mergeIdeaBatches(existing: GiftIdea[], incoming: GiftIdea[]): { ideas: GiftIdea[]; added: GiftIdea[] } {
-  const seen = new Set<string>();
   const ideas: GiftIdea[] = [];
   existing.forEach(idea => {
-    const key = normalizeIdeaTitle(idea.title);
-    if (!key || seen.has(key)) {
+    if (!normalizeIdeaTitle(idea.title) || ideas.some(kept => sameIdea(kept.title, idea.title))) {
       return;
     }
-    seen.add(key);
     ideas.push(idea);
   });
   const added: GiftIdea[] = [];
   incoming.forEach(idea => {
-    const key = normalizeIdeaTitle(idea.title);
-    if (!key || seen.has(key)) {
+    if (!normalizeIdeaTitle(idea.title) || ideas.some(kept => sameIdea(kept.title, idea.title))) {
       return;
     }
-    seen.add(key);
     added.push(idea);
     ideas.push(idea);
   });
@@ -60,6 +102,73 @@ export function ageYears(
   return age;
 }
 
+export function ageBandFromYears(age: number): AgeBand {
+  if (age < 3) {
+    return 'baby';
+  }
+  if (age < 13) {
+    return 'kid';
+  }
+  if (age < 18) {
+    return 'teen';
+  }
+  return 'adult';
+}
+
+/** A note such as "Age 6, loves LEGO" can supply an age when no birthday year is saved. */
+export function ageFromNotes(notes: string): number | null {
+  const match = /\bage\s+(\d{1,3})\b/i.exec(notes) ?? /\b(\d{1,3})\s*(?:years?\s*old|yo)\b/i.exec(notes);
+  const value = Number(match?.[1]);
+  if (!Number.isInteger(value) || value < 0 || value > 120) {
+    return null;
+  }
+  return value;
+}
+
+function bandFromRelationship(relationship: string | undefined): AgeBand | null {
+  const key = relationshipKey(relationship);
+  if (!key) {
+    return null;
+  }
+  if (CHILD_RELATIONSHIPS.has(key)) {
+    return 'kid';
+  }
+  if (ADULT_RELATIONSHIPS.has(key)) {
+    return 'adult';
+  }
+  return null;
+}
+
+/**
+ * Occasion year, then the birth-year field, then a note, then the relationship.
+ * `years` stays empty when the band was only inferred, so a name-free prompt is not given a guessed number.
+ */
+export function resolveAge(input: {
+  occasions: Array<{ personId: string; type: string; year?: number; month: number; day: number; deleted?: boolean }>;
+  personId: string;
+  birthYear?: number | null;
+  notes?: string;
+  relationship?: string;
+  today?: Date;
+}): { years: number | null; band: AgeBand | null } {
+  const today = input.today ?? new Date();
+  const fromOccasion = ageYears(input.occasions, input.personId, today);
+  if (fromOccasion != null) {
+    return { years: fromOccasion, band: ageBandFromYears(fromOccasion) };
+  }
+  if (typeof input.birthYear === 'number' && input.birthYear >= 1900 && input.birthYear <= today.getFullYear()) {
+    const years = today.getFullYear() - input.birthYear;
+    if (years >= 0 && years <= 120) {
+      return { years, band: ageBandFromYears(years) };
+    }
+  }
+  const fromNotes = ageFromNotes(input.notes ?? '');
+  if (fromNotes != null) {
+    return { years: fromNotes, band: ageBandFromYears(fromNotes) };
+  }
+  return { years: null, band: bandFromRelationship(input.relationship) };
+}
+
 export function asGiftIdea(idea: GiftIdea | string): GiftIdea {
   if (typeof idea === 'string') {
     return { title: idea, priceMin: 15, priceMax: 45, reason: 'Something useful they can enjoy more than once.', searchQuery: 'thoughtful practical gift' };
@@ -75,6 +184,8 @@ export function suggestIdeas(input: {
   feedback: FeedbackEntry[];
   salt: number;
   limit?: number;
+  notes?: string;
+  band?: AgeBand | null;
 }): GiftIdea[] {
   const limit = input.limit ?? 5;
   const tags = new Set(input.tags.map(tag => tag.toLowerCase()));
@@ -84,9 +195,11 @@ export function suggestIdeas(input: {
   const likedTags = new Set(
     CATALOG.filter(idea => liked.includes(idea.text)).flatMap(idea => idea.tags),
   );
+  const notes = noteTokens(input.notes ?? '');
+  const band = input.band ?? null;
   const ranked = CATALOG.map(idea => ({
     idea,
-    score: scoreIdea(idea, tags, input.occasion, likedTags, blocked),
+    score: scoreIdea(idea, tags, input.occasion, likedTags, blocked, band, notes),
     tie: hashToUint(`${input.personId}|${idea.text}|${input.salt}`),
   }))
     .filter(item => item.score > -50)
@@ -96,7 +209,7 @@ export function suggestIdeas(input: {
     return picked;
   }
   const titles = new Set(picked.map(idea => idea.title));
-  const filler = CATALOG.filter(idea => !titles.has(idea.text) && !blocked.has(idea.text))
+  const filler = CATALOG.filter(idea => !titles.has(idea.text) && !blocked.has(idea.text) && audienceOk(idea, band))
     .sort((a, b) => hashToUint(`${input.salt}|${a.text}`) - hashToUint(`${input.salt}|${b.text}`))
     .slice(0, limit - picked.length)
     .map(toGiftIdea);
@@ -113,14 +226,32 @@ function toGiftIdea(idea: CatalogIdea): GiftIdea {
   };
 }
 
+function noteTokens(notes: string): Set<string> {
+  return new Set(
+    notes.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(word => word.length > 3 && !NOTE_STOP.has(word)),
+  );
+}
+
+function audienceOk(idea: CatalogIdea, band: AgeBand | null): boolean {
+  if ((band === 'baby' || band === 'kid') && idea.audience === 'adult') {
+    return false;
+  }
+  if (band === 'adult' && idea.audience === 'child') {
+    return false;
+  }
+  return true;
+}
+
 function scoreIdea(
   idea: CatalogIdea,
   tags: Set<string>,
   occasion: OccasionType | null,
   likedTags: Set<string>,
   blocked: Set<string>,
+  band: AgeBand | null,
+  notes: Set<string>,
 ): number {
-  if (blocked.has(idea.text)) {
+  if (blocked.has(idea.text) || !audienceOk(idea, band)) {
     return -100;
   }
   let score = 1;
@@ -141,6 +272,15 @@ function scoreIdea(
   if (tags.size === 0) {
     score += 1;
   }
+  const hay = `${idea.text} ${idea.searchQuery} ${idea.tags.join(' ')}`.toLowerCase();
+  notes.forEach(token => {
+    if (hay.includes(token)) {
+      score += 5;
+    }
+    if (token === 'lego' && (idea.tags.includes('kids') || idea.tags.includes('games'))) {
+      score += 6;
+    }
+  });
   return score;
 }
 

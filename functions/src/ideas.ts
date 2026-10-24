@@ -10,6 +10,10 @@ export type IdeaPrompt = {
   relationship?: string;
   /** Whole years, when a birthday year is known. Never a name. */
   age?: number | null;
+  /** Life stage when a number is missing or alongside it. Never a name. */
+  ageBand?: 'baby' | 'kid' | 'teen' | 'adult' | null;
+  /** Idea titles already on the phone. The model should not repeat them. */
+  avoid?: string[];
   occasion?: string | null;
   tags?: string[];
   budgetCents?: number | null;
@@ -74,10 +78,12 @@ function clampPrice(value: unknown): number | null {
 
 export function promptHash(personId: string, prompt: IdeaPrompt): string {
   return JSON.stringify({
-    v: 3,
+    v: 4,
     personId,
     relationship: prompt.relationship ?? '',
     age: prompt.age ?? null,
+    ageBand: prompt.ageBand ?? null,
+    avoid: [...(prompt.avoid ?? [])].sort(),
     occasion: prompt.occasion ?? '',
     tags: [...(prompt.tags ?? [])].sort(),
     budgetCents: prompt.budgetCents ?? null,
@@ -93,6 +99,8 @@ export function modelPrompt(prompt: IdeaPrompt): IdeaPrompt {
   return {
     relationship: prompt.relationship ?? '',
     age: prompt.age ?? null,
+    ageBand: prompt.ageBand ?? null,
+    avoid: prompt.avoid ?? [],
     occasion: prompt.occasion ?? null,
     tags: prompt.tags ?? [],
     budgetCents: prompt.budgetCents ?? null,
@@ -109,7 +117,9 @@ const SYSTEM_PROMPT = [
   'Do not use or guess a person\'s name. No name is provided.',
   'Read relationship and age first and treat them as the life stage.',
   'An adult sister, brother, parent, or partner is not a child and must not get kids\' toys, picture books, or playground gifts.',
-  'Suggest toys only for a child relationship or an age under 13.',
+  'A baby or kid age band must not get fragrance, jewelry, live shows, reservations, alcohol, or other adult-only gifts.',
+  'Suggest toys only for a child relationship, a baby or kid age band, or an age under 13.',
+  'Do not repeat any title listed under avoid.',
   'Stay within the occasion budget and do not repeat past gifts.',
   'Be specific but not brand-dependent.',
   'Reply with JSON {"ideas":[{"title":"...","priceMin":60,"priceMax":120,"reason":"...","searchQuery":"..."}]} containing exactly 5 ideas.',
@@ -122,7 +132,10 @@ function userContent(prompt: IdeaPrompt): string {
   const shaped = modelPrompt(prompt);
   const relationship = shaped.relationship?.trim() || 'unspecified';
   const age = shaped.age == null ? 'unknown' : String(shaped.age);
-  const lead = `Relationship: ${relationship}. Age: ${age}. Use this relationship and age as the life stage before any other field.`;
+  const band = shaped.ageBand ?? 'unknown';
+  const avoid = (shaped.avoid ?? []).filter(Boolean);
+  const avoidLine = avoid.length ? ` Avoid these titles: ${avoid.join('; ')}.` : '';
+  const lead = `Relationship: ${relationship}. Age: ${age}. Age band: ${band}. Use this relationship, age, and age band as the life stage before any other field.${avoidLine}`;
   return `${lead}\n${JSON.stringify(shaped)}`;
 }
 
