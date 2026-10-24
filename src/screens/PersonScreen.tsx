@@ -1,12 +1,12 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
 import { amazonSearchUrl } from '../domain/amazon';
 import { INTEREST_TAGS } from '../domain/catalog';
-import { asGiftIdea, ideaCacheId, ideaKey, ideasTooSimilar, normalizeIdeaTitle } from '../domain/ideas';
+import { asGiftIdea, ideaCacheId, ideaKey, ideasTooSimilar, normalizeIdeaTitle, sentenceCaseTitle } from '../domain/ideas';
 import type { GiftIdea } from '../domain/types';
 import { canEditSharedGift } from '../domain/edits';
 import { allTimeSpentCents, daysUntil, isRealMonthDay, listCurrency, occurrenceYear, parseBirthYear, parseBudget, parseLooseDate, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
@@ -19,7 +19,8 @@ import { useGifteez } from '../state/GifteezContext';
 import { occasionLook, space } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { DateField, MonthDayField } from '../ui/DateField';
-import { HeartPop, Moment, Shimmer, ShimmerSlot } from '../ui/motion';
+import { Icon } from '../ui/icons';
+import { HeartPop, Moment, Shimmer } from '../ui/motion';
 import { OccasionPicker } from '../ui/OccasionPicker';
 import { CircleField } from '../ui/CircleField';
 import { RelationshipField } from '../ui/RelationshipField';
@@ -59,7 +60,6 @@ export function AddPersonScreen() {
   const { addPerson, completedPersonId, clearCompletedPerson, cancelPendingAdd } = useGifteez();
   const cancelAdd = useRef(cancelPendingAdd);
   cancelAdd.current = cancelPendingAdd;
-  const allowLeave = useRef(false);
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
   const [relationship, setRelationship] = useState('');
@@ -69,39 +69,41 @@ export function AddPersonScreen() {
   const [budgetError, setBudgetError] = useState('');
   const [birthYear, setBirthYear] = useState('');
   const [birthError, setBirthError] = useState('');
-  const dirty = Boolean(name.trim() || relationship.trim() || circleId || budget.trim() || birthYear.trim());
+  const [tags, setTags] = useState<string[]>([]);
+  const [allowLeave, setAllowLeave] = useState(false);
+  const nextId = useRef<string | null>(null);
+  const dirty = Boolean(name.trim() || relationship.trim() || circleId || budget.trim() || birthYear.trim() || tags.length);
+  usePreventRemove(dirty && !allowLeave, ({ data }) => {
+    confirmDestructive(
+      t('firstOpen.discardTitle'),
+      t('firstOpen.discardBody'),
+      t('firstOpen.discard'),
+    ).then(ok => {
+      if (!ok) {
+        return;
+      }
+      navigation.dispatch(data.action);
+    }).catch(() => undefined);
+  });
+  useEffect(() => {
+    if (!allowLeave || !nextId.current) {
+      return;
+    }
+    const personId = nextId.current;
+    nextId.current = null;
+    navigation.replace('Person', { personId });
+  }, [allowLeave, navigation]);
   useEffect(() => {
     if (!completedPersonId) {
       return;
     }
-    allowLeave.current = true;
-    const personId = completedPersonId;
+    nextId.current = completedPersonId;
+    setAllowLeave(true);
     clearCompletedPerson();
-    navigation.replace('Person', { personId });
-  }, [clearCompletedPerson, completedPersonId, navigation]);
+  }, [clearCompletedPerson, completedPersonId]);
   useEffect(() => () => {
     cancelAdd.current();
   }, []);
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', event => {
-      if (allowLeave.current || !dirty) {
-        return;
-      }
-      event.preventDefault();
-      confirmDestructive(
-        t('firstOpen.discardTitle'),
-        t('firstOpen.discardBody'),
-        t('firstOpen.discard'),
-      ).then(ok => {
-        if (!ok) {
-          return;
-        }
-        allowLeave.current = true;
-        navigation.dispatch(event.data.action);
-      }).catch(() => undefined);
-    });
-    return unsubscribe;
-  }, [dirty, navigation]);
   return (
     <Screen
       footer={(
@@ -126,20 +128,19 @@ export function AddPersonScreen() {
                 setBirthError(t('person.birthYearInvalid'));
                 return;
               }
-              allowLeave.current = true;
               const id = await addPerson({
                 name,
                 budget,
-                tags: [],
+                tags,
                 relationship: cleaned,
                 birthYear,
                 ...(circleId ? { circleId } : {}),
               });
               if (id) {
-                navigation.replace('Person', { personId: id });
+                nextId.current = id;
+                setAllowLeave(true);
                 return;
               }
-              allowLeave.current = false;
             }}
           />
           <TabBar active="people" />
@@ -152,6 +153,8 @@ export function AddPersonScreen() {
         label={t('firstOpen.theirName')}
         value={name}
         error={nameError}
+        textContentType="name"
+        autoComplete="name"
         onChangeText={value => {
           setName(value);
           setNameError('');
@@ -165,6 +168,8 @@ export function AddPersonScreen() {
           setRelationshipError('');
         }}
       />
+      <Caption>{t('person.interests')}</Caption>
+      <TagPicker tags={tags} onChange={setTags} />
       <CircleField value={circleId} onChange={setCircleId} />
       <Field
         label={t('person.budget')}
@@ -220,7 +225,6 @@ export function PersonScreen() {
   const [name, setName] = useState(person?.name ?? '');
   const [relationship, setRelationship] = useState(person?.relationship ?? '');
   const [notes, setNotes] = useState(person?.notes ?? '');
-  const [freshCloud, setFreshCloud] = useState<GiftIdea[]>([]);
   const [relationshipError, setRelationshipError] = useState('');
   const [gift, setGift] = useState('');
   const [price, setPrice] = useState('');
@@ -237,6 +241,7 @@ export function PersonScreen() {
   const [dateError, setDateError] = useState('');
   const [pickingCircle, setPickingCircle] = useState(false);
   const [section, setSection] = useState<'ideas' | 'occasions' | 'history'>(route.params.section ?? 'ideas');
+  const [ideaFilter, setIdeaFilter] = useState<'forYou' | 'saved'>('forYou');
   useEffect(() => {
     if (route.params.section) {
       setSection(route.params.section);
@@ -245,15 +250,12 @@ export function PersonScreen() {
   const [editingDetails, setEditingDetails] = useState(false);
   const [editCircleId, setEditCircleId] = useState(person?.circleId ?? '');
   const [addingOccasion, setAddingOccasion] = useState(false);
-  const [tuning, setTuning] = useState(false);
-  const [tuneTags, setTuneTags] = useState<string[]>(person?.tags ?? []);
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudError, setCloudError] = useState(false);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [moment, setMoment] = useState<'wrap' | null>(null);
   const [buyAsk, setBuyAsk] = useState<GiftIdea | null>(null);
   const queued = useRef<Queue | null>(null);
-  const queuedMenu = useRef<Menu | null>(null);
   const pendingBuy = useRef<GiftIdea | null>(null);
   const shopping = useRef(false);
 
@@ -280,6 +282,32 @@ export function PersonScreen() {
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false, title: '' });
   }, [navigation]);
+
+  const savedBudget = person?.budgetCents == null ? '' : String(person.budgetCents / 100);
+  const detailsDirty = Boolean(
+    person
+    && editingDetails
+    && (
+      name.trim() !== person.name
+      || budget !== savedBudget
+      || birthYear !== (person.birthYear ? String(person.birthYear) : '')
+      || relationship !== (person.relationship ?? '')
+      || notes !== (person.notes ?? '')
+      || (editCircleId || '') !== (person.circleId ?? '')
+      || interestTags.join('|') !== (person.tags ?? []).join('|')
+    ),
+  );
+  usePreventRemove(detailsDirty, ({ data }) => {
+    confirmDestructive(
+      t('firstOpen.discardTitle'),
+      t('firstOpen.discardBody'),
+      t('firstOpen.discard'),
+    ).then(ok => {
+      if (ok) {
+        navigation.dispatch(data.action);
+      }
+    }).catch(() => undefined);
+  });
 
   if (!person) {
     return (
@@ -323,10 +351,7 @@ export function PersonScreen() {
     return Boolean(next && nextState?.savedIdea === idea);
   }
 
-  const personId = person.id;
-  function hearted(idea: string): boolean {
-    return savedFor(idea) || snapshot.feedback.some(item => item.personId === personId && item.idea === idea && item.vote === 'up');
-  }
+  const savedList = [...visibleDevice, ...visibleCloud].filter(idea => savedFor(ideaKey(idea)));
 
   function openPurchase(occasionId: string, idea: string, priceDollars?: number) {
     setBuying(occasionId);
@@ -419,13 +444,15 @@ export function PersonScreen() {
           {locked ? <Body>{t('person.readOnly')}</Body> : null}
           {person.imported ? <Caption>{t('person.openedImported')}</Caption> : null}
           <View style={styles.navRow}>
-            <IconButton label={t('common.back')} name="chevronLeft" onPress={() => navigation.goBack()} />
-            <IconButton label={t('person.editDetails')} name="more" filled onPress={openDetails} />
+            <BackLink label={backLabelFor(navigation)} onPress={() => navigation.goBack()} />
+            <Pressable accessibilityRole="button" accessibilityLabel={t('person.editDetails')} onPress={openDetails} style={styles.backLink}>
+              <Text maxFontSizeMultiplier={1.4} style={[type.body, { color: colors.pink }]}>{t('person.editShort')}</Text>
+            </Pressable>
           </View>
           <View style={styles.personRow}>
             <MonogramAvatar name={person.name} personId={person.id} size={36} crest />
             <View style={styles.personCopy}>
-              <Text numberOfLines={2} style={[styles.personName, { color: colors.text, fontFamily: type.display.fontFamily }]}>{person.name}</Text>
+              <Text numberOfLines={1} style={[styles.personName, { color: colors.text, fontFamily: type.display.fontFamily }]}>{person.name}</Text>
               <Pressable accessibilityRole="button" onPress={() => setPickingCircle(true)}>
                 <Caption tone="text">{personMeta(person, snapshot.circles)}</Caption>
               </Pressable>
@@ -437,11 +464,16 @@ export function PersonScreen() {
               />
             </View>
             {next ? (
-              <Text style={[styles.nextOccasion, { color: colors.muted }]}>
+              <Text numberOfLines={1} style={[styles.nextOccasion, { color: colors.muted }]}>
                 {`${occasionLabel(next.occasion)} · ${formatDate(next.date)}`}
               </Text>
             ) : null}
           </View>
+          {person.tags.length > 0 ? (
+            <Text numberOfLines={1} style={[type.caption, { color: colors.muted }]}>
+              {person.tags.map(tag => t(`tags.${tag}`)).join(' · ')}
+            </Text>
+          ) : null}
           {moment ? <Moment kind="wrap" name="purchase" onDone={() => setMoment(null)} /> : null}
           <Segment
             value={section}
@@ -457,43 +489,83 @@ export function PersonScreen() {
     >
       {section === 'ideas' && !hidden && !locked ? (
         <>
-          {!tuning && buyAsk ? <BuyPrompt idea={buyAsk} onYes={() => acceptBuy(buyAsk)} onNo={() => setBuyAsk(null)} /> : null}
+          <Segment
+            value={ideaFilter}
+            onChange={id => setIdeaFilter(id as 'forYou' | 'saved')}
+            options={[
+              { id: 'forYou', label: t('person.forYou') },
+              { id: 'saved', label: t('person.savedTab') },
+            ]}
+          />
+          <Pressable accessibilityRole="button" onPress={openDetails}>
+            <Caption tone="text">{`${person.tags.length ? t('person.interestsLine', { list: person.tags.map(tag => t(`tags.${tag}`)).join(', ') }) : t('person.addInterests')} · ${t('person.editShort')}`}</Caption>
+          </Pressable>
+          {buyAsk ? <BuyPrompt idea={buyAsk} onYes={() => acceptBuy(buyAsk)} onNo={() => setBuyAsk(null)} /> : null}
           {findingIdeas && ideas.length === 0 ? <Shimmer label={t('person.ideasLoading')} /> : null}
-          {!findingIdeas && visibleDevice.length === 0 && visibleCloud.length === 0 ? <EmptyState kind="ideas" text={t('person.ideasEmpty')} /> : null}
-          {shownIdeas.map(idea => (
-            <IdeaCard
-              key={`device-${ideaKey(idea)}`}
-              idea={idea}
-              art={artName}
-              saved={savedFor(ideaKey(idea))}
-              onSave={() => onSaveIdea(ideaKey(idea))}
-              onUp={() => { vote(person.id, ideaKey(idea), 'up').catch(() => undefined); }}
-              onDown={() => { vote(person.id, ideaKey(idea), 'down').catch(() => undefined); }}
-              onShop={() => { shopIdea(idea).catch(() => undefined); }}
-            />
-          ))}
-          {visibleCloud.map(idea => (
-            <IdeaCard
-              key={`cloud-${ideaKey(idea)}`}
-              idea={idea}
-              art={artName}
-              saved={savedFor(ideaKey(idea))}
-              onSave={() => onSaveIdea(ideaKey(idea))}
-              onUp={() => { vote(person.id, ideaKey(idea), 'up').catch(() => undefined); }}
-              onDown={() => { vote(person.id, ideaKey(idea), 'down').catch(() => undefined); }}
-              onShop={() => { shopIdea(idea).catch(() => undefined); }}
-            />
-          ))}
+          {ideaFilter === 'saved' ? (
+            savedList.length === 0 ? <EmptyState kind="ideas" text={t('person.savedEmpty')} /> : savedList.map(idea => (
+              <IdeaCard
+                key={`saved-${ideaKey(idea)}`}
+                idea={idea}
+                art={artName}
+                saved
+                onSave={() => onSaveIdea(ideaKey(idea))}
+                onMore={() => setMenu({ kind: 'idea', idea: ideaKey(idea) })}
+                onShop={() => { shopIdea(idea).catch(() => undefined); }}
+              />
+            ))
+          ) : (
+            <>
+              {!findingIdeas && visibleDevice.length === 0 && visibleCloud.length === 0 ? <EmptyState kind="ideas" text={t('person.ideasEmpty')} /> : null}
+              {shownIdeas.map(idea => (
+                <IdeaCard
+                  key={`device-${ideaKey(idea)}`}
+                  idea={idea}
+                  art={artName}
+                  saved={savedFor(ideaKey(idea))}
+                  onSave={() => onSaveIdea(ideaKey(idea))}
+                  onMore={() => setMenu({ kind: 'idea', idea: ideaKey(idea) })}
+                  onShop={() => { shopIdea(idea).catch(() => undefined); }}
+                />
+              ))}
+              {visibleCloud.map(idea => (
+                <IdeaCard
+                  key={`cloud-${ideaKey(idea)}`}
+                  idea={idea}
+                  art={artName}
+                  saved={savedFor(ideaKey(idea))}
+                  onSave={() => onSaveIdea(ideaKey(idea))}
+                  onMore={() => setMenu({ kind: 'idea', idea: ideaKey(idea) })}
+                  onShop={() => { shopIdea(idea).catch(() => undefined); }}
+                />
+              ))}
+            </>
+          )}
           <Cluster>
-            {hiddenIdeaCount > 0 ? (
+            {ideaFilter === 'forYou' && hiddenIdeaCount > 0 ? (
               <Button label={t('person.showMore', { count: hiddenIdeaCount })} tone="ghost" onPress={() => setShowAllIdeas(true)} />
             ) : null}
-            {showAllIdeas && ideas.length > 3 ? (
+            {ideaFilter === 'forYou' && showAllIdeas && ideas.length > 3 ? (
               <Button label={t('person.showFewer')} tone="ghost" onPress={() => setShowAllIdeas(false)} />
             ) : null}
-            <Button label={t('person.tuneIdeas')} tone="ghost" onPress={() => { setTuneTags(interestTags); setTuning(true); }} />
           </Cluster>
           {cloudError ? <Body>{t('person.ideasError')}</Body> : null}
+          <Button
+            label={cloudError ? t('person.ideasRetry') : t('person.cloud')}
+            tone="ghost"
+            busy={cloudBusy}
+            onPress={async () => {
+              setCloudBusy(true);
+              setCloudError(false);
+              try {
+                await cloudIdeas(person.id);
+              } catch {
+                setCloudError(true);
+              } finally {
+                setCloudBusy(false);
+              }
+            }}
+          />
           {cloudRemaining[person.id] != null ? (
             <Caption tone="text">{t('person.refreshesLeft', { count: cloudRemaining[person.id], name: person.name })}</Caption>
           ) : null}
@@ -555,80 +627,6 @@ export function PersonScreen() {
       ) : null}
 
       <Sheet
-        visible={tuning}
-        title={t('person.tuneIdeas')}
-        onClose={() => {
-          setFreshCloud(current => current.filter(idea => hearted(idea.title)));
-          setTuning(false);
-        }}
-        onDismiss={() => {
-          const nextMenu = queuedMenu.current;
-          queuedMenu.current = null;
-          if (nextMenu) {
-            setMenu(nextMenu);
-          }
-        }}
-      >
-        {tuning && buyAsk ? <BuyPrompt idea={buyAsk} onYes={() => acceptBuy(buyAsk)} onNo={() => setBuyAsk(null)} /> : null}
-        <Body>{t('person.tagsHint')}</Body>
-        <TagPicker tags={tuneTags} onChange={setTuneTags} />
-        <Button
-          label={t('person.save')}
-          onPress={async () => {
-            setInterestTags(tuneTags);
-            await savePerson(person.id, { tags: tuneTags });
-            await refreshIdeas(person.id);
-            setTuning(false);
-          }}
-        />
-        <Button
-          label={t('person.refresh')}
-          tone="secondary"
-          onPress={async () => {
-            await refreshIdeas(person.id);
-            setTuning(false);
-          }}
-        />
-        <ShimmerSlot label={t('person.ideasLoading')} busy={cloudBusy} />
-        {cloudError ? <Body>{t('person.ideasError')}</Body> : null}
-        {freshCloud.filter(idea => !hiddenIdeas.has(idea.title)).map(idea => (
-          <IdeaCard
-            key={`fresh-${idea.title}`}
-            idea={idea}
-            art={artName}
-            saved={savedFor(idea.title)}
-            onSave={() => onSaveIdea(idea.title)}
-            onUp={() => { vote(person.id, idea.title, 'up').catch(() => undefined); }}
-            onDown={() => { vote(person.id, idea.title, 'down').catch(() => undefined); }}
-            onShop={() => { shopIdea(idea).catch(() => undefined); }}
-          />
-        ))}
-        <Button
-          label={cloudError ? t('person.ideasRetry') : t('person.cloud')}
-          tone="secondary"
-          onPress={async () => {
-            setCloudBusy(true);
-            setCloudError(false);
-            try {
-              const added = await cloudIdeas(person.id);
-              setFreshCloud(current => {
-                const seen = new Set(added.map(idea => normalizeIdeaTitle(idea.title)));
-                return [...added, ...current.filter(idea => !seen.has(normalizeIdeaTitle(idea.title)))];
-              });
-            } catch {
-              setCloudError(true);
-            } finally {
-              setCloudBusy(false);
-            }
-          }}
-        />
-        {cloudRemaining[person.id] != null ? (
-          <Body>{t('person.refreshesLeft', { count: cloudRemaining[person.id], name: person.name })}</Body>
-        ) : null}
-        <Body>{t('person.cloudHint')}</Body>
-        <Caption tone="text">{t('shop.disclosure')}</Caption>
-      </Sheet>
-      <Sheet
         visible={addingOccasion}
         title={t('person.addOccasionHeading')}
         onClose={() => {
@@ -662,11 +660,15 @@ export function PersonScreen() {
           label={t('person.name')}
           value={name}
           error={nameError}
+          textContentType="name"
+          autoComplete="name"
           onChangeText={value => {
             setName(value);
             setNameError('');
           }}
         />
+        <Caption>{t('person.interests')}</Caption>
+        <TagPicker tags={interestTags} onChange={setInterestTags} />
         <Field
           label={t('person.budget')}
           value={budget}
@@ -739,8 +741,8 @@ export function PersonScreen() {
           }}
         />
         <Button
-          label={t('person.delete')}
-          tone="danger-quiet"
+          label={t('person.removePerson', { name: person.name })}
+          tone="danger"
           onPress={async () => {
             const ok = await confirmDestructive(
               t('person.deleteConfirm', { name: person.name }),
@@ -760,15 +762,15 @@ export function PersonScreen() {
         {menu?.kind === 'idea' ? (
           <>
             <Button
-              label={savedFor(menu.idea) ? t('person.unsaveIdea') : t('person.saveIdea')}
+              label={t('person.moreLike')}
               tone="secondary"
               onPress={() => {
-                onSaveIdea(menu.idea);
+                vote(person.id, menu.idea, 'up').catch(() => undefined);
+                refreshIdeas(person.id).catch(() => undefined);
                 setMenu(null);
               }}
             />
-            <Button label={t('person.thumbsUp')} tone="secondary" onPress={() => { vote(person.id, menu.idea, 'up').catch(() => undefined); setMenu(null); }} />
-            <Button label={t('person.thumbsDown')} tone="secondary" onPress={() => { vote(person.id, menu.idea, 'down').catch(() => undefined); setMenu(null); }} />
+            <Button label={t('person.notAFit')} tone="secondary" onPress={() => { vote(person.id, menu.idea, 'down').catch(() => undefined); setMenu(null); }} />
           </>
         ) : null}
       </Sheet>
@@ -1114,6 +1116,21 @@ function ReminderOffer() {
   );
 }
 
+function backLabelFor(navigation: NativeStackNavigationProp<RootStack>): string {
+  const state = navigation.getState?.();
+  const previous = state?.routes[state.index - 1];
+  return previous?.name === 'Home' ? t('people.home') : t('people.title');
+}
+
+function BackLink({ label, onPress }: { label: string; onPress: () => void }) {
+  const { colors, type, typeScale } = useTheme();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.backLink}>
+      <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.pink }]}>{`‹ ${label}`}</Text>
+    </Pressable>
+  );
+}
+
 function TagPicker({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void | Promise<unknown> }) {
   return (
     <Cluster>
@@ -1148,46 +1165,46 @@ function IdeaCard({
   art,
   saved,
   onSave,
-  onUp,
-  onDown,
+  onMore,
   onShop,
 }: {
   idea: GiftIdea | string;
   art: ReturnType<typeof occasionLook>['art'];
   saved: boolean;
   onSave: () => void | Promise<unknown> | undefined;
-  onUp: () => void;
-  onDown: () => void;
+  onMore: () => void;
   onShop: () => void;
 }) {
   const gift = asGiftIdea(idea);
-  const { colors, type } = useTheme();
+  const { colors, type, typeScale } = useTheme();
+  const title = sentenceCaseTitle(gift.title);
   return (
     <Card compact>
       <View style={styles.ideaRow}>
-        <ArtSlot name={art} size={40} />
+        <ArtSlot name={art} size={36} />
         <View style={styles.ideaCopy}>
           <View style={styles.titlePrice}>
-            <Text numberOfLines={2} style={[styles.ideaTitle, { color: colors.text, fontFamily: type.heading.fontFamily }]}>{gift.title}</Text>
+            <Text numberOfLines={2} style={[styles.ideaTitle, { color: colors.text, fontFamily: type.heading.fontFamily }]}>{title}</Text>
             <Text style={[type.caption, { color: colors.muted }]}>{`$${gift.priceMin}–${gift.priceMax}`}</Text>
           </View>
-          <Text numberOfLines={2} style={[type.body, { color: colors.text }]}>{gift.reason}</Text>
+          <Text numberOfLines={2} style={[type.caption, { color: colors.text }]}>{gift.reason}</Text>
         </View>
       </View>
       <View style={styles.actions}>
         <Button flex tone="soft" label={t('person.shopIdea')} onPress={onShop} />
-        <IconButton label={t('person.thumbsUp')} name="sparkle" onPress={onUp} />
-        <IconButton label={t('person.thumbsDown')} name="thumbDown" onPress={onDown} />
         <HeartPop saved={saved}>
-          <IconButton
-            label={saved ? t('person.unsaveIdea') : t('person.saveIdea')}
-            name="heart"
-            color={saved ? colors.pink : colors.text}
-            filled={saved}
-            size={22}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={saved ? t('person.unsaveIdea') : t('person.saveIdea')}
             onPress={() => { onSave(); }}
-          />
+            style={styles.saveWord}>
+            <Icon name="heart" size={18} color={saved ? colors.pink : colors.text} filled={saved} />
+            <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: colors.text }]}>{saved ? t('person.saved') : t('person.save')}</Text>
+          </Pressable>
         </HeartPop>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('person.moreLike')} onPress={onMore} style={styles.moreBtn}>
+          <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: colors.muted }]}>•••</Text>
+        </Pressable>
       </View>
     </Card>
   );
@@ -1344,6 +1361,9 @@ const styles = StyleSheet.create({
   footerStack: { gap: space.xs },
   pinnedTight: { gap: 6 },
   navRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  backLink: { minHeight: 44, justifyContent: 'center' },
+  saveWord: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8 },
+  moreBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   personRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: 64 },
   personName: { fontSize: 25, lineHeight: 28 },
   nextOccasion: { fontSize: 12, lineHeight: 16, maxWidth: 108, textAlign: 'right' },

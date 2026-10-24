@@ -15,8 +15,9 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ goBack: jest.fn(), setOptions: jest.fn(), replace: jest.fn() }),
+  useNavigation: () => ({ goBack: jest.fn(), setOptions: jest.fn(), replace: jest.fn(), getState: () => ({ index: 0, routes: [{ name: 'People' }] }) }),
   useRoute: () => ({ params: { personId: 'ada' } }),
+  usePreventRemove: () => undefined,
 }));
 
 const mockCallable = jest.fn();
@@ -89,11 +90,6 @@ test('a rejected cloud ideas callable shows retry and keeps on-device ideas', as
     renderer = ReactTestRenderer.create(<PersonScreen />);
   });
   expect(ideaCacheId('ada', 'general', 'on-device')).toBe('ada:general:on-device:v2');
-  const tune = buttonLabeled(renderer!, 'Tune ideas');
-  expect(tune).toBeDefined();
-  await ReactTestRenderer.act(async () => {
-    tune?.props.onPress();
-  });
   for (const failure of failures) {
     mockCallable.mockRejectedValueOnce(failure);
     const ask = buttonLabeled(renderer!, 'Ask for more ideas') ?? buttonLabeled(renderer!, 'Try again');

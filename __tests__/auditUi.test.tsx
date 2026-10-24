@@ -14,8 +14,9 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ goBack: jest.fn(), setOptions: jest.fn() }),
+  useNavigation: () => ({ goBack: jest.fn(), setOptions: jest.fn(), getState: () => ({ index: 0, routes: [{ name: 'People' }] }) }),
   useRoute: () => ({ params: { personId: 'ada', sourcePersonId: 'ada2', sourceGroupId: 'there' } }),
+  usePreventRemove: () => undefined,
 }));
 
 jest.mock('../src/state/GifteezContext', () => {

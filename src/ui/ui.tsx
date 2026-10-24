@@ -117,6 +117,7 @@ export function Screen({
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const headerHeight = useContext(HeaderHeightContext);
+  const [footerHeight, setFooterHeight] = useState(0);
   const bar = tab ? <TabBar active={tab} /> : footer;
   const coverStatus = Boolean(tab) || !headerHeight;
   const topPad = (coverStatus ? insets.top : 0) + (tight ? 0 : space.sm);
@@ -125,7 +126,9 @@ export function Screen({
       style={[styles.screen, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={headerHeight ?? 0}>
-      {pinned ? <View style={[styles.pinned, { paddingTop: topPad }]}>{pinned}</View> : null}
+      {pinned ? (
+        <View accessibilityRole="header" style={[styles.pinned, { paddingTop: topPad }]}>{pinned}</View>
+      ) : null}
       <ScrollView
         style={styles.screen}
         contentContainerStyle={[
@@ -133,7 +136,7 @@ export function Screen({
           centered ? styles.centered : null,
           {
             paddingTop: pinned ? (tight ? 0 : space.sm) : topPad,
-            paddingBottom: bar ? space.sm : insets.bottom + space.lg,
+            paddingBottom: bar ? footerHeight : insets.bottom + space.lg,
           },
         ]}
         keyboardShouldPersistTaps="handled">
@@ -143,7 +146,9 @@ export function Screen({
         <View pointerEvents="none" style={[styles.statusBar, { height: insets.top, backgroundColor: colors.background }]} />
       ) : null}
       {bar ? (
-        <View style={[styles.footer, { backgroundColor: colors.background, paddingBottom: insets.bottom + space.xs }]}>
+        <View
+          onLayout={event => setFooterHeight(event.nativeEvent.layout.height)}
+          style={[styles.footer, { backgroundColor: colors.background, paddingBottom: insets.bottom + space.xs }]}>
           {bar}
         </View>
       ) : null}
@@ -521,8 +526,8 @@ export function Field({
         placeholder={placeholder}
         placeholderTextColor={colors.muted}
         keyboardType={keyboardType}
-        autoCapitalize={keyboardType === 'email-address' ? 'none' : 'sentences'}
-        autoCorrect={keyboardType === 'email-address' ? false : undefined}
+        autoCapitalize={textContentType === 'name' ? 'words' : keyboardType === 'email-address' ? 'none' : 'sentences'}
+        autoCorrect={textContentType === 'name' || keyboardType === 'email-address' ? false : undefined}
         returnKeyType={returnKeyType}
         textContentType={textContentType}
         autoComplete={autoComplete}
@@ -624,7 +629,7 @@ export function Notice({
       pointerEvents="box-none"
       accessibilityRole={tone === 'danger' ? 'alert' : undefined}
       accessibilityLiveRegion={tone === 'danger' ? 'assertive' : 'polite'}
-      style={[styles.floater, { top: insets.top + space.xs }]}>
+      style={[styles.floater, { bottom: insets.bottom + layout.tabBar + space.sm }]}>
       <View style={styles.floaterCard}>
       <Settle distance={20}>
       <StickerBox fill={colors.surface} radius={radius.card} borderWidth={stroke.card}>

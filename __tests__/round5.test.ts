@@ -1,5 +1,5 @@
 import { deleteSharedGift } from '../src/domain/edits';
-import { ageYears, mergeIdeaBatches } from '../src/domain/ideas';
+import { ageYears, mergeIdeaBatches, sentenceCaseTitle } from '../src/domain/ideas';
 import { recordGift, yearSpentCents } from '../src/domain/logic';
 import { emptySnapshot, type GiftIdea } from '../src/domain/types';
 
@@ -12,6 +12,8 @@ test('a later cloud batch appends and keeps the earlier title', () => {
   const second = mergeIdeaBatches(first.ideas, [idea('wool   socks'), idea('Linen apron')]);
   expect(second.ideas.map(item => item.title)).toEqual(['Wool socks', 'A mug', 'Linen apron']);
   expect(second.added.map(item => item.title)).toEqual(['Linen apron']);
+  expect(sentenceCaseTitle('A Cozy Wool Blanket')).toBe('A cozy wool blanket');
+  expect(mergeIdeaBatches([], [idea('A Cozy Wool Blanket')]).ideas[0].title).toBe('A cozy wool blanket');
 });
 
 test('age comes from a birthday year and never needs a name', () => {

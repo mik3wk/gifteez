@@ -32,6 +32,16 @@ export function normalizeIdeaTitle(title: string): string {
   return title.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 }
 
+/** Sentence case for every idea title, including ones that arrive in title case from the cloud. */
+export function sentenceCaseTitle(title: string): string {
+  const trimmed = title.trim().replace(/\s+/g, ' ');
+  if (!trimmed) {
+    return '';
+  }
+  const lower = trimmed.toLocaleLowerCase();
+  return lower.charAt(0).toLocaleUpperCase() + lower.slice(1);
+}
+
 /** Tokens that can mark two titles as the same gift. Short words and "gift" do not count. */
 export function ideaTokens(title: string): string[] {
   return title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(word => word.length > 3 && !SIMILAR_STOP.has(word));
@@ -69,11 +79,12 @@ export function mergeIdeaBatches(existing: GiftIdea[], incoming: GiftIdea[]): { 
   });
   const added: GiftIdea[] = [];
   incoming.forEach(idea => {
-    if (!normalizeIdeaTitle(idea.title) || ideas.some(kept => sameIdea(kept.title, idea.title))) {
+    const titled = { ...idea, title: sentenceCaseTitle(idea.title) };
+    if (!normalizeIdeaTitle(titled.title) || ideas.some(kept => sameIdea(kept.title, titled.title))) {
       return;
     }
-    added.push(idea);
-    ideas.push(idea);
+    added.push(titled);
+    ideas.push(titled);
   });
   return { ideas, added };
 }

@@ -143,6 +143,17 @@ test('on-device ideas stay on device, follow tags, and skip thumbs down', () => 
     salt: 0,
   });
   expect(blocked.map(idea => idea.title)).not.toContain(first[0].title);
+  const child = suggestIdeas({
+    personId: 'kid',
+    name: 'Sam',
+    tags: ['home', 'cozy'],
+    occasion: 'birthday',
+    feedback: [],
+    salt: 3,
+    band: 'kid',
+  });
+  expect(child.some(idea => /candle/i.test(`${idea.title} ${idea.searchQuery}`))).toBe(false);
+  expect(child.every(idea => idea.reason.length > 12 && idea.searchQuery.split(' ').length >= 3)).toBe(true);
 });
 
 test('free tier stops at five people unless this phone is unlocked', () => {

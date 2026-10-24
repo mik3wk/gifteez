@@ -109,6 +109,12 @@ const RAW_CATALOG: Array<Pick<CatalogIdea, 'text' | 'tags' | 'occasions'>> = [
 
 const QUERY_STOP = new Set(['a', 'an', 'the', 'and', 'or', 'for', 'to', 'of', 'with', 'from', 'their', 'they', 'them', 'that', 'this', 'you', 'your', 'just', 'plus', 'one', 'into', 'can', 'use']);
 
+function reasonFor(text: string, topic: string): string {
+  const gift = text.replace(/\.$/, '');
+  const lower = gift.charAt(0).toLocaleLowerCase() + gift.slice(1);
+  return `A ${topic} pick they can use: ${lower}.`;
+}
+
 function searchQueryFor(text: string): string {
   const words = text.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(word => word.length > 2 && !QUERY_STOP.has(word));
   const picked = words.slice(0, 6);
@@ -137,6 +143,9 @@ const ADULT_ONLY = new Set([
   'Simple studs, a chain, or a repair of a piece they own',
   'A reservation at a place they have mentioned',
   'A meal out, just the two of you',
+  'A candle and a soft throw for the couch',
+  'A candle, a game, and something sweet for the first night',
+  'A nice bottle of olive oil, honey, or hot sauce',
 ]);
 
 const CHILD_ONLY = new Set([
@@ -154,7 +163,7 @@ export const CATALOG: CatalogIdea[] = RAW_CATALOG.map(item => {
     ...item,
     priceMin,
     priceMax,
-    reason: `A practical ${topic} gift they can enjoy more than once.`,
+    reason: reasonFor(item.text, topic),
     searchQuery: searchQueryFor(item.text),
     ...(audience ? { audience } : {}),
   };
