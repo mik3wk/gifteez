@@ -213,11 +213,13 @@ export function CircleFairnessCard({
     ? undefined
     : t('fairness.behindSeal', { name: behind.name, amount: money(behind.behindCents) });
   const head = (
-    <View style={styles.fairHead}>
-      <Icon name="scale" color={colors.teal} size={22} />
-      <View style={styles.fairTitle}>
-        <Text maxFontSizeMultiplier={typeScale.heading} style={[type.heading, { color: colors.text, fontSize: 22 }]}>{t('fairness.cardTitle')}</Text>
-        <Text maxFontSizeMultiplier={typeScale.caption} numberOfLines={1} style={[type.caption, { color: colors.muted }]}>{section.name}</Text>
+    <View style={styles.fairHeadBlock}>
+      <View style={styles.fairHead}>
+        <Icon name="scale" color={colors.sunshine} size={28} />
+        <View style={styles.fairTitle}>
+          <Text maxFontSizeMultiplier={typeScale.heading} style={[type.heading, { color: colors.text, fontSize: 22 }]}>{t('fairness.cardTitle')}</Text>
+          <Text maxFontSizeMultiplier={typeScale.caption} numberOfLines={1} style={[type.caption, { color: colors.muted }]}>{section.name}</Text>
+        </View>
       </View>
       {section.status === 'empty' ? null : <SealPill state={balanced ? 'balanced' : 'purchased'} label={sealLabel} />}
     </View>
@@ -231,7 +233,7 @@ export function CircleFairnessCard({
         <View style={styles.memberBar}>
           <BudgetBar spentCents={member.yearSpentCents} budgetCents={barBudget} fill={fills[index % fills.length]} />
         </View>
-        <Text maxFontSizeMultiplier={typeScale.caption} style={[styles.memberAmount, { color: colors.text }]}>{amount}</Text>
+        <Text numberOfLines={1} maxFontSizeMultiplier={typeScale.caption} style={[styles.memberAmount, { color: colors.text }]}>{amount}</Text>
       </View>
     );
   });
@@ -251,7 +253,7 @@ export function CircleFairnessCard({
       ) : body}
       {openIdeas ? (
         <Pressable accessibilityRole="button" accessibilityLabel={footer} onPress={openIdeas}>
-          <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.text }]}>{footer}</Text>
+          <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.pink }]}>{footer}</Text>
         </Pressable>
       ) : (
         <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.text }]}>{footer}</Text>
@@ -423,13 +425,14 @@ const styles = StyleSheet.create({
   copy: { flex: 1, gap: space.xxs },
   track: { height: 10, borderRadius: 999, overflow: 'hidden' },
   bar: { height: '100%' },
+  fairHeadBlock: { gap: space.xs },
   fairHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   fairTitle: { flex: 1, gap: 2 },
   fairBody: { gap: space.sm },
   memberLine: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   memberName: { width: 88, fontSize: 15, lineHeight: 20 },
   memberBar: { flex: 1 },
-  memberAmount: { fontSize: 13, lineHeight: 16, textAlign: 'right' },
+  memberAmount: { width: 96, fontSize: 13, lineHeight: 16, textAlign: 'right' },
   fairRow: { gap: space.xxs },
   fairName: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
 });

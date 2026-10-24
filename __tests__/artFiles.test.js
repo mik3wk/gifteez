@@ -56,6 +56,8 @@ test('every emblem, empty state, and celebration has a 1x, 2x, and 3x sticker', 
   ['ribbon-banner-slice', 'ribbon-banner-slice-dark', 'ribbon-banner-center', 'ribbon-banner-center-dark'].forEach(name => {
     expectScales(path.join(art, 'banner'), name);
   });
+  const tag = path.join(__dirname, '../src/assets/tag');
+  ['tag-bow', 'tag-bow-dark', 'tag-string', 'tag-string-dark'].forEach(name => expectScales(tag, name));
 });
 
 test('the iOS marketing icon is a square RGB PNG without alpha', async () => {

@@ -13,7 +13,7 @@ import { deviceLocale, formatDate, formatLongDate, formatMoney, formatWeekday, t
 import { useGifteez } from '../state/GifteezContext';
 import { space } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
-import { bowSource, RibbonBanner } from '../ui/art';
+import { RibbonBanner, tagBowSource, tagStringSource } from '../ui/art';
 import { Icon } from '../ui/icons';
 import { BudgetBar, CircleFairnessCard, ListRow, MonogramAvatar, RowCard, SealPill } from '../ui/stationery';
 import { Body, Button, Caption, Card, EmptyState, IconButton, Screen, Sheet } from '../ui/ui';
@@ -114,7 +114,7 @@ export function HomeScreen() {
           </RowCard>
           {upcoming.length > 5 ? (
             <Pressable accessibilityRole="button" accessibilityLabel={t('people.seeAll')} onPress={() => navigation.navigate('People')}>
-              <Caption tone="text">{t('people.seeAll')}</Caption>
+              <AddLink>{t('people.seeAll')}</AddLink>
             </Pressable>
           ) : null}
         </View>
@@ -211,40 +211,56 @@ function Hero({
     ? t('people.spent', { used: money(spent) })
     : t('people.budgeted', { used: money(spent), budget: money(item.person.budgetCents) });
   return (
-    <View style={[styles.hero, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.card }]}>
-      <Image accessible={false} source={bowSource(scheme)} resizeMode="contain" style={styles.heroBow} />
-      <Text
-        maxFontSizeMultiplier={typeScale.caption}
-        style={[type.caption, styles.kicker, { color: colors.pink }]}>
-        {t('people.comingUp')}
-      </Text>
-      <View style={styles.heroRow}>
-        <MonogramAvatar name={item.person.name} personId={item.person.id} size={56} />
-        <View style={styles.heroCopy}>
-          <Text
-            numberOfLines={2}
-            maxFontSizeMultiplier={typeScale.display}
-            style={[type.display, styles.heroTitle, { color: colors.text }]}>
-            {t('people.nextTitle', { name: item.person.name, occasion: occasionLabel(item.occasion) })}
-          </Text>
-          <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.muted, fontSize: 15 }]}>
-            {`${formatWeekday(item.date)}, ${dateLabel} · ${when}`}
-          </Text>
+    <View style={styles.heroWrap}>
+      <View style={[styles.hero, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.card }]}>
+        <Text
+          maxFontSizeMultiplier={typeScale.caption}
+          style={[type.caption, styles.kicker, { color: colors.muted }]}>
+          {t('people.comingUp')}
+        </Text>
+        <View style={styles.heroRow}>
+          <MonogramAvatar name={item.person.name} personId={item.person.id} size={56} />
+          <View style={styles.heroCopy}>
+            <Text
+              numberOfLines={2}
+              maxFontSizeMultiplier={typeScale.display}
+              style={[type.display, styles.heroTitle, { color: colors.text }]}>
+              {t('people.nextTitle', { name: item.person.name, occasion: occasionLabel(item.occasion) })}
+            </Text>
+            <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.muted, fontSize: 15 }]}>
+              {`${formatWeekday(item.date)}, ${dateLabel} · ${when}`}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.heroSeal}>
+          <SealPill state={rowSeal(item, snapshot.states, snapshot.gifts, today)} />
+        </View>
+        <View style={styles.heroFoot}>
+          <View style={styles.heroBudget}>
+            <BudgetBar spentCents={spent} budgetCents={item.person.budgetCents ?? null} caption={budget} />
+          </View>
+          <Button
+            compact
+            serif
+            label={t('people.planGift')}
+            onPress={() => onOpen('Person', { personId: item.person.id, section: 'ideas' })}
+          />
         </View>
       </View>
-      <View style={styles.heroSeal}>
-        <SealPill state={rowSeal(item, snapshot.states, snapshot.gifts, today)} />
-      </View>
-      <View style={styles.heroFoot}>
-        <View style={styles.heroBudget}>
-          <BudgetBar spentCents={spent} budgetCents={item.person.budgetCents ?? null} caption={budget} />
-        </View>
-        <Button
-          compact
-          label={t('people.planGift')}
-          onPress={() => onOpen('Person', { personId: item.person.id, section: 'ideas' })}
-        />
-      </View>
+      <Image
+        accessible={false}
+        pointerEvents="none"
+        source={tagStringSource(scheme)}
+        resizeMode="contain"
+        style={styles.heroString}
+      />
+      <Image
+        accessible={false}
+        pointerEvents="none"
+        source={tagBowSource(scheme)}
+        resizeMode="contain"
+        style={styles.heroBow}
+      />
     </View>
   );
 }
@@ -327,13 +343,15 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   headerCopy: { flex: 1, gap: 2 },
+  heroWrap: { overflow: 'visible', marginTop: space.xs },
   hero: { borderWidth: 1, padding: space.md, paddingTop: space.sm, gap: space.sm, overflow: 'visible' },
-  heroBow: { position: 'absolute', top: -8, right: 8, width: 56, height: 56, zIndex: 1 },
-  kicker: { fontSize: 12, fontWeight: '600', letterSpacing: 1.4, textTransform: 'uppercase', marginRight: 64 },
-  heroRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingRight: 108 },
+  heroBow: { position: 'absolute', top: 2, right: 4, width: 72, height: 56 },
+  heroString: { position: 'absolute', left: -20, top: -20, width: 64, height: 64 },
+  kicker: { fontSize: 12, fontWeight: '600', letterSpacing: 1.4, textTransform: 'uppercase', marginLeft: 14 },
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   heroCopy: { flex: 1, gap: 2 },
   heroTitle: { fontSize: 28, lineHeight: 32 },
-  heroSeal: { position: 'absolute', top: 58, right: space.sm },
+  heroSeal: { alignItems: 'flex-end', minHeight: 32 },
   heroFoot: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   heroBudget: { flex: 1 },
   calendar: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', minHeight: 44 },

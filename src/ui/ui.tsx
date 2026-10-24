@@ -130,7 +130,7 @@ export function Screen({
         <View accessibilityRole="header" style={[styles.pinned, { paddingTop: topPad }]}>{pinned}</View>
       ) : null}
       <ScrollView
-        style={styles.screen}
+        style={[styles.screen, { overflow: 'visible' }]}
         contentContainerStyle={[
           styles.content,
           centered ? styles.centered : null,
@@ -377,6 +377,7 @@ export function Button({
   busy,
   flex,
   compact,
+  serif,
   icon,
   accessibilityLabel,
   hint,
@@ -388,6 +389,8 @@ export function Button({
   busy?: boolean;
   flex?: boolean;
   compact?: boolean;
+  /** Serif label, used for the home hero action. */
+  serif?: boolean;
   icon?: IconName;
   accessibilityLabel?: string;
   hint?: string;
@@ -454,7 +457,15 @@ export function Button({
           <View style={styles.buttonInner}>
             <View style={styles.buttonRow}>
               {working ? <ActivityIndicator color={text} size="small" /> : icon ? <Icon name={icon} color={text} size={18} /> : null}
-              <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: text, textAlign: 'center' }]}>{label}</Text>
+              <Text
+                maxFontSizeMultiplier={typeScale.button}
+                style={[
+                  type.button,
+                  serif ? { fontFamily: type.display.fontFamily, fontWeight: '400' } : null,
+                  { color: text, textAlign: 'center' },
+                ]}>
+                {label}
+              </Text>
             </View>
           </View>
         </StickerBox>
@@ -1444,8 +1455,8 @@ const styles = StyleSheet.create({
   statusBar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 4 },
   pinned: { paddingHorizontal: space.md, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center', gap: space.sm },
   modalFill: { flex: 1, justifyContent: 'center', padding: space.lg },
-  content: { paddingHorizontal: space.md, flexGrow: 1, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
-  column: { gap: space.sm },
+  content: { paddingHorizontal: space.md, flexGrow: 1, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center', overflow: 'visible' },
+  column: { gap: space.sm, overflow: 'visible' },
   centered: { justifyContent: 'center' },
   footer: { paddingHorizontal: space.md, paddingTop: space.xs, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
   stack: { gap: space.sm },

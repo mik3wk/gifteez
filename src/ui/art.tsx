@@ -113,6 +113,24 @@ export function bowSource(scheme: Scheme): number {
   return paired(RIBBON.bow, scheme);
 }
 
+const TAG_BOW = {
+  light: require('../assets/tag/tag-bow.png'),
+  dark: require('../assets/tag/tag-bow-dark.png'),
+};
+
+const TAG_STRING = {
+  light: require('../assets/tag/tag-string.png'),
+  dark: require('../assets/tag/tag-string-dark.png'),
+};
+
+export function tagBowSource(scheme: Scheme): number {
+  return paired(TAG_BOW, scheme);
+}
+
+export function tagStringSource(scheme: Scheme): number {
+  return paired(TAG_STRING, scheme);
+}
+
 export function dividerSource(scheme: Scheme): number {
   return paired(RIBBON.divider, scheme);
 }
