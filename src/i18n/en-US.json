@@ -426,6 +426,7 @@
     "within": "Everyone is within {amount}.",
     "withinNice": "Everyone is within {amount}. Nicely done.",
     "matchedNice": "Everyone matches. Nicely done.",
+    "nothingBought": "Nothing bought yet. You'll see how everyone compares once you log a gift.",
     "behindLead": "{name} is {amount} behind.",
     "wantIdeas": "Want ideas?",
     "behindIdeas": "{name} is {amount} behind. Want ideas?",

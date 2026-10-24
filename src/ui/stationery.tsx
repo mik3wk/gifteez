@@ -208,17 +208,20 @@ export function CircleFairnessCard({
   const behindLead = section.status === 'behind' && behind
     ? t('fairness.behindLead', { name: behind.name, amount: money(behind.behindCents) })
     : '';
+  const nothingBought = section.members.length > 0 && section.members.every(member => member.yearSpentCents <= 0);
   const footer = section.status === 'empty'
     ? t('fairness.emptyCircle')
-    : behindLead
-      ? `${behindLead} ${t('fairness.wantIdeas')}`
-      : spread === 0
-        ? t('fairness.matchedNice')
-        : t('fairness.withinNice', { amount: money(spread) });
+    : nothingBought
+      ? t('fairness.nothingBought')
+      : behindLead
+        ? `${behindLead} ${t('fairness.wantIdeas')}`
+        : spread === 0
+          ? t('fairness.matchedNice')
+          : t('fairness.withinNice', { amount: money(spread) });
   const sealLabel = balanced || !behind
     ? undefined
     : t('fairness.behindSeal', { name: behind.name, amount: money(behind.behindCents) });
-  const seal = section.status === 'empty' ? null : <SealPill state={balanced ? 'balanced' : 'purchased'} label={sealLabel} />;
+  const seal = section.status === 'empty' || nothingBought ? null : <SealPill state={balanced ? 'balanced' : 'purchased'} label={sealLabel} />;
   const head = sealBeside ? (
     <View style={styles.fairHeadWrap}>
       <Icon name="scale" color={colors.sunshine} size={28} />
@@ -364,11 +367,14 @@ export function FairnessCard({
 }) {
   const { colors, type, typeScale, radius } = useTheme();
   const view = fairnessView(rows);
+  const nothingBought = view.bars.length > 0 && view.spentCents <= 0;
   const summary = view.bars.length === 0
     ? t('fairness.empty')
-    : view.balanced
-      ? t('fairness.even')
-      : t('fairness.within', { amount: money(view.spread) });
+    : nothingBought
+      ? t('fairness.nothingBought')
+      : view.balanced
+        ? t('fairness.even')
+        : t('fairness.within', { amount: money(view.spread) });
   const overall = view.budgetCents == null
     ? t('fairness.overallOpen', { used: money(view.spentCents) })
     : t('fairness.overall', { used: money(view.spentCents), budget: money(view.budgetCents) });
@@ -377,7 +383,7 @@ export function FairnessCard({
       <View style={styles.fairHead}>
         <Icon name="scale" color={colors.teal} />
         <Text maxFontSizeMultiplier={typeScale.heading} style={[type.heading, { color: colors.text, flex: 1 }]}>{t('fairness.cardTitle')}</Text>
-        {view.balanced ? <WaxSeal state="balanced" /> : null}
+        {view.balanced && !nothingBought ? <WaxSeal state="balanced" /> : null}
       </View>
       <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.text }]}>{summary}</Text>
       {view.bars.length > 0 ? (

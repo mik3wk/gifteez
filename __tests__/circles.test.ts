@@ -55,6 +55,22 @@ test('tolerance is the larger of $10 and 5% of the top spend', () => {
   expect(isEvenSpend(189999, 200000)).toBe(false);
 });
 
+test('a circle with no gifts is even in the numbers and has bought nothing', () => {
+  const snapshot = emptySnapshot(1);
+  snapshot.circles = [{ id: 'kids', name: 'Kids', createdAt: 1 }];
+  snapshot.people = [
+    person('leo', 'Leo', { circleId: 'kids', budgetCents: 20000 }),
+    person('maya', 'Maya', { circleId: 'kids', budgetCents: 20000 }),
+  ];
+  const quiet = circleSections(snapshot, 2026)[0];
+  expect(quiet.status).toBe('even');
+  expect(quiet.members.every(member => member.yearSpentCents === 0)).toBe(true);
+  snapshot.gifts = [gift('leo', 2500)];
+  const spent = circleSections(snapshot, 2026)[0];
+  expect(spent.members.some(member => member.yearSpentCents > 0)).toBe(true);
+  expect(spent.status).toBe('behind');
+});
+
 test('a circle of one person is even and an empty circle stays empty', () => {
   const snapshot = emptySnapshot(1);
   snapshot.circles = [
