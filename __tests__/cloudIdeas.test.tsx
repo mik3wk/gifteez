@@ -102,7 +102,7 @@ test('a rejected cloud ideas callable shows retry and keeps on-device ideas', as
       await ask?.props.onPress();
     });
     const copy = renderer!.root.findAllByType(Text).map(node => node.props.children).flat();
-    expect(copy).toContain("Couldn't get ideas right now. Try again.");
+    expect(copy).toContain("Couldn't get ideas right now. The ideas already on this phone are still here. Try again.");
     expect(copy).toContain('Wool socks');
     expect(copy).not.toContain('Cloud ideas are unavailable right now.');
     expect(buttonLabeled(renderer!, 'Try again')).toBeDefined();

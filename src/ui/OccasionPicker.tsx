@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { isRealMonthDay } from '../domain/logic';
 import {
   nextOccasionDate,
@@ -14,12 +14,13 @@ import type { Occasion } from '../domain/types';
 import { formatDate, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { MonthDayField } from './DateField';
-import { Body, Button, Chip, Cluster, Field, Heading, Select, Stack, Toggle } from './ui';
+import { Body, Button, Caption, Chip, Cluster, Field, Heading, Select, Stack, Toggle, useSheetFooter } from './ui';
 
 const GROUPS: OccasionPreset['group'][] = ['holiday', 'celebration', 'life'];
 
 export function OccasionPicker({ personId, onAdded }: { personId: string; onAdded?: (occasionId?: string) => void }) {
-  const { addOccasion } = useGifteez();
+  const { addOccasion, snapshot } = useGifteez();
+  const setFooter = useSheetFooter();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState('');
@@ -31,6 +32,8 @@ export function OccasionPicker({ personId, onAdded }: { personId: string; onAdde
   const [everyYear, setEveryYear] = useState(true);
   const [dateError, setDateError] = useState('');
   const [nameError, setNameError] = useState('');
+  const [attempted, setAttempted] = useState(false);
+  const [also, setAlso] = useState<string[]>([]);
 
   const q = query.trim().toLowerCase();
   const picked = selected !== '';
@@ -48,6 +51,30 @@ export function OccasionPicker({ personId, onAdded }: { personId: string; onAdde
     today: new Date(),
   });
   const preview = previewLabel(planned, selected, personId);
+  const others = snapshot.people.filter(person => !person.deleted && person.id !== personId);
+  const holiday = preset?.group === 'holiday';
+  const occasionName = selected ? occasionLabel({ type: selected }) : '';
+  const submitRef = useRef<() => void>(() => undefined);
+  submitRef.current = () => {
+    void submit();
+  };
+  const buttonLabel = also.length > 0 && occasionName
+    ? t('person.addForEveryone', { occasion: occasionName })
+    : t('person.addOccasion');
+  const showHint = attempted && !picked;
+
+  useLayoutEffect(() => {
+    if (!setFooter) {
+      return undefined;
+    }
+    setFooter(
+      <Stack>
+        {showHint ? <Caption tone="danger">{t('person.pickOccasionFirst')}</Caption> : null}
+        <Button label={buttonLabel} onPress={() => submitRef.current()} />
+      </Stack>,
+    );
+    return () => setFooter(null);
+  }, [buttonLabel, setFooter, showHint]);
 
   function choose(id: string) {
     setSelected(id);
@@ -60,6 +87,49 @@ export function OccasionPicker({ personId, onAdded }: { personId: string; onAdde
     setDay(String(opening.day));
     setYear('');
     setKnowYear(false);
+    setAlso([]);
+    setAttempted(false);
+  }
+
+  async function submit() {
+    setAttempted(true);
+    const nameMissing = selected === 'custom' && !customName.trim();
+    const monthNum = Number(month);
+    const dayNum = Number(day);
+    const dateMissing = needsDate && !isRealMonthDay(monthNum, dayNum);
+    const yearNum = Number(year);
+    const yearMissing = needsDate && knowYear && !(yearNum > 0);
+    setNameError(nameMissing ? t('person.nameNeeded') : '');
+    setDateError(dateMissing ? t('errors.date') : yearMissing ? t('person.yearMissing') : '');
+    if (!picked || nameMissing || dateMissing || yearMissing) {
+      return;
+    }
+    const id = await addOccasion(
+      personId,
+      selected,
+      needsDate ? monthNum : undefined,
+      needsDate ? dayNum : undefined,
+      needsDate && knowYear && yearNum > 0 ? yearNum : undefined,
+      {
+        label: selected === 'custom' ? customName.trim() : undefined,
+        recurs: asksRecurrence ? everyYear : true,
+      },
+    );
+    if (holiday) {
+      for (const otherId of also) {
+        await addOccasion(
+          otherId,
+          selected,
+          needsDate ? monthNum : undefined,
+          needsDate ? dayNum : undefined,
+          needsDate && knowYear && yearNum > 0 ? yearNum : undefined,
+          { recurs: true },
+        );
+      }
+    }
+    if (id) {
+      onAdded?.(id);
+    }
   }
 
   return (
@@ -152,38 +222,32 @@ export function OccasionPicker({ personId, onAdded }: { personId: string; onAdde
       ) : null}
       {preset?.note ? <Body>{t(preset.note)}</Body> : null}
       {!needsDate && preview ? <Body>{preview}</Body> : null}
-      <Button
-        label={t('person.addOccasion')}
-        disabled={!picked}
-        hint={t('person.pickOccasionFirst')}
-        onPress={async () => {
-          const nameMissing = selected === 'custom' && !customName.trim();
-          const monthNum = Number(month);
-          const dayNum = Number(day);
-          const dateMissing = needsDate && !isRealMonthDay(monthNum, dayNum);
-          const yearNum = Number(year);
-          const yearMissing = needsDate && knowYear && !(yearNum > 0);
-          setNameError(nameMissing ? t('person.nameNeeded') : '');
-          setDateError(dateMissing ? t('errors.date') : yearMissing ? t('person.yearMissing') : '');
-          if (!picked || nameMissing || dateMissing || yearMissing) {
-            return;
-          }
-          const id = await addOccasion(
-            personId,
-            selected,
-            needsDate ? monthNum : undefined,
-            needsDate ? dayNum : undefined,
-            needsDate && knowYear && yearNum > 0 ? yearNum : undefined,
-            {
-              label: selected === 'custom' ? customName.trim() : undefined,
-              recurs: asksRecurrence ? everyYear : true,
-            },
-          );
-          if (id) {
-            onAdded?.(id);
-          }
-        }}
-      />
+      {holiday && others.length > 0 ? (
+        <Stack>
+          <Body>{t('person.addForEveryone', { occasion: occasionName })}</Body>
+          <Cluster>
+            {others.map(person => {
+              const selectedPerson = also.includes(person.id);
+              return (
+                <Chip
+                  key={person.id}
+                  label={person.name}
+                  selected={selectedPerson}
+                  onPress={() => setAlso(current => (
+                    selectedPerson ? current.filter(id => id !== person.id) : [...current, person.id]
+                  ))}
+                />
+              );
+            })}
+          </Cluster>
+        </Stack>
+      ) : null}
+      {setFooter ? null : (
+        <Stack>
+          {showHint ? <Caption tone="danger">{t('person.pickOccasionFirst')}</Caption> : null}
+          <Button label={buttonLabel} onPress={() => submitRef.current()} />
+        </Stack>
+      )}
     </Stack>
   );
 }

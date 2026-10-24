@@ -128,7 +128,7 @@ export function ShimmerSlot({ label, busy }: { label: string; busy: boolean }) {
 }
 
 export function Shimmer({ label }: { label: string }) {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const reduce = useReduceMotion();
   const pulse = useSharedValue(reduce ? 0.7 : 0.45);
   useEffect(() => {
@@ -151,7 +151,7 @@ export function Shimmer({ label }: { label: string }) {
           key={index}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
-          style={[styles.bar, width, { backgroundColor: colors.surfaceAlt, borderColor: colors.outline }, reduce ? styles.steady : style]}
+          style={[styles.bar, width, { backgroundColor: scheme === 'dark' ? '#6E625A' : colors.surfaceAlt, borderColor: colors.outline }, reduce ? styles.steady : style]}
         />
       ))}
     </View>

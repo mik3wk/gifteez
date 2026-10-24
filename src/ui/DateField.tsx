@@ -10,8 +10,9 @@ import { Body, Caption, Toggle } from './ui';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const WHEEL_ROW = touch.minTarget;
-const WHEEL_ROWS = 3;
+const WHEEL_ROWS = 5;
 const WHEEL_HEIGHT = WHEEL_ROW * WHEEL_ROWS;
+const WHEEL_PAD = WHEEL_ROW * 2;
 
 export function MonthDayField({
   label,
@@ -165,7 +166,7 @@ function Wheel({
               <Text
                 numberOfLines={1}
                 maxFontSizeMultiplier={typeScale.body}
-                style={[selected ? type.heading : type.body, styles.wheelLabel, { color: selected ? colors.onPink : colors.text }]}>
+                style={[selected ? type.heading : type.body, styles.wheelLabel, { color: selected ? colors.onPink : colors.text, fontSize: selected ? 22 : 18 }]}>
                 {item.label}
               </Text>
             </Pressable>
@@ -251,7 +252,7 @@ const styles = StyleSheet.create({
   wheels: { flexDirection: 'row', gap: space.xs },
   wheel: { flex: 1, gap: space.xxs },
   wheelList: { height: WHEEL_HEIGHT, overflow: 'hidden' },
-  wheelContent: { paddingVertical: WHEEL_ROW },
+  wheelContent: { paddingVertical: WHEEL_PAD },
   wheelItem: {
     height: WHEEL_ROW,
     overflow: 'hidden',

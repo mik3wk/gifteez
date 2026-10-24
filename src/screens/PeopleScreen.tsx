@@ -1,9 +1,10 @@
-import React, { useLayoutEffect, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
-import { listCurrency, sortPeople, upcomingOccasion, yearSpentCents } from '../domain/logic';
+import { getEnv } from '../config/env';
+import { accountUnlocked, canAddPerson, listCurrency, sortPeople, upcomingOccasion, yearSpentCents } from '../domain/logic';
 import { isOneTimeOccasion, occasionLabel } from '../domain/occasions';
 import { relationshipLabel } from '../domain/relationship';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, t } from '../i18n';
@@ -14,13 +15,27 @@ import { Body, Button, Caption, EmptyState, Field, Heading, Screen, Title } from
 
 export function PeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, resumePersonId, clearResumePerson } = useGifteez();
+  const { snapshot, resumePersonId, clearResumePerson, openPaywall } = useGifteez();
   const [query, setQuery] = useState('');
+  const order = useRef<string[] | null>(null);
+  useFocusEffect(useCallback(() => {
+    order.current = null;
+  }, []));
   const today = new Date();
   const year = today.getFullYear();
   const money = (cents: number) => formatMoney(cents, deviceLocale(), listCurrency(snapshot), true);
   const needle = query.trim().toLowerCase();
-  const people = sortPeople(snapshot.people, snapshot.occasions, today).filter(person => {
+  const sorted = sortPeople(snapshot.people, snapshot.occasions, today);
+  const byId = new Map(sorted.map(person => [person.id, person]));
+  if (!order.current) {
+    order.current = sorted.map(person => person.id);
+  } else {
+    const known = new Set(order.current);
+    const kept = order.current.filter(id => byId.has(id));
+    const added = sorted.map(person => person.id).filter(id => !known.has(id));
+    order.current = [...kept, ...added];
+  }
+  const people = order.current.map(id => byId.get(id)).filter((person): person is NonNullable<typeof person> => Boolean(person)).filter(person => {
     if (!needle) {
       return true;
     }
@@ -39,16 +54,26 @@ export function PeopleScreen() {
     clearResumePerson();
     navigation.navigate('Person', { personId, section: 'ideas' });
   }, [clearResumePerson, navigation, resumePersonId]);
+  const limit = getEnv().freeTierMaxPeople;
+  const used = snapshot.people.filter(person => !person.deleted).length;
+  function addSomeone() {
+    if (!canAddPerson(snapshot, limit)) {
+      openPaywall();
+      return;
+    }
+    navigation.navigate('AddPerson');
+  }
 
   return (
     <Screen tab="people">
       <View style={styles.header}>
         <Title>{t('people.title')}</Title>
-        <Button compact label={t('people.addPerson')} onPress={() => navigation.navigate('AddPerson')} />
+        <Button compact label={t('people.addPerson')} onPress={addSomeone} />
       </View>
+      {accountUnlocked(snapshot) ? null : <Caption>{t('people.freeCount', { used: Math.min(used, limit), limit })}</Caption>}
       <Field label={t('people.search')} value={query} onChangeText={setQuery} returnKeyType="search" />
       {snapshot.people.some(person => !person.deleted) ? null : (
-        <EmptyState kind="people" text={t('people.addFirst')} action={t('people.addPerson')} onAction={() => navigation.navigate('AddPerson')} />
+        <EmptyState kind="people" text={t('people.addFirst')} action={t('people.addPerson')} onAction={addSomeone} />
       )}
       {needle && people.length === 0 && snapshot.people.some(person => !person.deleted) ? (
         <Body>{t('people.noMatch', { query: query.trim() })}</Body>

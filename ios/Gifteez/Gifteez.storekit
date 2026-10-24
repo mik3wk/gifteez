@@ -1,0 +1,45 @@
+{
+  "identifier" : "Gifteez",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "6670000001",
+      "localizations" : [
+        {
+          "description" : "Unlock unlimited people in Gifteez.",
+          "displayName" : "Gifteez Unlock",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "gifteez_unlock",
+      "referenceName" : "Gifteez Unlock",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

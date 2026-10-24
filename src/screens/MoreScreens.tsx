@@ -33,12 +33,12 @@ export function SettingsScreen() {
     importFromCalendar,
     shareBackup,
     pickBackup,
-    previewBackup,
+    storeBusy,
+    error,
     appearance,
     setAppearance,
   } = useGifteez();
   const [pasted, setPasted] = useState('');
-  const [backup, setBackup] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   return (
     <Screen tab="settings">
@@ -49,7 +49,8 @@ export function SettingsScreen() {
         {accountUnlocked(snapshot) ? <Body>{t('settings.unlocked')}</Body> : (
           <>
             <Body>{priceLabel(storeProduct?.displayPrice)}</Body>
-            <Button label={t('settings.unlockAction')} onPress={buy} />
+            {error ? <Caption tone="danger">{error}</Caption> : null}
+            <Button label={t('settings.unlockAction')} busy={storeBusy} onPress={buy} />
             <Button label={t('settings.restore')} tone="secondary" onPress={restorePurchases} />
           </>
         )}
@@ -59,16 +60,6 @@ export function SettingsScreen() {
         <Body>{t('settings.backupHint')}</Body>
         <Button label={t('settings.export')} tone="secondary" onPress={() => { shareBackup().catch(() => undefined); }} />
         <Button label={t('settings.restoreBackup')} tone="secondary" onPress={() => { pickBackup().catch(() => undefined); }} />
-        {__DEV__ ? (
-          <>
-            <Field label={t('settings.backupPaste')} value={backup} onChangeText={setBackup} />
-            <Button
-              label={t('settings.restoreConfirm')}
-              tone="secondary"
-              onPress={() => previewBackup(backup)}
-            />
-          </>
-        ) : null}
         <Body>{t('settings.optional')}</Body>
         <Body>{t('settings.calendarHint')}</Body>
         <Button

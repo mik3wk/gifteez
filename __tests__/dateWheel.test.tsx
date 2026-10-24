@@ -9,6 +9,7 @@ jest.mock('../src/state/GifteezContext', () => {
     useGifteez: () => ({
       colors: BUNDLED_SKINS.base,
       addOccasion: jest.fn(),
+      snapshot: { people: [] },
       notice: null,
       error: null,
     }),

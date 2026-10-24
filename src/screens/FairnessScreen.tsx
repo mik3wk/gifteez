@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
+import { getEnv } from '../config/env';
 import {
   circleSections,
   circleSuggestions,
@@ -11,7 +12,7 @@ import {
   uncircledPeople,
   type CircleSuggestion,
 } from '../domain/circles';
-import { listCurrency, yearSpentCents } from '../domain/logic';
+import { canAddPerson, listCurrency, yearSpentCents } from '../domain/logic';
 import { relationshipCircleName } from '../domain/relationship';
 import { deviceLocale, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
@@ -43,6 +44,7 @@ export function FairnessScreen() {
     deleteCircle,
     setPersonCircle,
     acceptCircleSuggestion,
+    openPaywall,
   } = useGifteez();
   const today = new Date();
   const year = today.getFullYear();
@@ -97,7 +99,13 @@ export function FairnessScreen() {
             kind="fairness"
             text={t('fairness.empty')}
             action={t('fairness.emptyAction')}
-            onAction={() => navigation.navigate('AddPerson')}
+            onAction={() => {
+              if (!canAddPerson(snapshot, getEnv().freeTierMaxPeople)) {
+                openPaywall();
+                return;
+              }
+              navigation.navigate('AddPerson');
+            }}
           />
         ) : (
           <>

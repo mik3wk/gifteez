@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -105,21 +105,21 @@ export function Screen({
   centered,
   tab,
   pinned,
+  tight,
 }: {
   children: React.ReactNode;
   footer?: React.ReactNode;
   centered?: boolean;
   tab?: TabId;
   pinned?: React.ReactNode;
+  tight?: boolean;
 }) {
   const { colors } = useTheme();
-  const { notice, error } = useGifteez();
   const insets = useSafeAreaInsets();
   const headerHeight = useContext(HeaderHeightContext);
   const bar = tab ? <TabBar active={tab} /> : footer;
   const coverStatus = Boolean(tab) || !headerHeight;
-  const topPad = (coverStatus ? insets.top : 0) + space.sm;
-  const toast = Boolean(notice || error);
+  const topPad = (coverStatus ? insets.top : 0) + (tight ? 0 : space.sm);
   return (
     <KeyboardAvoidingView
       style={[styles.screen, { backgroundColor: colors.background }]}
@@ -127,12 +127,12 @@ export function Screen({
       keyboardVerticalOffset={headerHeight ?? 0}>
       {pinned ? <View style={[styles.pinned, { paddingTop: topPad }]}>{pinned}</View> : null}
       <ScrollView
-        style={[styles.screen, toast ? { marginBottom: layout.toastGap } : null]}
+        style={styles.screen}
         contentContainerStyle={[
           styles.content,
           centered ? styles.centered : null,
           {
-            paddingTop: pinned ? space.sm : topPad,
+            paddingTop: pinned ? (tight ? 0 : space.sm) : topPad,
             paddingBottom: bar ? space.sm : insets.bottom + space.lg,
           },
         ]}
@@ -378,7 +378,7 @@ export function Button({
 }: {
   label: string;
   onPress: () => void | Promise<unknown>;
-  tone?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'danger-quiet' | 'hero';
+  tone?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'danger-quiet' | 'hero' | 'soft';
   disabled?: boolean;
   busy?: boolean;
   flex?: boolean;
@@ -387,7 +387,7 @@ export function Button({
   accessibilityLabel?: string;
   hint?: string;
 }) {
-  const { colors, type, typeScale, radius } = useTheme();
+  const { colors, scheme, type, typeScale, radius } = useTheme();
   const [pending, setPending] = useState(false);
   const working = pending || Boolean(busy);
   const blocked = Boolean(disabled) || working;
@@ -395,9 +395,12 @@ export function Button({
   const danger = tone === 'danger' || tone === 'danger-quiet';
   const ghost = tone === 'ghost';
   const hero = tone === 'hero';
-  const primary = tone === 'primary' || hero;
-  const fill = quiet ? colors.surfaceAlt : primary ? colors.button : colors.surface;
-  const text = quiet ? colors.muted : primary ? colors.onButton : danger ? colors.dangerText : colors.text;
+  const soft = tone === 'soft';
+  const primary = tone === 'primary' || hero || soft;
+  const softFill = scheme === 'dark' ? '#4A2A32' : '#F6E3E6';
+  const softInk = scheme === 'dark' ? '#F2B3BF' : '#8E2F43';
+  const fill = quiet ? colors.surfaceAlt : soft ? softFill : primary ? colors.button : colors.surface;
+  const text = quiet ? colors.muted : soft ? softInk : primary ? colors.onButton : danger ? colors.dangerText : colors.text;
   return (
     <View style={flex ? styles.buttonFlex : compact ? styles.compact : null}>
     <Pressable
@@ -439,10 +442,10 @@ export function Button({
           fill={ghost ? 'transparent' : fill}
           radius={radius.button}
           borderWidth={ghost ? 0 : stroke.control}
-          borderColor={quiet || !primary ? colors.outline : colors.button}
+          borderColor={quiet ? colors.outline : soft ? softFill : primary ? colors.button : colors.outline}
           pressed={pressed && !blocked}
           dashed={quiet && !ghost}
-          shadow={!ghost && !quiet}>
+          shadow={!ghost && !quiet && !soft}>
           <View style={styles.buttonInner}>
             <View style={styles.buttonRow}>
               {working ? <ActivityIndicator color={text} size="small" /> : icon ? <Icon name={icon} color={text} size={18} /> : null}
@@ -613,7 +616,7 @@ export function Notice({
   const closeRef = React.useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
-    const timer = setTimeout(() => closeRef.current(), action ? 5000 : 2500);
+    const timer = setTimeout(() => closeRef.current(), action ? 6000 : 2500);
     return () => clearTimeout(timer);
   }, [action, text]);
   return (
@@ -621,7 +624,7 @@ export function Notice({
       pointerEvents="box-none"
       accessibilityRole={tone === 'danger' ? 'alert' : undefined}
       accessibilityLiveRegion={tone === 'danger' ? 'assertive' : 'polite'}
-      style={[styles.floater, { bottom: insets.bottom + layout.tabBar + space.xs }]}>
+      style={[styles.floater, { top: insets.top + space.xs }]}>
       <View style={styles.floaterCard}>
       <Settle distance={20}>
       <StickerBox fill={colors.surface} radius={radius.card} borderWidth={stroke.card}>
@@ -676,10 +679,12 @@ export function OfflineBanner({ text }: { text: string }) {
 export function Card({
   children,
   variant = 'default',
+  compact,
   style,
 }: {
   children: React.ReactNode;
   variant?: 'default' | 'accent' | 'dashed';
+  compact?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors, radius } = useTheme();
@@ -692,7 +697,7 @@ export function Card({
       dashed={variant === 'dashed'}
       shadow={variant !== 'dashed'}
       style={style}>
-      <View style={styles.pad}>{children}</View>
+      <View style={[styles.pad, compact ? styles.padCompact : null]}>{children}</View>
     </StickerBox>
   );
 }
@@ -1176,6 +1181,13 @@ export function CheckRow({
   );
 }
 
+const SheetFooterContext = React.createContext<((node: React.ReactNode) => void) | null>(null);
+
+/** Pins a control under a sheet's scroll, such as Add occasion. */
+export function useSheetFooter(): ((node: React.ReactNode) => void) | null {
+  return useContext(SheetFooterContext);
+}
+
 export function Sheet({
   visible,
   onClose,
@@ -1225,20 +1237,36 @@ export function Sheet({
     settleConfirm(confirm, value);
     setConfirm(null);
   };
+  const [footer, setFooterState] = useState<React.ReactNode>(null);
+  const setFooter = useCallback((node: React.ReactNode) => {
+    setFooterState(node);
+  }, []);
+  useEffect(() => {
+    if (!visible) {
+      setFooterState(null);
+    }
+  }, [visible]);
   return (
     <Modal visible={visible} animationType={reduce ? 'fade' : 'slide'} presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: Platform.OS === 'ios' ? space.xs : insets.top }]}>
+        <SheetFooterContext.Provider value={setFooter}>
+        <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View
           style={styles.screen}
           accessibilityElementsHidden={confirm != null}
           importantForAccessibility={confirm ? 'no-hide-descendants' : 'auto'}>
           <IconButton label={t('common.close')} name="close" onPress={onClose} />
-          <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={[styles.content, { paddingBottom: footer ? space.md : insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled">
             <Settle distance={10}>
               <View style={styles.column}>{children}</View>
             </Settle>
           </ScrollView>
+          {footer ? (
+            <View style={[styles.footer, { paddingBottom: insets.bottom + space.xs }]}>{footer}</View>
+          ) : null}
         </View>
+        </KeyboardAvoidingView>
+        </SheetFooterContext.Provider>
         {confirm ? (
           <View style={styles.sheetConfirm}>
             <ConfirmDialog
@@ -1266,13 +1294,15 @@ export function priceLabel(displayPrice?: string | null): string {
 }
 
 export function UnlockSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { buy, restorePurchases, storeProduct } = useGifteez();
+  const { buy, restorePurchases, storeProduct, storeBusy, error } = useGifteez();
   return (
     <Sheet visible={visible} onClose={onClose}>
       <Title>{t('settings.keepEveryone')}</Title>
       <Body>{t('settings.keepEveryoneBody', { count: getEnv().freeTierMaxPeople })}</Body>
       <Body>{priceLabel(storeProduct?.displayPrice)}</Body>
-      <Button label={t('settings.unlockAction')} onPress={buy} />
+      {storeBusy ? <ActivityIndicator /> : null}
+      {error ? <Caption tone="danger">{error}</Caption> : null}
+      <Button label={t('settings.unlockAction')} busy={storeBusy} onPress={buy} />
       <Button label={t('settings.restore')} tone="secondary" onPress={restorePurchases} />
       <Button label={t('settings.notNow')} tone="ghost" onPress={onClose} />
     </Sheet>
@@ -1288,9 +1318,12 @@ export function Segment({
   options: Array<{ id: string; label: string }>;
   onChange: (id: string) => void;
 }) {
-  const { colors, type, typeScale } = useTheme();
+  const { colors, scheme, type, typeScale } = useTheme();
+  const track = scheme === 'dark' ? '#2A2320' : '#F1E8DE';
+  const pill = scheme === 'dark' ? '#40362F' : '#FFFDF9';
+  const rose = scheme === 'dark' ? '#F2B3BF' : '#8E2F43';
   return (
-    <View accessibilityRole="tablist" style={[styles.segment, { backgroundColor: colors.surface, borderColor: colors.outline }]}>
+    <View accessibilityRole="tablist" style={[styles.segment, { backgroundColor: track, borderColor: track }]}>
       {options.map(option => {
         const selected = option.id === value;
         return (
@@ -1300,8 +1333,8 @@ export function Segment({
             accessibilityState={{ selected }}
             accessibilityLabel={option.label}
             onPress={() => onChange(option.id)}
-            style={[styles.segmentItem, { backgroundColor: selected ? colors.pink : 'transparent' }]}>
-            <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: selected ? colors.onPink : colors.text }]}>{option.label}</Text>
+            style={[styles.segmentItem, { backgroundColor: selected ? pill : 'transparent' }]}>
+            <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: selected ? rose : colors.text }]}>{option.label}</Text>
           </Pressable>
         );
       })}
@@ -1396,6 +1429,7 @@ const styles = StyleSheet.create({
   ink: { flexShrink: 1 },
   stickerWrap: {},
   pad: { padding: space.md, gap: space.xs },
+  padCompact: { padding: space.sm, gap: space.xxs },
   buttonInner: { minHeight: touch.minTarget, paddingHorizontal: space.md, alignItems: 'center', justifyContent: 'center' },
   buttonRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   buttonFlex: { flexGrow: 1 },
@@ -1475,7 +1509,7 @@ const styles = StyleSheet.create({
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: touch.minTarget },
   box: { width: 28, height: 28, borderWidth: stroke.inner, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   segment: { flexDirection: 'row', borderWidth: stroke.inner, borderRadius: 999, padding: space.xxs, gap: space.xxs },
-  segmentItem: { flex: 1, minHeight: touch.minTarget, borderRadius: 999, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.xxs },
+  segmentItem: { flex: 1, minHeight: 44, borderRadius: 999, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.xxs },
   toggle: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: touch.minTarget },
   sheetConfirm: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 8 },
   scrim: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center', padding: space.lg },

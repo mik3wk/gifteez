@@ -1,15 +1,15 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
 import { amazonSearchUrl } from '../domain/amazon';
 import { INTEREST_TAGS } from '../domain/catalog';
-import { asGiftIdea, ideaCacheId, ideaKey, normalizeIdeaTitle } from '../domain/ideas';
+import { asGiftIdea, ideaCacheId, ideaKey, ideasTooSimilar, normalizeIdeaTitle } from '../domain/ideas';
 import type { GiftIdea } from '../domain/types';
 import { canEditSharedGift } from '../domain/edits';
-import { allTimeSpentCents, daysUntil, isRealMonthDay, listCurrency, occurrenceYear, parseBudget, parseLooseDate, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
+import { allTimeSpentCents, daysUntil, isRealMonthDay, listCurrency, occurrenceYear, parseBirthYear, parseBudget, parseLooseDate, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
 import { dateIsEstimated, isOneTimeOccasion, nextOccasionDate, occasionLabel, occasionNeedsDate, presetFor } from '../domain/occasions';
 import type { Occasion, OccasionState } from '../domain/types';
 import { relationshipLabel, storeRelationship } from '../domain/relationship';
@@ -36,7 +36,6 @@ import {
   EmptyState,
   Field,
   GhostRow,
-  Display,
   Heading,
   IconButton,
   Screen,
@@ -60,10 +59,22 @@ export function AddPersonScreen() {
   const { addPerson, completedPersonId, clearCompletedPerson, cancelPendingAdd } = useGifteez();
   const cancelAdd = useRef(cancelPendingAdd);
   cancelAdd.current = cancelPendingAdd;
+  const allowLeave = useRef(false);
+  const [name, setName] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [relationship, setRelationship] = useState('');
+  const [relationshipError, setRelationshipError] = useState('');
+  const [circleId, setCircleId] = useState('');
+  const [budget, setBudget] = useState('');
+  const [budgetError, setBudgetError] = useState('');
+  const [birthYear, setBirthYear] = useState('');
+  const [birthError, setBirthError] = useState('');
+  const dirty = Boolean(name.trim() || relationship.trim() || circleId || budget.trim() || birthYear.trim());
   useEffect(() => {
     if (!completedPersonId) {
       return;
     }
+    allowLeave.current = true;
     const personId = completedPersonId;
     clearCompletedPerson();
     navigation.replace('Person', { personId });
@@ -71,13 +82,70 @@ export function AddPersonScreen() {
   useEffect(() => () => {
     cancelAdd.current();
   }, []);
-  const [name, setName] = useState('');
-  const [nameError, setNameError] = useState('');
-  const [relationship, setRelationship] = useState('');
-  const [relationshipError, setRelationshipError] = useState('');
-  const [circleId, setCircleId] = useState('');
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', event => {
+      if (allowLeave.current || !dirty) {
+        return;
+      }
+      event.preventDefault();
+      confirmDestructive(
+        t('firstOpen.discardTitle'),
+        t('firstOpen.discardBody'),
+        t('firstOpen.discard'),
+      ).then(ok => {
+        if (!ok) {
+          return;
+        }
+        allowLeave.current = true;
+        navigation.dispatch(event.data.action);
+      }).catch(() => undefined);
+    });
+    return unsubscribe;
+  }, [dirty, navigation]);
   return (
-    <Screen footer={<TabBar active="people" />}>
+    <Screen
+      footer={(
+        <View style={styles.footerStack}>
+          <Button
+            label={t('person.save')}
+            onPress={async () => {
+              if (!name.trim()) {
+                setNameError(t('errors.name'));
+                return;
+              }
+              const cleaned = storeRelationship(relationship);
+              if (cleaned == null) {
+                setRelationshipError(t('relationship.invalid'));
+                return;
+              }
+              if (budget.trim() && parseBudget(budget) == null) {
+                setBudgetError(t('errors.price'));
+                return;
+              }
+              if (birthYear.trim() && parseBirthYear(birthYear) == null) {
+                setBirthError(t('person.birthYearInvalid'));
+                return;
+              }
+              allowLeave.current = true;
+              const id = await addPerson({
+                name,
+                budget,
+                tags: [],
+                relationship: cleaned,
+                birthYear,
+                ...(circleId ? { circleId } : {}),
+              });
+              if (id) {
+                navigation.replace('Person', { personId: id });
+                return;
+              }
+              allowLeave.current = false;
+            }}
+          />
+          <TabBar active="people" />
+        </View>
+      )}
+    >
       <Title>{t('firstOpen.title')}</Title>
       <Body>{t('firstOpen.lead')}</Body>
       <Field
@@ -98,29 +166,26 @@ export function AddPersonScreen() {
         }}
       />
       <CircleField value={circleId} onChange={setCircleId} />
-      <Button
-        label={t('firstOpen.start')}
-        onPress={async () => {
-          if (!name.trim()) {
-            setNameError(t('errors.name'));
-            return;
-          }
-          const cleaned = storeRelationship(relationship);
-          if (cleaned == null) {
-            setRelationshipError(t('relationship.invalid'));
-            return;
-          }
-          const id = await addPerson({
-            name,
-            budget: '',
-            tags: [],
-            relationship: cleaned,
-            ...(circleId ? { circleId } : {}),
-          });
-          if (id) {
-            navigation.replace('Person', { personId: id });
-          }
+      <Field
+        label={t('person.budget')}
+        value={budget}
+        error={budgetError}
+        onChangeText={value => {
+          setBudget(value);
+          setBudgetError('');
         }}
+        keyboardType="decimal-pad"
+      />
+      <Caption>{t('person.perYear')}</Caption>
+      <Field
+        label={t('person.birthYear')}
+        value={birthYear}
+        error={birthError}
+        onChangeText={value => {
+          setBirthYear(value);
+          setBirthError('');
+        }}
+        keyboardType="number-pad"
       />
     </Screen>
   );
@@ -129,6 +194,7 @@ export function AddPersonScreen() {
 export function PersonScreen() {
   const route = useRoute<RouteProp<RootStack, 'Person'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
+  const { colors, type } = useTheme();
   const {
     snapshot,
     focusPerson,
@@ -149,6 +215,8 @@ export function PersonScreen() {
   const person = snapshot.people.find(item => item.id === route.params.personId && !item.deleted);
   const today = new Date();
   const [budget, setBudget] = useState(person?.budgetCents == null ? '' : String(person.budgetCents / 100));
+  const [birthYear, setBirthYear] = useState(person?.birthYear ? String(person.birthYear) : '');
+  const [birthError, setBirthError] = useState('');
   const [name, setName] = useState(person?.name ?? '');
   const [relationship, setRelationship] = useState(person?.relationship ?? '');
   const [notes, setNotes] = useState(person?.notes ?? '');
@@ -178,6 +246,7 @@ export function PersonScreen() {
   const [editCircleId, setEditCircleId] = useState(person?.circleId ?? '');
   const [addingOccasion, setAddingOccasion] = useState(false);
   const [tuning, setTuning] = useState(false);
+  const [tuneTags, setTuneTags] = useState<string[]>(person?.tags ?? []);
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudError, setCloudError] = useState(false);
   const [menu, setMenu] = useState<Menu | null>(null);
@@ -209,7 +278,7 @@ export function PersonScreen() {
   }, [route.params.personId]);
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: '', headerRight: undefined });
+    navigation.setOptions({ headerShown: false, title: '' });
   }, [navigation]);
 
   if (!person) {
@@ -235,7 +304,10 @@ export function PersonScreen() {
   const cloudList = cloud?.ideas ?? [];
   const hiddenIdeas = new Set(snapshot.feedback.filter(item => item.personId === person.id && item.vote === 'down').map(item => item.idea));
   const visibleDevice = ideas.filter(idea => !hiddenIdeas.has(ideaKey(idea)));
-  const visibleCloud = cloudList.filter(idea => !hiddenIdeas.has(ideaKey(idea)));
+  const visibleCloud = cloudList.filter(idea => (
+    !hiddenIdeas.has(ideaKey(idea))
+    && !visibleDevice.some(other => normalizeIdeaTitle(other.title) === normalizeIdeaTitle(asGiftIdea(idea).title) || ideasTooSimilar(asGiftIdea(idea).title, asGiftIdea(other).title))
+  ));
   const shownIdeas = showAllIdeas ? visibleDevice : visibleDevice.slice(0, 3);
   const hiddenIdeaCount = Math.max(0, visibleDevice.length - shownIdeas.length);
   const artName = next ? occasionLook(next.occasion.type).art : 'gift';
@@ -246,11 +318,6 @@ export function PersonScreen() {
     : undefined;
   const occasions = snapshot.occasions.filter(item => item.personId === person.id && !item.deleted);
   const menuOccasion = menu?.kind === 'occasion' ? occasions.find(item => item.id === menu.id) : undefined;
-  const budgetLabel = hidden
-    ? ''
-    : person.budgetCents == null
-      ? t('people.spent', { used: money(spent) })
-      : t('people.budgetYear', { used: money(spent), budget: money(person.budgetCents) });
 
   function savedFor(idea: string): boolean {
     return Boolean(next && nextState?.savedIdea === idea);
@@ -332,25 +399,50 @@ export function PersonScreen() {
     return saveIdeaFor(next.occasion.id, idea);
   }
 
+  function openDetails() {
+    if (!person) {
+      return;
+    }
+    setEditCircleId(person.circleId ?? '');
+    setBirthYear(person.birthYear ? String(person.birthYear) : '');
+    setBirthError('');
+    setEditingDetails(true);
+  }
+
   return (
     <Screen
+      tab="people"
+      tight
       pinned={(
-        <>
+        <View style={styles.pinnedTight}>
           {hidden ? <Body>{t('person.hiddenRecipient')}</Body> : null}
           {locked ? <Body>{t('person.readOnly')}</Body> : null}
           {person.imported ? <Caption>{t('person.openedImported')}</Caption> : null}
-          <View style={styles.personHead}>
-            <View style={styles.personMenu}>
-              <IconButton label={t('person.editDetails')} name="more" filled onPress={() => { setEditCircleId(person.circleId ?? ''); setEditingDetails(true); }} />
-            </View>
-            <MonogramAvatar name={person.name} personId={person.id} size={72} crest />
-            <Display lines={2}>{person.name}</Display>
-            <Pressable accessibilityRole="button" onPress={() => setPickingCircle(true)}>
-              <Caption tone="text">{personMeta(person, snapshot.circles)}</Caption>
-            </Pressable>
-            {budgetLabel ? <Caption tone="text">{budgetLabel}</Caption> : null}
-            {moment ? <Moment kind="wrap" name="purchase" onDone={() => setMoment(null)} /> : null}
+          <View style={styles.navRow}>
+            <IconButton label={t('common.back')} name="chevronLeft" onPress={() => navigation.goBack()} />
+            <IconButton label={t('person.editDetails')} name="more" filled onPress={openDetails} />
           </View>
+          <View style={styles.personRow}>
+            <MonogramAvatar name={person.name} personId={person.id} size={36} crest />
+            <View style={styles.personCopy}>
+              <Text numberOfLines={2} style={[styles.personName, { color: colors.text, fontFamily: type.display.fontFamily }]}>{person.name}</Text>
+              <Pressable accessibilityRole="button" onPress={() => setPickingCircle(true)}>
+                <Caption tone="text">{personMeta(person, snapshot.circles)}</Caption>
+              </Pressable>
+              <BudgetLine
+                spent={spent}
+                budgetCents={person.budgetCents}
+                money={money}
+                onSetBudget={openDetails}
+              />
+            </View>
+            {next ? (
+              <Text style={[styles.nextOccasion, { color: colors.muted }]}>
+                {`${occasionLabel(next.occasion)} · ${formatDate(next.date)}`}
+              </Text>
+            ) : null}
+          </View>
+          {moment ? <Moment kind="wrap" name="purchase" onDone={() => setMoment(null)} /> : null}
           <Segment
             value={section}
             onChange={id => setSection(id as 'ideas' | 'occasions' | 'history')}
@@ -360,7 +452,7 @@ export function PersonScreen() {
               { id: 'history', label: t('person.history') },
             ]}
           />
-        </>
+        </View>
       )}
     >
       {section === 'ideas' && !hidden && !locked ? (
@@ -399,8 +491,12 @@ export function PersonScreen() {
             {showAllIdeas && ideas.length > 3 ? (
               <Button label={t('person.showFewer')} tone="ghost" onPress={() => setShowAllIdeas(false)} />
             ) : null}
-            <Button label={t('person.tuneIdeas')} tone="ghost" onPress={() => setTuning(true)} />
+            <Button label={t('person.tuneIdeas')} tone="ghost" onPress={() => { setTuneTags(interestTags); setTuning(true); }} />
           </Cluster>
+          {cloudError ? <Body>{t('person.ideasError')}</Body> : null}
+          {cloudRemaining[person.id] != null ? (
+            <Caption tone="text">{t('person.refreshesLeft', { count: cloudRemaining[person.id], name: person.name })}</Caption>
+          ) : null}
           <Caption tone="text">{t('shop.disclosure')}</Caption>
         </>
       ) : null}
@@ -422,7 +518,7 @@ export function PersonScreen() {
       ) : null}
       {section === 'history' && !hidden ? (
         <>
-          {showSpend ? <SpendBreakdown personId={person.id} budgetCents={person.budgetCents} money={money} /> : null}
+          {showSpend ? <SpendBreakdown personId={person.id} budgetCents={person.budgetCents} money={money} onSetBudget={openDetails} /> : null}
           {history.length === 0 ? <EmptyState kind="ideas" text={t('person.historyEmpty')} /> : null}
           {locked ? null : (
             <Button
@@ -475,14 +571,24 @@ export function PersonScreen() {
         <Heading>{t('person.tuneIdeas')}</Heading>
         {tuning && buyAsk ? <BuyPrompt idea={buyAsk} onYes={() => acceptBuy(buyAsk)} onNo={() => setBuyAsk(null)} /> : null}
         <Body>{t('person.tagsHint')}</Body>
-        <TagPicker
-          tags={interestTags}
-          onChange={tags => {
-            setInterestTags(tags);
-            return savePerson(person.id, { tags }).then(() => refreshIdeas(person.id));
+        <TagPicker tags={tuneTags} onChange={setTuneTags} />
+        <Button
+          label={t('person.save')}
+          onPress={async () => {
+            setInterestTags(tuneTags);
+            await savePerson(person.id, { tags: tuneTags });
+            await refreshIdeas(person.id);
+            setTuning(false);
           }}
         />
-        <Button label={t('person.refresh')} tone="secondary" onPress={() => refreshIdeas(person.id)} />
+        <Button
+          label={t('person.refresh')}
+          tone="secondary"
+          onPress={async () => {
+            await refreshIdeas(person.id);
+            setTuning(false);
+          }}
+        />
         <ShimmerSlot label={t('person.ideasLoading')} busy={cloudBusy} />
         {cloudError ? <Body>{t('person.ideasError')}</Body> : null}
         {freshCloud.filter(idea => !hiddenIdeas.has(idea.title)).map(idea => (
@@ -516,7 +622,9 @@ export function PersonScreen() {
             }
           }}
         />
-        {cloudRemaining[person.id] != null ? <Body>{t('person.cloudLeft', { count: cloudRemaining[person.id] })}</Body> : null}
+        {cloudRemaining[person.id] != null ? (
+          <Body>{t('person.refreshesLeft', { count: cloudRemaining[person.id], name: person.name })}</Body>
+        ) : null}
         <Body>{t('person.cloudHint')}</Body>
         <Caption tone="text">{t('shop.disclosure')}</Caption>
       </Sheet>
@@ -570,6 +678,17 @@ export function PersonScreen() {
           }}
           keyboardType="decimal-pad"
         />
+        <Caption>{t('person.perYear')}</Caption>
+        <Field
+          label={t('person.birthYear')}
+          value={birthYear}
+          error={birthError}
+          onChangeText={value => {
+            setBirthYear(value);
+            setBirthError('');
+          }}
+          keyboardType="number-pad"
+        />
         <RelationshipField
           value={relationship}
           error={relationshipError}
@@ -591,12 +710,15 @@ export function PersonScreen() {
             const trimmed = name.trim();
             const nextNameError = trimmed ? '' : t('errors.name');
             const nextBudgetError = budget.trim() && parseBudget(budget) == null ? t('errors.price') : '';
+            const parsedYear = birthYear.trim() ? parseBirthYear(birthYear) : null;
+            const nextBirthError = birthYear.trim() && parsedYear == null ? t('person.birthYearInvalid') : '';
             const cleaned = storeRelationship(relationship);
             const nextRelationshipError = cleaned == null ? t('relationship.invalid') : '';
             setNameError(nextNameError);
             setBudgetError(nextBudgetError);
+            setBirthError(nextBirthError);
             setRelationshipError(nextRelationshipError);
-            if (nextNameError || nextBudgetError || nextRelationshipError) {
+            if (nextNameError || nextBudgetError || nextBirthError || nextRelationshipError) {
               return;
             }
             toast(t('person.saved'));
@@ -608,6 +730,7 @@ export function PersonScreen() {
               tags: interestTags,
               relationship: cleaned ?? '',
               notes,
+              birthYear: parsedYear,
             }).then(() => {
               if ((person.circleId ?? null) !== nextCircle) {
                 return setPersonCircle(person.id, nextCircle);
@@ -948,7 +1071,17 @@ function OccasionMenu({
   );
 }
 
-function SpendBreakdown({ personId, budgetCents, money }: { personId: string; budgetCents: number | null; money: (cents: number) => string }) {
+function SpendBreakdown({
+  personId,
+  budgetCents,
+  money,
+  onSetBudget,
+}: {
+  personId: string;
+  budgetCents: number | null;
+  money: (cents: number) => string;
+  onSetBudget: () => void;
+}) {
   const { snapshot } = useGifteez();
   const year = new Date().getFullYear();
   const yearTotal = yearSpentCents(personId, snapshot.gifts, year);
@@ -957,7 +1090,13 @@ function SpendBreakdown({ personId, budgetCents, money }: { personId: string; bu
     <Card>
       <Body>{t('person.yearTotal', { amount: money(yearTotal) })}</Body>
       <Body>{t('person.allTotal', { amount: money(allTotal) })}</Body>
-      <Body>{budgetCents == null ? t('person.noBudget') : t('person.budgetLine', { amount: money(budgetCents) })}</Body>
+      {budgetCents == null ? (
+        <Pressable accessibilityRole="button" onPress={onSetBudget}>
+          <Body>{t('person.noBudget')}</Body>
+        </Pressable>
+      ) : (
+        <Body>{t('person.budgetLine', { amount: money(budgetCents) })}</Body>
+      )}
     </Card>
   );
 }
@@ -1026,33 +1165,68 @@ function IdeaCard({
   onShop: () => void;
 }) {
   const gift = asGiftIdea(idea);
-  const { colors } = useTheme();
+  const { colors, type } = useTheme();
   return (
-    <Card>
+    <Card compact>
       <View style={styles.ideaRow}>
-        <ArtSlot name={art} size={48} />
+        <ArtSlot name={art} size={40} />
         <View style={styles.ideaCopy}>
-          <Heading>{gift.title}</Heading>
-          <Caption>{`$${gift.priceMin}–${gift.priceMax}`}</Caption>
-          <Body>{gift.reason}</Body>
+          <View style={styles.titlePrice}>
+            <Text numberOfLines={2} style={[styles.ideaTitle, { color: colors.text, fontFamily: type.heading.fontFamily }]}>{gift.title}</Text>
+            <Text style={[type.caption, { color: colors.muted }]}>{`$${gift.priceMin}–${gift.priceMax}`}</Text>
+          </View>
+          <Text numberOfLines={2} style={[type.body, { color: colors.text }]}>{gift.reason}</Text>
         </View>
       </View>
-      <Cluster>
-        <Button compact label={t('person.thumbsUp')} tone="secondary" onPress={onUp} />
-        <Button compact label={t('person.thumbsDown')} tone="secondary" onPress={onDown} />
+      <View style={styles.actions}>
+        <Button flex tone="soft" label={t('person.shopIdea')} onPress={onShop} />
+        <IconButton label={t('person.thumbsUp')} name="sparkle" onPress={onUp} />
+        <IconButton label={t('person.thumbsDown')} name="thumbDown" onPress={onDown} />
         <HeartPop saved={saved}>
           <IconButton
             label={saved ? t('person.unsaveIdea') : t('person.saveIdea')}
             name="heart"
             color={saved ? colors.pink : colors.text}
             filled={saved}
-            size={28}
+            size={22}
             onPress={() => { onSave(); }}
           />
         </HeartPop>
-      </Cluster>
-      <Button label={t('person.shopIdea')} tone="secondary" onPress={onShop} />
+      </View>
     </Card>
+  );
+}
+
+function BudgetLine({
+  spent,
+  budgetCents,
+  money,
+  onSetBudget,
+}: {
+  spent: number;
+  budgetCents: number | null;
+  money: (cents: number) => string;
+  onSetBudget: () => void;
+}) {
+  const { colors, type } = useTheme();
+  if (budgetCents == null) {
+    return (
+      <Pressable accessibilityRole="button" accessibilityLabel={t('person.noBudget')} onPress={onSetBudget}>
+        <Caption tone="text">{t('person.noBudget')}</Caption>
+      </Pressable>
+    );
+  }
+  const ratio = budgetCents > 0 ? Math.min(1, spent / budgetCents) : 0;
+  return (
+    <View style={styles.budgetBlock}>
+      <View style={[styles.budgetTrack, { backgroundColor: colors.surfaceAlt }]}>
+        <View style={[styles.budgetFill, { width: `${Math.round(ratio * 100)}%`, backgroundColor: colors.pink }]} />
+      </View>
+      <Text style={[type.caption, { color: colors.text }]}>
+        <Text style={styles.budgetStrong}>{money(spent)}</Text>
+        {` of ${money(budgetCents)} ${t('person.perYear')}`}
+      </Text>
+    </View>
   );
 }
 
@@ -1114,9 +1288,6 @@ function GiftSheet({
       ) : (
         <>
           <Heading>{title}</Heading>
-          <Field label={t('purchase.gift')} value={gift} error={giftError} onChangeText={onGift} />
-          <Field label={t('purchase.price')} value={price} error={priceError} onChangeText={onPrice} keyboardType="decimal-pad" />
-          <DateField label={t('purchase.date')} value={date} error={dateError} maximumDate={new Date()} onChange={onDate} />
           {occasions && onOccasion ? (
             <>
               <Caption>{t('purchase.occasionOptional')}</Caption>
@@ -1134,6 +1305,9 @@ function GiftSheet({
               <Button label={t('person.addOccasion')} tone="secondary" onPress={() => setAdding(true)} />
             </>
           ) : null}
+          <Field label={t('purchase.gift')} value={gift} error={giftError} onChangeText={onGift} />
+          <Field label={t('purchase.price')} value={price} error={priceError} onChangeText={onPrice} keyboardType="decimal-pad" />
+          <DateField label={t('purchase.date')} value={date} error={dateError} maximumDate={new Date()} onChange={onDate} />
           <Button label={saveLabel} accessibilityLabel={saveAccessibilityLabel} onPress={onSave} />
         </>
       )}
@@ -1167,13 +1341,24 @@ function personMeta(person: { relationship?: string; circleId?: string }, circle
 }
 
 const styles = StyleSheet.create({
-  personHead: { alignItems: 'center', gap: space.xs },
-  personMenu: { position: 'absolute', top: 0, right: 0, zIndex: 1 },
+  footerStack: { gap: space.xs },
+  pinnedTight: { gap: 6 },
+  navRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  personRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: 64 },
+  personName: { fontSize: 25, lineHeight: 28 },
+  nextOccasion: { fontSize: 12, lineHeight: 16, maxWidth: 108, textAlign: 'right' },
+  budgetBlock: { gap: 4 },
+  budgetTrack: { height: 4, borderRadius: 2, overflow: 'hidden' },
+  budgetFill: { height: 4, borderRadius: 2 },
+  budgetStrong: { fontWeight: '700' },
   summaryName: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.xs },
   avatarName: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flex: 1 },
   personCopy: { flex: 1, gap: 2 },
-  ideaRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  ideaCopy: { flex: 1 },
+  ideaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.xs },
+  ideaCopy: { flex: 1, gap: 2 },
+  titlePrice: { flexDirection: 'row', alignItems: 'flex-start', gap: space.xs },
+  ideaTitle: { flex: 1, fontSize: 17.5, lineHeight: 22 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: space.xxs },
   occasionRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   logged: { alignSelf: 'flex-start' },
 });
