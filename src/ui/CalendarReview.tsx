@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { initiallyChosen, type CalendarDraft } from '../domain/calendarImport';
+import { draftStatus, initiallyChosen, type CalendarDraft } from '../domain/calendarImport';
 import { scanCalendar } from '../platform/importers';
 import { deviceLocale, formatDate, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
@@ -36,7 +36,7 @@ export function CalendarReviewLink({
 
   async function openReview() {
     setDenied(false);
-    const found = await scanCalendar(gifteez.snapshot.people);
+    const found = await scanCalendar(gifteez.snapshot.people, gifteez.snapshot.occasions);
     if (found === 'denied') {
       setDrafts([]);
       setDenied(true);
@@ -48,7 +48,7 @@ export function CalendarReviewLink({
     setOpen(true);
   }
 
-  const chosen = drafts.filter(item => picked[item.key]);
+  const chosen = drafts.filter(item => !item.alreadyAdded && picked[item.key]);
 
   async function addChosen() {
     setBusy(true);
@@ -118,18 +118,25 @@ export function CalendarReviewLink({
         {!denied && drafts.length === 0 ? <Body>{t('importFlow.none')}</Body> : null}
         {drafts.map(draft => {
           const when = formatDate(new Date(2026, draft.month - 1, draft.day), deviceLocale());
-          const who = !draft.name.trim()
-            ? t('importFlow.addName')
-            : draft.personId
-              ? t('importFlow.matched', { name: draft.name })
-              : t('importFlow.newPerson', { name: draft.name });
-          const toggle = () => setPicked(current => ({ ...current, [draft.key]: !current[draft.key] }));
+          const status = draftStatus(draft);
+          const who = status === 'matched'
+            ? t('importFlow.matched', { name: draft.name })
+            : status === 'newPerson'
+              ? t('importFlow.newPerson', { name: draft.name })
+              : t(`importFlow.${status}`);
+          const toggle = () => {
+            if (draft.alreadyAdded) {
+              return;
+            }
+            setPicked(current => ({ ...current, [draft.key]: !current[draft.key] }));
+          };
           return (
             <View key={draft.key}>
               {draft.nameEditable ? (
                 <CheckRow
                   label={t('importFlow.editName')}
                   checked={picked[draft.key] === true}
+                  disabled={draft.alreadyAdded === true}
                   onPress={toggle}
                   field={(
                     <>
@@ -153,7 +160,8 @@ export function CalendarReviewLink({
               ) : (
                 <CheckRow
                   label={`${draft.name} · ${when}. ${who}`}
-                  checked={picked[draft.key] === true}
+                  checked={!draft.alreadyAdded && picked[draft.key] === true}
+                  disabled={draft.alreadyAdded === true}
                   onPress={toggle}
                 />
               )}

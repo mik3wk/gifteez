@@ -582,6 +582,7 @@
     "editName": "Name from the calendar",
     "addName": "Add a name",
     "matched": "Adds an occasion for {name}",
+    "alreadyAdded": "Already added",
     "newPerson": "Adds {name}",
     "addOne": "Add 1 occasion",
     "addMany": "Add {count} occasions"

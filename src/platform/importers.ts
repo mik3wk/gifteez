@@ -24,7 +24,10 @@ export async function importContacts(): Promise<ImportedPerson[] | 'denied'> {
 }
 
 /** Read the next year of events. Nothing is written back to the calendar. */
-export async function scanCalendar(people: Array<{ id: string; name: string; deleted?: boolean }>): Promise<CalendarDraft[] | 'denied'> {
+export async function scanCalendar(
+  people: Array<{ id: string; name: string; deleted?: boolean }>,
+  occasions: Array<{ personId: string; type: string; month: number; day: number; deleted?: boolean }> = [],
+): Promise<CalendarDraft[] | 'denied'> {
   const permission = await CalendarEvents.requestPermissions(true);
   if (permission !== 'authorized') {
     return 'denied';
@@ -33,7 +36,7 @@ export async function scanCalendar(people: Array<{ id: string; name: string; del
   const end = new Date();
   end.setMonth(end.getMonth() + 12);
   const events = await CalendarEvents.fetchAllEvents(start.toISOString(), end.toISOString());
-  return draftsFromEvents(events, people);
+  return draftsFromEvents(events, people, occasions);
 }
 
 export async function sweepBirthdays(): Promise<ImportedPerson[] | 'denied'> {

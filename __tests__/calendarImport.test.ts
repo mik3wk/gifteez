@@ -1,4 +1,5 @@
-import { draftsFromEvents, eventDraft, initiallyChosen } from '../src/domain/calendarImport';
+import { draftStatus, draftsFromEvents, eventDraft, initiallyChosen } from '../src/domain/calendarImport';
+import { t } from '../src/i18n';
 
 test('calendar titles become occasions and other events are ignored', () => {
   expect(eventDraft("Ada's birthday", '2026-04-02')).toMatchObject({
@@ -79,4 +80,33 @@ test('drafts match a living person and collapse the same date', () => {
   const named = eventDraft("Ada's birthday", '2026-05-02');
   expect(initiallyChosen(birthday!)).toBe(false);
   expect(initiallyChosen(named!)).toBe(true);
+});
+
+test('an occasion that already exists is unticked and not offered again', () => {
+  const people = [{ id: 'ada', name: 'Ada' }];
+  const events = [
+    { title: "Ada's birthday", startDate: '2026-04-02' },
+    { title: "Ada's anniversary", startDate: '2026-04-02' },
+  ];
+  const drafts = draftsFromEvents(events, people, [
+    { personId: 'ada', type: 'birthday', month: 4, day: 2 },
+  ]);
+  expect(drafts[0]).toMatchObject({ personId: 'ada', occasion: 'birthday', alreadyAdded: true });
+  expect(initiallyChosen(drafts[0])).toBe(false);
+  expect(draftStatus(drafts[0])).toBe('alreadyAdded');
+  expect(t('importFlow.alreadyAdded')).toBe('Already added');
+  expect(drafts[1]).toMatchObject({ personId: 'ada', occasion: 'anniversary' });
+  expect(drafts[1].alreadyAdded).toBeFalsy();
+  expect(initiallyChosen(drafts[1])).toBe(true);
+  expect(draftStatus(drafts[1])).toBe('matched');
+  expect(t('importFlow.matched', { name: 'Ada' })).toBe('Adds an occasion for Ada');
+
+  const removed = draftsFromEvents(
+    [{ title: "Ada's birthday", startDate: '2026-04-02' }],
+    people,
+    [{ personId: 'ada', type: 'birthday', month: 4, day: 2, deleted: true }],
+  );
+  expect(removed[0].alreadyAdded).toBeFalsy();
+  expect(initiallyChosen(removed[0])).toBe(true);
+  expect(draftStatus({ name: 'Sam', personId: null })).toBe('newPerson');
 });

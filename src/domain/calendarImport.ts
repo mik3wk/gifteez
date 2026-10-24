@@ -12,6 +12,8 @@ export type CalendarDraft = {
   personId: string | null;
   /** The title matched an occasion, but the name could not be split out. */
   nameEditable?: boolean;
+  /** This person already has this occasion. */
+  alreadyAdded?: boolean;
 };
 
 const ORDINAL = String.raw`\d{1,3}(?:st|nd|rd|th)`;
@@ -41,14 +43,30 @@ export function eventDraft(title: string, start: string): Omit<CalendarDraft, 'k
   };
 }
 
-/** Clear names start selected. Unclear titles, including a bare "Birthday", start off. */
-export function initiallyChosen(draft: { name: string; nameEditable?: boolean }): boolean {
-  return !draft.nameEditable && Boolean(draft.name.trim());
+/** Clear names start selected. Unclear titles, including a bare "Birthday", start off.
+ *  An occasion that is already on the person starts off and stays off. */
+export function initiallyChosen(draft: { name: string; nameEditable?: boolean; alreadyAdded?: boolean }): boolean {
+  return !draft.alreadyAdded && !draft.nameEditable && Boolean(draft.name.trim());
+}
+
+export function draftStatus(draft: {
+  name: string;
+  personId: string | null;
+  alreadyAdded?: boolean;
+}): 'alreadyAdded' | 'addName' | 'matched' | 'newPerson' {
+  if (draft.alreadyAdded) {
+    return 'alreadyAdded';
+  }
+  if (!draft.name.trim()) {
+    return 'addName';
+  }
+  return draft.personId ? 'matched' : 'newPerson';
 }
 
 export function draftsFromEvents(
   events: Array<{ title?: string | null; startDate?: string | null }>,
   people: Array<{ id: string; name: string; deleted?: boolean }>,
+  occasions: Array<{ personId: string; type: string; month: number; day: number; deleted?: boolean }> = [],
 ): CalendarDraft[] {
   const living = people.filter(person => !person.deleted);
   const seen = new Set<string>();
@@ -69,7 +87,19 @@ export function draftsFromEvents(
     const match = draft.nameEditable
       ? null
       : living.find(person => person.name.trim().toLowerCase() === draft.name.toLowerCase());
-    drafts.push({ ...draft, key, personId: match?.id ?? null });
+    const alreadyAdded = Boolean(match && occasions.some(item => (
+      !item.deleted
+      && item.personId === match.id
+      && item.type === draft.occasion
+      && item.month === draft.month
+      && item.day === draft.day
+    )));
+    drafts.push({
+      ...draft,
+      key,
+      personId: match?.id ?? null,
+      ...(alreadyAdded ? { alreadyAdded: true } : {}),
+    });
   });
   return drafts;
 }

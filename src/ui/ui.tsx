@@ -1201,17 +1201,21 @@ export function CheckRow({
   checked,
   onPress,
   field,
+  disabled = false,
 }: {
   label: string;
   checked: boolean;
   onPress: () => void;
   /** Renders in the row, outside the checkbox, so a text field can be edited. */
   field?: React.ReactNode;
+  disabled?: boolean;
 }) {
   const { colors, type, typeScale } = useTheme();
+  const showChecked = disabled ? false : checked;
+  const state = { checked: showChecked, ...(disabled ? { disabled: true } : {}) };
   const box = (
-    <View style={[styles.box, { borderColor: colors.outline, backgroundColor: checked ? colors.button : colors.surface }]}>
-      {checked ? <Icon name="check" color={colors.onButton} size={16} /> : null}
+    <View style={[styles.box, { borderColor: disabled ? colors.muted : colors.outline, backgroundColor: showChecked ? colors.button : colors.surface }]}>
+      {showChecked ? <Icon name="check" color={colors.onButton} size={16} /> : null}
     </View>
   );
   if (field) {
@@ -1220,7 +1224,8 @@ export function CheckRow({
         <Pressable
           accessibilityRole="checkbox"
           accessibilityLabel={label}
-          accessibilityState={{ checked }}
+          accessibilityState={state}
+          disabled={disabled}
           onPress={onPress}
           hitSlop={8}
           style={styles.boxHit}>
@@ -1234,11 +1239,12 @@ export function CheckRow({
     <Pressable
       accessibilityRole="checkbox"
       accessibilityLabel={label}
-      accessibilityState={{ checked }}
+      accessibilityState={state}
+      disabled={disabled}
       onPress={onPress}
       style={styles.checkRow}>
       {box}
-      <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, styles.ink, { color: colors.text }]}>{label}</Text>
+      <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, styles.ink, { color: disabled ? colors.muted : colors.text }]}>{label}</Text>
     </Pressable>
   );
 }
