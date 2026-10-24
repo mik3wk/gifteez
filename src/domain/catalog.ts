@@ -1,3 +1,5 @@
+import { shopNounPhrase } from './amazon';
+
 export type CatalogIdea = {
   text: string;
   tags: string[];
@@ -111,8 +113,6 @@ const RAW_CATALOG: Array<Pick<CatalogIdea, 'text' | 'tags' | 'occasions'>> = [
   { text: 'A card and a favorite treat to start the year', tags: ['foodie'], occasions: ['new-year'] },
 ];
 
-const QUERY_STOP = new Set(['a', 'an', 'the', 'and', 'or', 'for', 'to', 'of', 'with', 'from', 'their', 'they', 'them', 'that', 'this', 'you', 'your', 'just', 'plus', 'one', 'into', 'can', 'use']);
-
 const TOPIC_NOUN: Record<string, string> = {
   books: 'book',
   cooking: 'cooking',
@@ -170,12 +170,7 @@ export function ideaReason(text: string, topic: string | null): string {
 }
 
 function searchQueryFor(text: string): string {
-  const words = text.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(word => word.length > 2 && !QUERY_STOP.has(word));
-  const picked = words.slice(0, 6);
-  while (picked.length < 3) {
-    picked.push('gift');
-  }
-  return picked.join(' ');
+  return shopNounPhrase(text);
 }
 
 function priceBand(tags: string[]): [number, number] {

@@ -1,12 +1,64 @@
+const NUMBER_WORD: Record<string, string> = {
+  one: '1',
+  two: '2',
+  three: '3',
+  four: '4',
+  five: '5',
+  six: '6',
+  seven: '7',
+  eight: '8',
+  nine: '9',
+  ten: '10',
+};
+
 const QUERY_STOP = new Set([
+  'a', 'an', 'the', 'and', 'or', 'for', 'to', 'of', 'with', 'from', 'their', 'they', 'them',
+  'that', 'this', 'you', 'your', 'just', 'plus', 'into', 'can', 'use', 'on', 'in', 'at', 'by',
+]);
+
+const FILLER = new Set(['plays', 'play', 'playing', 'well', 'focused', 'enough']);
+
+const LEGACY_STOP = new Set([
   'a', 'an', 'the', 'and', 'or', 'for', 'to', 'of', 'with', 'from', 'their', 'they', 'them',
   'that', 'this', 'you', 'your', 'just', 'plus', 'one', 'into', 'can', 'use',
 ]);
 
 const REASON_MARK = /idea they can use|something they can use|something to do together|letter or keepsake|something useful they can enjoy/i;
 
-function titleKeywords(title: string): string[] {
-  return title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(word => word.length > 2 && !QUERY_STOP.has(word));
+/** Shop words from the gift itself. A player count stays as "for 2-5 players". */
+export function shopNounPhrase(title: string): string {
+  const normalized = title.toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+  const numbered = normalized.replace(
+    /\b(one|two|three|four|five|six|seven|eight|nine|ten)\b/g,
+    word => NUMBER_WORD[word] ?? word,
+  );
+  const range = numbered.match(/\b(\d+)\s*(?:to|-)\s*(\d+)\b/);
+  const players = /\b(?:people|players|person|player)\b/.test(numbered);
+  const head = numbered.split(/\b(?:that|which|who)\b/)[0] ?? numbered;
+  const words = head.split(/[\s-]+/).filter(word => (
+    Boolean(word)
+    && !QUERY_STOP.has(word)
+    && !FILLER.has(word)
+    && !/^\d+$/.test(word)
+    && word.length > 2
+  ));
+  const picked = words.slice(0, 6);
+  if (range && players) {
+    picked.push('for', `${range[1]}-${range[2]}`, 'players');
+  }
+  while (picked.length < 3) {
+    picked.push('gift');
+  }
+  return picked.join(' ');
+}
+
+function legacyTitleQuery(title: string): string {
+  const words = title.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(word => word.length > 2 && !LEGACY_STOP.has(word));
+  const picked = words.slice(0, 6);
+  while (picked.length < 3) {
+    picked.push('gift');
+  }
+  return picked.join(' ');
 }
 
 function copiesReason(query: string, reason: string): boolean {
@@ -25,26 +77,19 @@ function copiesReason(query: string, reason: string): boolean {
 }
 
 /**
- * Shop search uses the idea's search keywords, or words from the title when those keywords are missing.
- * Reason sentences never become the query.
+ * Shop search uses the noun phrase in the title.
+ * A stored query is kept when it is its own phrase, and replaced when it is only the old filler strip or the reason.
  */
 export function shopSearchQuery(idea: { title: string; searchQuery?: string; reason?: string } | string): string {
   if (typeof idea === 'string') {
-    return padKeywords(titleKeywords(idea));
+    return shopNounPhrase(idea);
   }
+  const phrase = shopNounPhrase(idea.title);
   const query = (idea.searchQuery ?? '').trim().replace(/\s+/g, ' ');
-  if (query && !copiesReason(query, idea.reason ?? '')) {
-    return query;
+  if (!query || copiesReason(query, idea.reason ?? '') || query === legacyTitleQuery(idea.title)) {
+    return phrase;
   }
-  return padKeywords(titleKeywords(idea.title));
-}
-
-function padKeywords(words: string[]): string {
-  const picked = words.slice(0, 6);
-  while (picked.length < 3) {
-    picked.push('gift');
-  }
-  return picked.join(' ');
+  return query;
 }
 
 /** Amazon search for one idea. The associate tag is left off when Remote Config has none. */

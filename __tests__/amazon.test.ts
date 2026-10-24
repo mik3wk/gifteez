@@ -1,4 +1,4 @@
-import { amazonSearchUrl, shopSearchQuery } from '../src/domain/amazon';
+import { amazonSearchUrl, shopNounPhrase, shopSearchQuery } from '../src/domain/amazon';
 import { CATALOG } from '../src/domain/catalog';
 
 test('amazon search keeps the associate tag only when Remote Config has one', () => {
@@ -19,13 +19,19 @@ test('shop search uses the title and keywords, never the reason', () => {
     reason,
   });
   expect(fromReason.toLowerCase()).not.toContain('idea they can use');
-  expect(fromReason).toBe('cookbook focused weeknight meals');
+  expect(fromReason).toBe('cookbook weeknight meals');
   expect(shopSearchQuery({
     title: 'A cookbook focused on weeknight meals',
     searchQuery: 'cookbook weeknight meals',
     reason,
   })).toBe('cookbook weeknight meals');
   expect(shopSearchQuery('A wool scarf')).toBe('wool scarf gift');
+  expect(shopNounPhrase('A board game that plays well with two to five people')).toBe('board game for 2-5 players');
+  expect(shopSearchQuery({
+    title: 'A board game that plays well with two to five people',
+    searchQuery: 'board game plays well two five',
+    reason: 'A game idea they can use: a board game that plays well with two to five people.',
+  })).toBe('board game for 2-5 players');
   const cookbook = CATALOG.find(idea => /cookbook/i.test(idea.text));
   expect(cookbook?.reason.toLowerCase()).toContain('idea they can use');
   const shopped = { title: cookbook!.text, searchQuery: cookbook!.searchQuery, reason: cookbook!.reason };
