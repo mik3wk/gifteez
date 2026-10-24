@@ -349,6 +349,7 @@ export function confirmChoice(
     }
     if (!confirmListener) {
       Alert.alert(title, message, [
+        { text: t('common.cancel'), style: 'cancel', onPress: () => settleConfirm(request, false) },
         { text: secondaryLabel, onPress: () => settleConfirm(request, 'secondary') },
         { text: primaryLabel, onPress: () => settleConfirm(request, true) },
       ], { cancelable: true, onDismiss: () => settleConfirm(request, false) });
@@ -390,11 +391,10 @@ export function ConfirmDialog({
           <Heading>{title}</Heading>
           {message ? <Body>{message}</Body> : null}
           <Button label={confirmLabel} accessibilityLabel={confirmAccessibilityLabel} tone={tone} onPress={onConfirm} />
-          <Button
-            label={secondaryLabel ?? t('common.cancel')}
-            tone="secondary"
-            onPress={secondaryLabel ? (onSecondary ?? onCancel) : onCancel}
-          />
+          {secondaryLabel ? (
+            <Button label={secondaryLabel} tone="secondary" onPress={onSecondary ?? onCancel} />
+          ) : null}
+          <Button label={t('common.cancel')} tone="secondary" onPress={onCancel} />
         </Card>
       </View>
     </View>

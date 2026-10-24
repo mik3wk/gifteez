@@ -24,7 +24,7 @@ jest.mock('../src/state/GifteezContext', () => {
   };
 });
 
-import { Button, ConfirmHost, Sheet, confirmDestructive } from '../src/ui/ui';
+import { Button, ConfirmHost, Sheet, confirmChoice, confirmDestructive } from '../src/ui/ui';
 
 test('a confirm opened from a sheet stays in that sheet and cancel leaves it usable', async () => {
   let answer: boolean | null = null;
@@ -88,6 +88,9 @@ test('a confirm opened from a sheet stays in that sheet and cancel leaves it usa
     again?.props.onPress();
   });
   expect(renderer!.root.findAllByType(Text).filter(node => node.props.children === 'Remove Marie?')).toHaveLength(1);
+  await ReactTestRenderer.act(() => {
+    renderer!.unmount();
+  });
 });
 
 function labeled(renderer: ReactTestRenderer.ReactTestRenderer, label: string) {
@@ -141,4 +144,31 @@ test('a dirty sheet asks before closing, and a clean sheet closes', async () => 
   });
   expect(cleanClose).toHaveBeenCalledTimes(1);
   expect(renderer!.root.findAllByType(Text).some(node => node.props.children === 'Discard changes?')).toBe(false);
+  await ReactTestRenderer.act(() => {
+    renderer!.unmount();
+  });
+});
+
+test('the circle budget choice can be cancelled', async () => {
+  let answer: 'primary' | 'secondary' | 'dismiss' | null = null;
+  let renderer: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    renderer = ReactTestRenderer.create(<ConfirmHost />);
+  });
+  await ReactTestRenderer.act(() => {
+    const pending = confirmChoice('Budget per person', 'Apply $75 to Ada?', 'Apply to everyone', 'Only new people');
+    pending.then(value => {
+      answer = value;
+    }).catch(() => undefined);
+  });
+  expect(labeled(renderer!, 'Apply to everyone')).toBeDefined();
+  expect(labeled(renderer!, 'Only new people')).toBeDefined();
+  expect(labeled(renderer!, 'Cancel')).toBeDefined();
+  await ReactTestRenderer.act(async () => {
+    await labeled(renderer!, 'Cancel')?.props.onPress();
+  });
+  expect(answer).toBe('dismiss');
+  await ReactTestRenderer.act(() => {
+    renderer!.unmount();
+  });
 });
