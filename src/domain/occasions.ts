@@ -265,6 +265,16 @@ export function nextOccasionDate(occasion: Occasion, today: Date): Date | null {
   return null;
 }
 
+const COMMON_DATE_TYPES = ['christmas', 'valentines', 'mothers-day', 'fathers-day'] as const;
+
+/** Next Christmas, Valentine's Day, Mother's Day, or Father's Day. */
+export function commonDates(today = new Date()): Array<{ type: string; date: Date }> {
+  return COMMON_DATE_TYPES.flatMap(type => {
+    const date = nextOccasionDate({ id: type, personId: '', type, month: 1, day: 1, updatedAt: 0 }, today);
+    return date ? [{ type, date }] : [];
+  });
+}
+
 /** Wheel default: a preset's own date, or today when the date is one you choose. */
 export function openingMonthDay(type: string, today = new Date()): { month: number; day: number } {
   const preset = presetFor(type);

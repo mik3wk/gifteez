@@ -4,6 +4,7 @@ import {
   dateIsEstimated,
   easterSunday,
   isOneTimeOccasion,
+  commonDates,
   nextOccasionDate,
   occasionLabel,
   occasionNeedsDate,
@@ -31,6 +32,18 @@ function occasion(patch: Partial<Occasion> & Pick<Occasion, 'type'>): Occasion {
     ...patch,
   };
 }
+
+test('common date chips use the next Christmas, Valentine\'s, Mother\'s, and Father\'s Day', () => {
+  const today = new Date(2026, 9, 24);
+  const dates = commonDates(today);
+  expect(dates.map(item => item.type)).toEqual(['christmas', 'valentines', 'mothers-day', 'fathers-day']);
+  expect(dates.map(item => [item.date.getFullYear(), item.date.getMonth() + 1, item.date.getDate()])).toEqual([
+    [2026, 12, 25],
+    [2027, 2, 14],
+    [2027, 5, 9],
+    [2027, 6, 20],
+  ]);
+});
 
 test('a new occasion opens on today, or on a preset date when it has one', () => {
   const today = new Date(2026, 9, 23);

@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { ScrollView } from 'react-native';
-import { touch } from '../src/theme/tokens';
+import { commonDates, occasionLabel } from '../src/domain/occasions';
+import { formatDate } from '../src/i18n';
 
 jest.mock('../src/state/GifteezContext', () => {
   const { BUNDLED_SKINS } = jest.requireActual('../src/theme/skins');
@@ -19,22 +19,35 @@ jest.mock('../src/state/GifteezContext', () => {
 import { MonthDayField } from '../src/ui/DateField';
 import { OccasionPicker } from '../src/ui/OccasionPicker';
 
-const ROW = touch.minTarget;
-
-function selectedLabels(renderer: ReactTestRenderer.ReactTestRenderer): string[] {
-  return renderer.root
-    .findAllByProps({ accessibilityRole: 'button' })
-    .filter(node => node.props.accessibilityState?.selected)
-    .map(node => String(node.props.accessibilityLabel));
+function chipLabel(type: string, date: Date): string {
+  return `${occasionLabel({ type })} · ${formatDate(date)}`;
 }
 
-function wheels(renderer: ReactTestRenderer.ReactTestRenderer) {
-  return renderer.root.findAllByType(ScrollView);
+function buttons(renderer: ReactTestRenderer.ReactTestRenderer) {
+  return renderer.root.findAllByProps({ accessibilityRole: 'button' });
 }
 
-test('scrolling the wheel selects the centered row, and a shorter month shortens the day', async () => {
-  let month = '10';
-  let day = '23';
+function press(renderer: ReactTestRenderer.ReactTestRenderer, label: string) {
+  const node = buttons(renderer).find(item => item.props.accessibilityLabel === label);
+  node?.props.onPress();
+}
+
+function spinners(renderer: ReactTestRenderer.ReactTestRenderer) {
+  return renderer.root.findAllByProps({ display: 'spinner', mode: 'date' }, { deep: false });
+}
+
+function includeYear(renderer: ReactTestRenderer.ReactTestRenderer) {
+  return renderer.root.findAllByProps(
+    { accessibilityRole: 'switch', accessibilityLabel: 'Include year' },
+    { deep: false },
+  );
+}
+
+test('the native spinner, holiday chips, and Include year replace the wheels', async () => {
+  let month = '';
+  let day = '';
+  let year = '';
+  let knowYear = false;
   let renderer: ReactTestRenderer.ReactTestRenderer;
   function render() {
     return (
@@ -42,12 +55,15 @@ test('scrolling the wheel selects the centered row, and a shorter month shortens
         label="Date"
         month={month}
         day={day}
-        year=""
-        knowYear={false}
-        onKnowYear={() => undefined}
+        year={year}
+        knowYear={knowYear}
+        onKnowYear={value => {
+          knowYear = value;
+        }}
         onChange={next => {
           month = next.month;
           day = next.day;
+          year = next.year;
         }}
       />
     );
@@ -55,108 +71,74 @@ test('scrolling the wheel selects the centered row, and a shorter month shortens
   await ReactTestRenderer.act(() => {
     renderer = ReactTestRenderer.create(render());
   });
-  const [monthWheel, dayWheel] = wheels(renderer!);
-  expect(monthWheel.props.snapToInterval).toBe(ROW);
-  expect(dayWheel.props.snapToInterval).toBe(ROW);
-  expect(monthWheel.props.decelerationRate).toBe('fast');
-  expect(dayWheel.props.decelerationRate).toBe('fast');
-  expect(monthWheel.props.contentOffset).toEqual({ x: 0, y: 9 * ROW });
-  expect(dayWheel.props.contentOffset).toEqual({ x: 0, y: 22 * ROW });
-  expect(selectedLabels(renderer!)).toEqual(expect.arrayContaining(['October', '23']));
+  const picker = renderer!.root.findByProps({ display: 'spinner' });
+  expect(picker.props.mode).toBe('date');
+  const holidays = commonDates();
+  const labels = holidays.map(item => chipLabel(item.type, item.date));
+  expect(buttons(renderer!).map(node => node.props.accessibilityLabel)).toEqual(expect.arrayContaining(labels));
 
+  const christmas = holidays.find(item => item.type === 'christmas')!;
   await ReactTestRenderer.act(() => {
-    dayWheel.props.onScrollEndDrag({
-      nativeEvent: { contentOffset: { y: 25 * ROW }, velocity: { x: 0, y: 1.2 } },
-    });
-  });
-  expect(day).toBe('23');
-
-  await ReactTestRenderer.act(() => {
-    dayWheel.props.onMomentumScrollEnd({ nativeEvent: { contentOffset: { x: 0, y: 24 * ROW } } });
+    press(renderer!, chipLabel(christmas.type, christmas.date));
   });
   await ReactTestRenderer.act(() => {
     renderer!.update(render());
   });
-  expect(day).toBe('25');
-  expect(selectedLabels(renderer!)).toEqual(expect.arrayContaining(['October', '25']));
-  expect(selectedLabels(renderer!).includes('23')).toBe(false);
-
-  const parked = wheels(renderer!)[1];
-  const scrolled: Array<{ y: number; animated: boolean }> = [];
-  (parked.instance as { scrollTo: (options: { y: number; animated: boolean }) => void }).scrollTo = options => {
-    scrolled.push(options);
-  };
-  await ReactTestRenderer.act(() => {
-    parked.props.onScrollEndDrag({
-      nativeEvent: { contentOffset: { y: 24 * ROW + 7 }, velocity: { x: 0, y: 0 } },
-    });
-  });
-  expect(day).toBe('25');
-  expect(scrolled).toEqual([{ y: 24 * ROW, animated: true }]);
+  expect(month).toBe(String(christmas.date.getMonth() + 1));
+  expect(day).toBe(String(christmas.date.getDate()));
+  expect(year).toBe('');
+  const selected = buttons(renderer!).find(node => node.props.accessibilityState?.selected);
+  expect(selected?.props.accessibilityLabel).toBe(chipLabel(christmas.type, christmas.date));
 
   await ReactTestRenderer.act(() => {
-    wheels(renderer!)[1].props.onScrollEndDrag({
-      nativeEvent: {
-        contentOffset: { y: 24 * ROW },
-        targetContentOffset: { y: 25 * ROW },
-        velocity: { x: 0, y: 0 },
-      },
-    });
+    picker.props.onValueChange({}, new Date(2026, 1, 14));
   });
   await ReactTestRenderer.act(() => {
     renderer!.update(render());
   });
-  expect(day).toBe('26');
-  expect(selectedLabels(renderer!)).toContain('26');
+  expect(month).toBe('2');
+  expect(day).toBe('14');
+  expect(year).toBe('');
 
-  const november = renderer!.root.findAllByProps({ accessibilityRole: 'button' }).find(node => node.props.accessibilityLabel === 'November');
+  const includeYear = renderer!.root.findByProps({ accessibilityRole: 'switch', accessibilityLabel: 'Include year' });
   await ReactTestRenderer.act(() => {
-    november?.props.onPress();
+    includeYear.props.onPress();
   });
   await ReactTestRenderer.act(() => {
     renderer!.update(render());
   });
-  expect(month).toBe('11');
-  expect(selectedLabels(renderer!)).toEqual(expect.arrayContaining(['November', '26']));
+  expect(knowYear).toBe(true);
+  expect(year).toBe('2026');
 
-  month = '1';
-  day = '31';
   await ReactTestRenderer.act(() => {
-    renderer!.update(render());
-  });
-  await ReactTestRenderer.act(() => {
-    wheels(renderer!)[0].props.onMomentumScrollEnd({ nativeEvent: { contentOffset: { x: 0, y: 3 * ROW } } });
+    renderer!.root.findByProps({ accessibilityRole: 'switch', accessibilityLabel: 'Include year' }).props.onPress();
   });
   await ReactTestRenderer.act(() => {
     renderer!.update(render());
   });
-  expect(month).toBe('4');
-  expect(day).toBe('30');
-  expect(selectedLabels(renderer!)).toEqual(expect.arrayContaining(['April', '30']));
-  expect(selectedLabels(renderer!).includes('31')).toBe(false);
+  expect(knowYear).toBe(false);
+  expect(year).toBe('');
 });
 
-test('add occasion opens on today, centered and highlighted, unless the preset has its own date', async () => {
-  const today = new Date();
-  const monthName = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][today.getMonth()];
-  const day = String(today.getDate());
+test('a birthday uses the spinner, and Christmas keeps its own date', async () => {
   let renderer: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(() => {
     renderer = ReactTestRenderer.create(<OccasionPicker personId="p1" />);
   });
-  expect(wheels(renderer!).length).toBe(0);
-  const birthday = renderer!.root.findAllByProps({ accessibilityRole: 'button' }).find(node => node.props.accessibilityLabel === 'Birthday');
-  await ReactTestRenderer.act(() => {
-    birthday?.props.onPress();
-  });
-  const [monthWheel, dayWheel] = wheels(renderer!);
-  expect(monthWheel.props.contentOffset.y).toBe(today.getMonth() * ROW);
-  expect(dayWheel.props.contentOffset.y).toBe((today.getDate() - 1) * ROW);
-  expect(selectedLabels(renderer!)).toEqual(expect.arrayContaining([monthName, day]));
+  expect(spinners(renderer!)).toHaveLength(0);
 
-  const christmas = renderer!.root.findAllByProps({ accessibilityRole: 'button' }).find(node => node.props.accessibilityLabel === 'Christmas');
   await ReactTestRenderer.act(() => {
-    christmas?.props.onPress();
+    press(renderer!, 'Birthday');
   });
-  expect(wheels(renderer!).length).toBe(0);
+  expect(spinners(renderer!)).toHaveLength(1);
+  expect(includeYear(renderer!)).toHaveLength(1);
+  expect(buttons(renderer!).map(node => node.props.accessibilityLabel)).toEqual(
+    expect.arrayContaining(commonDates().map(item => chipLabel(item.type, item.date))),
+  );
+
+  await ReactTestRenderer.act(() => {
+    press(renderer!, 'Christmas');
+  });
+  expect(spinners(renderer!)).toHaveLength(0);
+  expect(includeYear(renderer!)).toHaveLength(0);
 });
