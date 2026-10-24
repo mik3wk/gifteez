@@ -24,6 +24,7 @@ import {
   upsertIdeas,
   withAccountUnlock,
   withProfile,
+  type ImportedPerson,
 } from '../domain/logic';
 import { emptySnapshot, type AppSnapshot, type GiftIdea, type Occasion, type OccasionType, type Person } from '../domain/types';
 import { formatDate, t } from '../i18n';
@@ -132,7 +133,8 @@ type GifteezApi = {
   buy: () => Promise<void>;
   restorePurchases: () => Promise<void>;
   importText: (text: string) => Promise<number>;
-  importFromContacts: () => Promise<number | 'denied'>;
+  loadContacts: () => Promise<ImportedPerson[] | 'denied'>;
+  importPeople: (rows: ImportedPerson[]) => Promise<number>;
   importFromCalendar: () => Promise<number | 'denied'>;
 };
 
@@ -1207,13 +1209,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       return addImported(rows);
     },
-    importFromContacts: async () => {
-      const rows = await importContacts();
-      if (rows === 'denied') {
-        return 'denied';
-      }
-      return addImported(rows);
-    },
+    loadContacts: () => importContacts(),
+    importPeople: rows => addImported(rows),
     importFromCalendar: async () => {
       const rows = await sweepBirthdays();
       if (rows === 'denied') {

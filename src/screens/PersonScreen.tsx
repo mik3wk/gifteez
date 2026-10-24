@@ -6,6 +6,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { peopleThenPerson, type RootStack } from '../app/navigation';
 import { amazonSearchUrl } from '../domain/amazon';
 import { describeImport } from '../domain/importNote';
+import { importedVisitBanner, type ImportedVisit } from '../domain/importedBanner';
 import { INTEREST_TAGS } from '../domain/catalog';
 import { asGiftIdea, ideaCacheId, ideaKey, ideasTooSimilar, normalizeIdeaTitle, sentenceCaseTitle } from '../domain/ideas';
 import type { GiftIdea } from '../domain/types';
@@ -19,6 +20,7 @@ import { openInApp } from '../platform/browser';
 import { useGifteez } from '../state/GifteezContext';
 import { occasionLook, space } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
+import { ContactsReviewLink } from '../ui/ContactsReview';
 import { DateField, MonthDayField } from '../ui/DateField';
 import { Icon } from '../ui/icons';
 import { HeartPop, Moment, Shimmer } from '../ui/motion';
@@ -66,7 +68,7 @@ function budgetField(cents: number | null | undefined): string {
 
 export function AddPersonScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, addPerson, completedPersonId, clearCompletedPerson, cancelPendingAdd, importFromContacts } = useGifteez();
+  const { snapshot, addPerson, completedPersonId, clearCompletedPerson, cancelPendingAdd } = useGifteez();
   function budgetPreset(id: string): string {
     const circle = snapshot.circles.find(item => item.id === id);
     if (circle && typeof circle.budgetCents === 'number') {
@@ -89,7 +91,9 @@ export function AddPersonScreen() {
   const [birthError, setBirthError] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [allowLeave, setAllowLeave] = useState(false);
+  const [leaveTick, setLeaveTick] = useState(0);
   const nextId = useRef<string | null>(null);
+  const mounted = useRef(true);
   const dirty = Boolean(name.trim() || relationship.trim() || circleId || budget.trim() !== preset || birthYear.trim() || tags.length);
   function chooseCircle(id: string) {
     const nextPreset = budgetPreset(id);
@@ -118,6 +122,9 @@ export function AddPersonScreen() {
       navigation.dispatch(data.action);
     }).catch(() => undefined);
   });
+  useEffect(() => () => {
+    mounted.current = false;
+  }, []);
   useEffect(() => {
     if (!allowLeave || !nextId.current) {
       return;
@@ -131,7 +138,7 @@ export function AddPersonScreen() {
     if (navigation.getState()?.routeNames?.includes('Person')) {
       navigation.replace('Person', { personId, section: 'ideas' });
     }
-  }, [allowLeave, navigation]);
+  }, [allowLeave, leaveTick, navigation]);
   useEffect(() => {
     if (!completedPersonId) {
       return;
@@ -147,12 +154,6 @@ export function AddPersonScreen() {
     <Screen
       footer={(
         <View style={styles.footerStack}>
-          <Button
-            label={t('settings.contacts')}
-            tone="secondary"
-            onPress={async () => setImportNote(describeImport(await importFromContacts()))}
-          />
-          {importNote ? <Caption>{importNote}</Caption> : null}
           <Button
             label={t('person.save')}
             onPress={async () => {
@@ -173,6 +174,10 @@ export function AddPersonScreen() {
                 setBirthError(t('person.birthYearInvalid'));
                 return;
               }
+              // The first save also marks the profile onboarded, which swaps the
+              // stack and removes this screen. Allow that removal before the
+              // await, or the dirty form asks to discard a person who was saved.
+              setAllowLeave(true);
               const id = await addPerson({
                 name,
                 budget,
@@ -181,11 +186,15 @@ export function AddPersonScreen() {
                 birthYear,
                 ...(circleId ? { circleId } : {}),
               });
-              if (id) {
-                nextId.current = id;
-                setAllowLeave(true);
+              if (!mounted.current) {
                 return;
               }
+              if (!id) {
+                setAllowLeave(false);
+                return;
+              }
+              nextId.current = id;
+              setLeaveTick(tick => tick + 1);
             }}
           />
           {firstRun ? null : <TabBar active="people" />}
@@ -194,6 +203,12 @@ export function AddPersonScreen() {
     >
       <Title>{t('firstOpen.title')}</Title>
       <Body>{t('firstOpen.lead')}</Body>
+      <ContactsReviewLink
+        link
+        label={t('settings.contacts')}
+        onDone={result => setImportNote(describeImport(result))}
+      />
+      {importNote ? <Caption>{importNote}</Caption> : null}
       <Field
         label={t('firstOpen.theirName')}
         value={name}
@@ -263,6 +278,8 @@ export function PersonScreen() {
     setPersonCircle,
   } = useGifteez();
   const person = snapshot.people.find(item => item.id === route.params.personId && !item.deleted);
+  const visitBanner = useRef<ImportedVisit | null>(null);
+  visitBanner.current = importedVisitBanner(visitBanner.current, person);
   const today = new Date();
   const [budget, setBudget] = useState(person?.budgetCents == null ? '' : String(person.budgetCents / 100));
   const [birthYear, setBirthYear] = useState(person?.birthYear ? String(person.birthYear) : '');
@@ -565,7 +582,7 @@ export function PersonScreen() {
         <View style={styles.pinnedTight}>
           {hidden ? <Body>{t('person.hiddenRecipient')}</Body> : null}
           {locked ? <Body>{t('person.readOnly')}</Body> : null}
-          {person.imported && !person.opened ? <Caption>{t('person.openedImported')}</Caption> : null}
+          {visitBanner.current?.show ? <Caption>{t('person.openedImported')}</Caption> : null}
           <View style={styles.navRow}>
             <BackLink label={backLabelFor(navigation)} onPress={() => leavePerson(navigation)} />
             <Pressable accessibilityRole="button" accessibilityLabel={t('person.editDetails')} onPress={openDetails} style={styles.backLink}>

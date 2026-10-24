@@ -9,10 +9,11 @@ import { describeImport } from '../domain/importNote';
 import { accountUnlocked, parseBudget } from '../domain/logic';
 import { t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
-import type { SkinId } from '../theme/skins';
+import { autoSkinLabel, type SkinId } from '../theme/skins';
 import { chrome, space } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { CalendarReviewLink } from '../ui/CalendarReview';
+import { ContactsReviewLink } from '../ui/ContactsReview';
 import { Icon, type IconName } from '../ui/icons';
 import { SessionEntrance } from '../ui/motion';
 import {
@@ -56,7 +57,6 @@ export function SettingsScreen() {
     updateProfile,
     previewSkin,
     skinPreview,
-    importFromContacts,
   } = useGifteez();
   const [sheet, setSheet] = useState<SheetId | null>(null);
   const [budget, setBudget] = useState('');
@@ -183,12 +183,10 @@ export function SettingsScreen() {
           />
         </SettingsGroup>
         <SettingsGroup footer={t('settings.contactsHint')}>
-          <SettingsRow
-            icon="people"
+          <ContactsReviewLink
             label={t('settings.contacts')}
-            onPress={() => {
-              importFromContacts().then(result => setImportNote(describeImport(result))).catch(() => undefined);
-            }}
+            onDone={result => setImportNote(describeImport(result))}
+            row={open => <SettingsRow icon="people" label={t('settings.contacts')} onPress={open} />}
           />
         </SettingsGroup>
         {importNote ? <Caption>{importNote}</Caption> : null}
@@ -302,7 +300,7 @@ export function SettingsScreen() {
           {SKIN_CHOICES.map(choice => (
             <Chip
               key={choice.id}
-              label={t(choice.label)}
+              label={choice.id === 'auto' ? autoSkinLabel(new Date()) : t(choice.label)}
               selected={skinPreview === choice.id}
               onPress={() => previewSkin(choice.id)}
             />

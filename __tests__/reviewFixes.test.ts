@@ -68,6 +68,11 @@ test('every skin and scheme keeps text and boundaries readable', () => {
     expect(contrastRatio(dark.banner, dark.background)).toBeGreaterThan(1.8);
   }
   expect(withColorScheme(BUNDLED_SKINS.fall, 'dark').banner).not.toBe(withColorScheme(BUNDLED_SKINS.winter, 'dark').banner);
+  const springDark = withColorScheme(spring, 'dark');
+  const winterDark = withColorScheme(BUNDLED_SKINS.winter, 'dark');
+  expect(springDark.accent.toUpperCase()).toBe('#E05C80');
+  expect(springDark.accent.toUpperCase()).not.toBe(winterDark.accent.toUpperCase());
+  expect(springDark.banner.toUpperCase()).not.toBe(winterDark.banner.toUpperCase());
 });
 
 test('light icon ink clears 3:1 on white and the scrim stays black', () => {

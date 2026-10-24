@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { t } from '../i18n';
-import { BUNDLED_SKINS, contrastRatio, withColorScheme, type ThemeColors } from '../theme/skins';
+import { autoSkinLabel, BUNDLED_SKINS, contrastRatio, skinForDate, withColorScheme, type SkinId, type ThemeColors } from '../theme/skins';
 import { chrome, space } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { BudgetBar, ListRow, RowCard, SealPill } from '../ui/stationery';
@@ -13,7 +13,11 @@ const summer = require('../../skins/summer.json').colors as ThemeColors;
 export function ThemeGalleryScreen() {
   const { scheme, type } = useTheme();
   const [on, setOn] = useState(true);
+  const today = new Date();
+  const autoId = skinForDate(today);
+  const bundled: Record<SkinId, ThemeColors> = { ...BUNDLED_SKINS, spring, summer };
   const samples: Array<{ name: string; colors: ThemeColors }> = [
+    { name: autoSkinLabel(today), colors: bundled[autoId] },
     { name: t('settings.skinBase'), colors: BUNDLED_SKINS.base },
     { name: t('settings.skinFall'), colors: BUNDLED_SKINS.fall },
     { name: t('settings.skinWinter'), colors: BUNDLED_SKINS.winter },

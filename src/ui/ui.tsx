@@ -153,8 +153,8 @@ export function Screen({
       {bar ? (
         <View
           onLayout={event => setFooterHeight(event.nativeEvent.layout.height)}
-          style={[styles.footer, { backgroundColor: colors.background, paddingBottom: insets.bottom + space.xs }]}>
-          {bar}
+          style={[styles.dock, { backgroundColor: colors.background, paddingBottom: insets.bottom + space.xs }]}>
+          <View style={styles.footer}>{bar}</View>
         </View>
       ) : null}
     </KeyboardAvoidingView>
@@ -1200,12 +1200,36 @@ export function CheckRow({
   label,
   checked,
   onPress,
+  field,
 }: {
   label: string;
   checked: boolean;
   onPress: () => void;
+  /** Renders in the row, outside the checkbox, so a text field can be edited. */
+  field?: React.ReactNode;
 }) {
   const { colors, type, typeScale } = useTheme();
+  const box = (
+    <View style={[styles.box, { borderColor: colors.outline, backgroundColor: checked ? colors.button : colors.surface }]}>
+      {checked ? <Icon name="check" color={colors.onButton} size={16} /> : null}
+    </View>
+  );
+  if (field) {
+    return (
+      <View style={styles.checkRow}>
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityLabel={label}
+          accessibilityState={{ checked }}
+          onPress={onPress}
+          hitSlop={8}
+          style={styles.boxHit}>
+          {box}
+        </Pressable>
+        <View style={styles.checkField}>{field}</View>
+      </View>
+    );
+  }
   return (
     <Pressable
       accessibilityRole="checkbox"
@@ -1213,9 +1237,7 @@ export function CheckRow({
       accessibilityState={{ checked }}
       onPress={onPress}
       style={styles.checkRow}>
-      <View style={[styles.box, { borderColor: colors.outline, backgroundColor: checked ? colors.button : colors.surface }]}>
-        {checked ? <Icon name="check" color={colors.onButton} size={16} /> : null}
-      </View>
+      {box}
       <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, styles.ink, { color: colors.text }]}>{label}</Text>
     </Pressable>
   );
@@ -1501,6 +1523,7 @@ const styles = StyleSheet.create({
   column: { gap: space.sm, overflow: 'visible' },
   centered: { justifyContent: 'center' },
   footer: { paddingHorizontal: space.md, paddingTop: space.xs, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
+  dock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 10, elevation: 10 },
   stack: { gap: space.sm },
   cluster: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, alignItems: 'center' },
   split: { flexDirection: 'row', gap: space.xs },
@@ -1586,6 +1609,8 @@ const styles = StyleSheet.create({
   iconButton: { minWidth: touch.minTarget, minHeight: touch.minTarget, alignItems: 'center', justifyContent: 'center' },
   hue: { width: 16, height: 16, borderRadius: 8, borderWidth: stroke.inner },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: touch.minTarget },
+  boxHit: { minWidth: touch.minTarget, minHeight: touch.minTarget, alignItems: 'center', justifyContent: 'center' },
+  checkField: { flex: 1, gap: space.xxs },
   box: { width: 28, height: 28, borderWidth: stroke.inner, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   segment: { flexDirection: 'row', borderWidth: stroke.inner, borderRadius: 999, padding: space.xxs, gap: space.xxs },
   segmentItem: { flex: 1, minHeight: 44, borderRadius: 999, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.xxs },

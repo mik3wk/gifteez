@@ -13,13 +13,14 @@ import { deviceLocale, formatDate, formatLongDate, formatMoney, t } from '../i18
 import { useGifteez } from '../state/GifteezContext';
 import { space } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
+import { ContactsReviewLink } from '../ui/ContactsReview';
 import { ListRow, RowCard } from '../ui/stationery';
 import { Caption, EmptyState, Field, Screen, Title } from '../ui/ui';
 
 export function PeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
   const { colors, type, typeScale } = useTheme();
-  const { snapshot, resumePersonId, clearResumePerson, openPaywall, importFromContacts } = useGifteez();
+  const { snapshot, resumePersonId, clearResumePerson, openPaywall } = useGifteez();
   const [query, setQuery] = useState('');
   const [importNote, setImportNote] = useState('');
   const order = useRef<string[] | null>(null);
@@ -90,15 +91,19 @@ export function PeopleScreen() {
       />
       {importNote ? <Caption>{importNote}</Caption> : null}
       {snapshot.people.some(person => !person.deleted) ? null : (
-        <EmptyState
-          kind="people"
-          text={t('people.addFirst')}
-          action={t('people.addPerson')}
-          onAction={addSomeone}
-          secondaryAction={t('settings.contacts')}
-          onSecondaryAction={() => {
-            importFromContacts().then(result => setImportNote(describeImport(result))).catch(() => undefined);
-          }}
+        <ContactsReviewLink
+          label={t('settings.contacts')}
+          onDone={result => setImportNote(describeImport(result))}
+          row={open => (
+            <EmptyState
+              kind="people"
+              text={t('people.addFirst')}
+              action={t('people.addPerson')}
+              onAction={addSomeone}
+              secondaryAction={t('settings.contacts')}
+              onSecondaryAction={open}
+            />
+          )}
         />
       )}
       {needle && people.length === 0 && snapshot.people.some(person => !person.deleted) ? (

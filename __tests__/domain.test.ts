@@ -26,7 +26,7 @@ import {
 } from '../src/domain/logic';
 import { ideaReason } from '../src/domain/catalog';
 import { cloudIdeaRequestLog, ideaCacheId, suggestIdeas } from '../src/domain/ideas';
-import { colorsFor, parseSkin, skinForDate } from '../src/theme/skins';
+import { autoSkinLabel, colorsFor, parseSkin, skinForDate } from '../src/theme/skins';
 import { buildInviteUrl, openJson, parseLink, randomKey, sealJson, unwrapKey, wrapKey } from '../src/crypto/crypto';
 import { formatDate, formatMoney, t } from '../src/i18n';
 import { canRefresh, emptyUsage, nextUsage } from '../functions/src/caps';
@@ -258,6 +258,7 @@ test('banner waits 30 days and SMS stays in the US', () => {
 
 test('skins follow the date and fall back when a download is missing', () => {
   expect(skinForDate(new Date(2026, 9, 22))).toBe('fall');
+  expect(autoSkinLabel(new Date(2026, 9, 24))).toBe('Auto (Fall)');
   expect(skinForDate(new Date(2026, 11, 20))).toBe('winter');
   expect(skinForDate(new Date(2026, 3, 10))).toBe('spring');
   expect(colorsFor('spring', {}).id).toBe('base');
