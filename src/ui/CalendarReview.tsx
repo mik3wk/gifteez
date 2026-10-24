@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import type { CalendarDraft } from '../domain/calendarImport';
+import { initiallyChosen, type CalendarDraft } from '../domain/calendarImport';
 import { scanCalendar } from '../platform/importers';
 import { deviceLocale, formatDate, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
@@ -36,7 +36,7 @@ export function CalendarReviewLink({
       return;
     }
     setDrafts(found);
-    setPicked(Object.fromEntries(found.map(item => [item.key, true])));
+    setPicked(Object.fromEntries(found.map(item => [item.key, initiallyChosen(item)])));
     setOpen(true);
   }
 
@@ -110,12 +110,17 @@ export function CalendarReviewLink({
         {!denied && drafts.length === 0 ? <Body>{t('importFlow.none')}</Body> : null}
         {drafts.map(draft => {
           const when = formatDate(new Date(2026, draft.month - 1, draft.day), deviceLocale());
-          const who = draft.personId ? t('importFlow.matched', { name: draft.name }) : t('importFlow.newPerson', { name: draft.name });
+          const who = !draft.name.trim()
+            ? t('importFlow.addName')
+            : draft.personId
+              ? t('importFlow.matched', { name: draft.name })
+              : t('importFlow.newPerson', { name: draft.name });
           return (
             <View key={draft.key} style={styles.draft}>
               {draft.nameEditable ? (
                 <TextInput
                   accessibilityLabel={t('importFlow.editName')}
+                  placeholder={t('importFlow.addName')}
                   value={draft.name}
                   onChangeText={name => setDrafts(current => current.map(item => (
                     item.key === draft.key ? { ...item, name } : item
@@ -129,7 +134,7 @@ export function CalendarReviewLink({
               ) : null}
               <CheckRow
                 label={draft.nameEditable ? `${when}. ${who}` : `${draft.name} · ${when}. ${who}`}
-                checked={picked[draft.key] !== false}
+                checked={picked[draft.key] === true}
                 onPress={() => setPicked(current => ({ ...current, [draft.key]: !current[draft.key] }))}
               />
             </View>

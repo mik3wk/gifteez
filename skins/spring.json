@@ -1,16 +1,16 @@
 {
   "id": "spring",
-  "version": 3,
+  "version": 4,
   "colors": {
     "background": "#FBF8F3",
     "surface": "#FFFFFF",
     "text": "#2B2522",
     "muted": "#6F6660",
-    "accent": "#4F6F57",
+    "accent": "#1B7A43",
     "accentText": "#FFFFFF",
     "border": "#E7DFD6",
     "danger": "#C62828",
-    "success": "#4F6F57",
-    "banner": "#E7F0E9"
+    "success": "#1B7A43",
+    "banner": "#E5F6EA"
   }
 }

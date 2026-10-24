@@ -176,6 +176,7 @@ const DARK_FILLS: Record<string, Pick<ThemeColors, 'accent' | 'accentText' | 'da
   '#5D7290': { ...DARK_ROLE, accent: '#A9B9CE', banner: '#3A4A60' },
   '#2F5D50': { ...DARK_ROLE, accent: '#9FCBBC', banner: '#5C4A28' },
   '#4F6F57': { ...DARK_ROLE, accent: sticker.dark.teal, banner: '#3E5A48' },
+  '#1B7A43': { ...DARK_ROLE, accent: '#7DCEA0', banner: '#245C3A' },
   '#B8A4FF': { ...DARK_ROLE, accent: '#C4B5FD', banner: '#5A4480' },
   '#FFD23F': { ...DARK_ROLE, accent: '#D9B866', banner: '#6A5420' },
   '#B45348': { ...DARK_ROLE, accent: '#F0B2A6', banner: '#6B4538' },

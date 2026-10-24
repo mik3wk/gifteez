@@ -41,6 +41,11 @@ export function eventDraft(title: string, start: string): Omit<CalendarDraft, 'k
   };
 }
 
+/** Clear names start selected. Unclear titles, including a bare "Birthday", start off. */
+export function initiallyChosen(draft: { name: string; nameEditable?: boolean }): boolean {
+  return !draft.nameEditable && Boolean(draft.name.trim());
+}
+
 export function draftsFromEvents(
   events: Array<{ title?: string | null; startDate?: string | null }>,
   people: Array<{ id: string; name: string; deleted?: boolean }>,
@@ -53,7 +58,10 @@ export function draftsFromEvents(
     if (!draft) {
       return;
     }
-    const key = `${draft.name.toLowerCase()}|${draft.occasion}|${draft.month}|${draft.day}`;
+    const identity = draft.name.trim()
+      ? draft.name.trim().toLowerCase()
+      : `untitled:${draft.title.toLowerCase()}`;
+    const key = `${identity}|${draft.occasion}|${draft.month}|${draft.day}`;
     if (seen.has(key)) {
       return;
     }
@@ -116,24 +124,13 @@ function wordFor(occasion: CalendarOccasion): string {
 function extractName(title: string, occasion: CalendarOccasion): { name: string; editable: boolean } {
   const stripped = stripAge(title);
   const word = wordFor(occasion);
-  const patterns = [
-    new RegExp(String.raw`^(?:test\s+)?(?:${word})\s*[-–—:]\s*(.+)$`, 'i'),
-    new RegExp(String.raw`^(.*?)['’]s(?:\s+(?:${word}))?$`, 'i'),
-    new RegExp(String.raw`^(?:test\s+)?(?:${word})\s+(.+)$`, 'i'),
-    new RegExp(String.raw`^(.+?)\s+(?:${word})$`, 'i'),
-  ];
-  for (const pattern of patterns) {
-    const match = pattern.exec(stripped);
-    const name = tidy(match?.[1] ?? '');
-    if (name && !isOccasionWord(name)) {
-      return { name, editable: false };
-    }
+  const withoutOccasion = tidy(stripped.replace(new RegExp(String.raw`\b(?:${word})\b`, 'ig'), ' '));
+  const possessive = /^(.*?)['’]s$/i.exec(withoutOccasion);
+  const name = tidy(possessive?.[1] ?? withoutOccasion);
+  if (!name || isOccasionWord(name)) {
+    return { name: '', editable: true };
   }
-  const plain = tidy(stripped);
-  if (plain && !isOccasionWord(plain) && !new RegExp(word, 'i').test(plain)) {
-    return { name: plain, editable: false };
-  }
-  return { name: tidy(stripped) || title, editable: true };
+  return { name, editable: false };
 }
 
 function tidy(value: string): string {
@@ -141,5 +138,5 @@ function tidy(value: string): string {
 }
 
 function isOccasionWord(name: string): boolean {
-  return /^(?:test\s+)?(?:birthday|b-?day|anniversary|anniversaries|wedding)s?$/i.test(name);
+  return /^(?:birthday|b-?day|anniversary|anniversaries|wedding)s?$/i.test(name);
 }

@@ -1,4 +1,4 @@
-import { draftsFromEvents, eventDraft } from '../src/domain/calendarImport';
+import { draftsFromEvents, eventDraft, initiallyChosen } from '../src/domain/calendarImport';
 
 test('calendar titles become occasions and other events are ignored', () => {
   expect(eventDraft("Ada's birthday", '2026-04-02')).toMatchObject({
@@ -27,8 +27,13 @@ test('calendar titles become occasions and other events are ignored', () => {
   });
   expect(eventDraft('Dentist', '2026-04-02')).toBeNull();
   expect(eventDraft('Anniversary', '2026-04-02')).toMatchObject({
-    name: 'Anniversary',
+    name: '',
     occasion: 'anniversary',
+    nameEditable: true,
+  });
+  expect(eventDraft('Birthday', '2026-04-02')).toMatchObject({
+    name: '',
+    occasion: 'birthday',
     nameEditable: true,
   });
 });
@@ -45,14 +50,15 @@ test('calendar names drop the age and keep titles that will not parse', () => {
   expect(eventDraft('Zoe (49)', '2026-03-03')).toMatchObject({ name: 'Zoe', occasion: 'birthday' });
   expect(eventDraft("Sam's 12th birthday", '2026-03-04')).toMatchObject({ name: 'Sam', occasion: 'birthday' });
   expect(eventDraft('Birthday – Zoe', '2026-03-05')).toMatchObject({ name: 'Zoe', occasion: 'birthday' });
-  expect(eventDraft('Test Birthday Zoe', '2026-03-06')).toMatchObject({ name: 'Zoe', occasion: 'birthday' });
+  expect(eventDraft('Test Birthday Zoe', '2026-03-06')).toMatchObject({ name: 'Test Zoe', occasion: 'birthday' });
   expect(eventDraft('Zoe Bday', '2026-03-07')).toMatchObject({ name: 'Zoe', occasion: 'birthday' });
   expect(eventDraft('Anniversary: X & Y', '2026-03-08')).toMatchObject({
     name: 'X & Y',
     occasion: 'anniversary',
   });
   expect(eventDraft('49th birthday', '2026-03-09')?.nameEditable).toBe(true);
-  expect(eventDraft('49th birthday', '2026-03-09')?.name).toBe('49th birthday');
+  expect(eventDraft('49th birthday', '2026-03-09')?.name).toBe('');
+  expect(eventDraft('Birthday Test', '2026-03-10')).toMatchObject({ name: 'Test', occasion: 'birthday' });
 });
 
 test('drafts match a living person and collapse the same date', () => {
@@ -69,4 +75,8 @@ test('drafts match a living person and collapse the same date', () => {
     ['Ada', 'birthday', 'ada'],
     ['Bea', 'anniversary', null],
   ]);
+  const birthday = eventDraft('Birthday', '2026-05-01');
+  const named = eventDraft("Ada's birthday", '2026-05-02');
+  expect(initiallyChosen(birthday!)).toBe(false);
+  expect(initiallyChosen(named!)).toBe(true);
 });
