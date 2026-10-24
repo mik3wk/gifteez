@@ -2,7 +2,17 @@
 
 > **End state:** an agent can be told to build everything in Phases 1–13. When it's done, the only manual step before testing on a simulator is filling in the environment variables from `.env.example`. If testing looks good, Phase 15 covers store submission (TestFlight and the Google Play internal testing track) using the Fastlane lanes.
 
-Gifteez is a private, year-round gift tracker with gift ideas. It's one React Native codebase for iOS and Android, running on Firebase (Blaze plan).
+## Decision, October 24, 2026
+
+Groups are removed. Gifteez is a local-only list on this phone. There is no sign-in screen, no invite link, and no shared list. The checklist items below that describe groups, joining, claims, merges, and one-list ownership are history. They are not the current product.
+
+The list lives on the phone. Encrypted local storage is the source of truth. Nothing waits on a sync. Settings has Export backup and Restore from backup. That file is the backup: versioned JSON of people, occasions, ideas, gifts, purchases, budgets, and relationship labels, shared through the phone's share sheet. Restore checks the file and asks before it replaces what is on the phone.
+
+Purchases use `react-native-iap` on the App Store and Google Play. The product is `gifteez_unlock`. The paywall is the person cap: five people free, unlimited after the unlock. `verifyUnlock`, `getEntitlement`, and `recheckEntitlements` stay so a refund can take the unlock away.
+
+Cloud Functions stay only as a proxy for OpenAI. The OpenAI key is a Functions secret and never ships in the app. The proxy still needs a Firebase user, so the app signs in anonymously with no UI, and App Check stays on. The AI cap is the device fingerprint, not that anonymous user. Fairness stays, and it compares spending on this phone's own list.
+
+Gifteez is a private, year-round gift tracker with gift ideas. It's one React Native codebase for iOS and Android. Firebase remains for the idea proxy, App Check, and purchase checks.
 
 ## 0. Context and decisions (reference)
 
@@ -75,6 +85,8 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] Generate the app icon at every iOS size (iPhone and iPad) and the Android adaptive icon, plus the launch screen, from the SVG sources
 
 ## 2. First open and onboarding
+
+Removed October 24, 2026: the Join button and invite links. First open adds one person and stays on this phone.
 - [x] Build the first-open screen: one sentence explaining the app, plus "Start" and "Join" buttons
 - [x] "Start" creates the invisible anonymous account and goes to the people list. Creating a group triggers the upgrade prompt.
 - [x] "Join" accepts an invite link and joins that group
@@ -83,6 +95,8 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] Don't generate recommendations at app open
 
 ## 3. Accounts (anonymous, invisible)
+
+Removed October 24, 2026: email-link and text-code sign-in, the upgrade prompt, and second-device restore. Anonymous auth remains with no UI because the idea proxy requires a user id.
 - [x] Create the Firebase anonymous account invisibly on first open, with no sign-in wall and no signup form
 - [x] Prompt the upgrade to a permanent sign-in only when the user starts a group, exports or shares a list, or first opens the app on a second device
 - [x] Make email magic link the default upgrade method, with a text code as an option
@@ -94,6 +108,8 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] Limit text codes to the launch regions (US first)
 
 ## 4. Groups
+
+Removed October 24, 2026. There is no group, invite, member list, or switcher.
 - [x] Create a group of up to 10 members, with an optional name override at creation. This prompts the upgrade from anonymous to a permanent sign-in.
 - [x] Invite through a shareable link that opens the app (or the store) and joins
 - [x] Enforce the member limit of 10. A list can exist with one person before anyone joins. The paid gift-recipient list is intentionally uncapped for now.
@@ -121,8 +137,8 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] Show the gift history for this person across occasions and years
 - [x] Let the user edit the person's tags and budget
 - [x] Gift history can filter to "My purchases". Each recipient shows who spent what this year and all time, next to the totals and budget
-- [x] On a group recipient, "Same person as…" merges a copy from another list. Occasions with the same type, month, and day combine. The source copy is removed and that list's recipient slot frees. Unchecked gifts stay private to the person who merged them
-- [x] After joining a list, offer a merge when a recipient matches one on your other lists by name or birthday. The offer can be dismissed. Nothing merges automatically
+- [x] On a group recipient, "Same person as…" merges a copy from another list. Occasions with the same type, month, and day combine. The source copy is removed and that list's recipient slot frees. Unchecked gifts stay private to the person who merged them. Removed October 24, 2026.
+- [x] After joining a list, offer a merge when a recipient matches one on your other lists by name or birthday. The offer can be dismissed. Nothing merges automatically. Removed October 24, 2026.
 
 ## 7. Occasions and the gift-giving loop
 - [x] Support per-person occasions: birthday, Christmas and wedding
@@ -130,9 +146,9 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [x] Reset the status for each new occurrence of an occasion
 - [x] Gift-giving loop: get ideas, save an idea, mark it purchased, log the date and price, give feedback
 - [x] Logging a purchase counts it toward the person's budget
-- [x] "I'll get this" claims this year's occasion. Every member sees who claimed it. The claimer or the list owner can unclaim
-- [x] Logging a purchase records who bought it. History says "Bought by" that name, or "You". Older gifts with no buyer still show
-- [x] A gentle warning shows if you log a purchase on an occasion another member claimed. The purchase still saves
+- [x] "I'll get this" claims this year's occasion. Every member sees who claimed it. The claimer or the list owner can unclaim. Removed October 24, 2026.
+- [x] Logging a purchase records who bought it. History says "Bought by" that name, or "You". Older gifts with no buyer still show. Removed October 24, 2026.
+- [x] A gentle warning shows if you log a purchase on an occasion another member claimed. The purchase still saves. Removed October 24, 2026.
 - [x] Build a fairness view comparing spend (and gift counts) across people
 
 ## 8. Recommendations: on-device AI (free baseline)
@@ -152,6 +168,8 @@ Gifteez is a private, year-round gift tracker with gift ideas. It's one React Na
 - [ ] Confirm OpenAI model pricing and set a monthly spend alert
 
 ## 10. Monetization
+
+Removed October 24, 2026: one list per free account, group ownership, and member caps. The free cap is five people on this phone. `gifteez_unlock` through react-native-iap removes that cap on the App Store and Google Play.
 - [x] Free tier: one list you start, 5 gift recipients on it, 5 refreshes each. Joining lists other people start is not limited
 - [x] $9.99 one-time in-app purchase removes both limits (more lists you start, and the recipient cap on lists you own) and raises refreshes
 - [x] No AI subscription
