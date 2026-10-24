@@ -38,6 +38,11 @@ import {
   Sheet,
 } from '../ui/ui';
 
+/** A new circle is created here. An existing circle saves edits. */
+export function circleSheetAction(editor: 'new' | string | null): string {
+  return editor === 'new' ? t('fairness.create') : t('common.saveChanges');
+}
+
 export function FairnessScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
   const {
@@ -219,7 +224,7 @@ export function FairnessScreen() {
         />
         <Caption>{t('fairness.circleBudgetHint')}</Caption>
         <Button
-          label={t('common.saveChanges')}
+          label={circleSheetAction(editor)}
           onPress={() => {
             saveEditor().then(ok => {
               if (ok) {

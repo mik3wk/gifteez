@@ -22,6 +22,7 @@ jest.mock('../src/state/GifteezContext', () => {
 });
 
 import { CircleFairnessCard } from '../src/ui/stationery';
+import { circleSheetAction } from '../src/screens/FairnessScreen';
 
 const quiet: CircleSection = {
   circleId: 'kids',
@@ -66,4 +67,10 @@ test('matching spend still says everyone matches', () => {
   const copy = textOf(renderer!);
   expect(copy).toContain('Everyone matches. Nicely done.');
   expect(copy).toContain('Balanced');
+});
+
+test('a new circle confirms with Create circle', () => {
+  expect(circleSheetAction('new')).toBe('Create circle');
+  expect(circleSheetAction('kids')).toBe('Save changes');
+  expect(circleSheetAction(null)).toBe('Save changes');
 });
