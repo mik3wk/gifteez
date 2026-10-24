@@ -26,7 +26,33 @@ test('calendar titles become occasions and other events are ignored', () => {
     day: 12,
   });
   expect(eventDraft('Dentist', '2026-04-02')).toBeNull();
-  expect(eventDraft('Anniversary', '2026-04-02')).toBeNull();
+  expect(eventDraft('Anniversary', '2026-04-02')).toMatchObject({
+    name: 'Anniversary',
+    occasion: 'anniversary',
+    nameEditable: true,
+  });
+});
+
+test('calendar names drop the age and keep titles that will not parse', () => {
+  expect(eventDraft('Kate Bell’s 49th', '2026-03-01')).toMatchObject({
+    name: 'Kate Bell',
+    occasion: 'birthday',
+  });
+  expect(eventDraft("David Taylor's 29th", '2026-03-02')).toMatchObject({
+    name: 'David Taylor',
+    occasion: 'birthday',
+  });
+  expect(eventDraft('Zoe (49)', '2026-03-03')).toMatchObject({ name: 'Zoe', occasion: 'birthday' });
+  expect(eventDraft("Sam's 12th birthday", '2026-03-04')).toMatchObject({ name: 'Sam', occasion: 'birthday' });
+  expect(eventDraft('Birthday – Zoe', '2026-03-05')).toMatchObject({ name: 'Zoe', occasion: 'birthday' });
+  expect(eventDraft('Test Birthday Zoe', '2026-03-06')).toMatchObject({ name: 'Zoe', occasion: 'birthday' });
+  expect(eventDraft('Zoe Bday', '2026-03-07')).toMatchObject({ name: 'Zoe', occasion: 'birthday' });
+  expect(eventDraft('Anniversary: X & Y', '2026-03-08')).toMatchObject({
+    name: 'X & Y',
+    occasion: 'anniversary',
+  });
+  expect(eventDraft('49th birthday', '2026-03-09')?.nameEditable).toBe(true);
+  expect(eventDraft('49th birthday', '2026-03-09')?.name).toBe('49th birthday');
 });
 
 test('drafts match a living person and collapse the same date', () => {
