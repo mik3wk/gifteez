@@ -106,3 +106,37 @@ test('a rejected cloud ideas callable shows retry and keeps on-device ideas', as
   expect(mockCallable).toHaveBeenCalledTimes(failures.length);
   expect(mockCallable).toHaveBeenCalledWith('ada');
 });
+
+test('edit person uses the add field order and saves from the bottom', async () => {
+  let renderer: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => {
+    renderer = ReactTestRenderer.create(<PersonScreen />);
+  });
+  const edit = renderer!.root.findAllByProps({ accessibilityRole: 'button' }).find(node => node.props.accessibilityLabel === 'Edit');
+  expect(edit).toBeDefined();
+  await ReactTestRenderer.act(async () => {
+    edit?.props.onPress();
+  });
+  const labels = renderer!.root.findAllByType(Text).map(node => node.props.children).filter(item => typeof item === 'string');
+  const start = labels.indexOf('Details');
+  const after = labels.slice(start);
+  const order = [
+    'Name',
+    'Relationship (optional)',
+    'Interests',
+    'Circle',
+    'Yearly budget (optional)',
+    'Birth year (optional)',
+    'Notes about them',
+    'Save changes',
+  ];
+  let last = -1;
+  order.forEach(label => {
+    const index = after.indexOf(label);
+    expect(index).toBeGreaterThan(last);
+    last = index;
+  });
+  expect(labels).not.toContain('Done');
+  const close = renderer!.root.findAllByProps({ accessibilityLabel: 'Close' })[0];
+  expect(close).toBeDefined();
+});

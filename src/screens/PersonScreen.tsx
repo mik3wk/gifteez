@@ -316,6 +316,8 @@ export function PersonScreen() {
   const [editingDetails, setEditingDetails] = useState(false);
   const [editCircleId, setEditCircleId] = useState(person?.circleId ?? '');
   const [addingOccasion, setAddingOccasion] = useState(false);
+  const [occasionDraft, setOccasionDraft] = useState(false);
+  const [occasionDirty, setOccasionDirty] = useState(false);
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudError, setCloudError] = useState(false);
   const [menu, setMenu] = useState<Menu | null>(null);
@@ -365,9 +367,9 @@ export function PersonScreen() {
   );
   usePreventRemove(detailsDirty, ({ data }) => {
     confirmDestructive(
-      t('firstOpen.discardTitle'),
-      t('firstOpen.discardBody'),
-      t('firstOpen.discard'),
+      t('common.discardChanges'),
+      '',
+      t('common.discard'),
     ).then(ok => {
       if (ok) {
         navigation.dispatch(data.action);
@@ -581,12 +583,23 @@ export function PersonScreen() {
     return true;
   }
 
-  function finishDetails() {
-    if (!detailsDirty) {
+  function closeDetails() {
+    if (!person) {
       setEditingDetails(false);
       return;
     }
-    saveDetails();
+    setName(person.name);
+    setBudget(person.budgetCents == null ? '' : String(person.budgetCents / 100));
+    setBirthYear(person.birthYear ? String(person.birthYear) : '');
+    setRelationship(person.relationship ?? '');
+    setNotes(person.notes ?? '');
+    setInterestTags(person.tags ?? []);
+    setEditCircleId(person.circleId ?? '');
+    setNameError('');
+    setBudgetError('');
+    setBirthError('');
+    setRelationshipError('');
+    setEditingDetails(false);
   }
 
   return (
@@ -821,13 +834,16 @@ export function PersonScreen() {
       <Sheet
         visible={addingOccasion}
         title={t('person.addOccasionHeading')}
+        dirty={occasionDraft}
         onClose={() => {
+          setOccasionDraft(false);
           setAddingOccasion(false);
           pendingBuy.current = null;
         }}
       >
         <OccasionPicker
           personId={person.id}
+          onDirty={setOccasionDraft}
           onAdded={id => {
             const pending = pendingBuy.current;
             pendingBuy.current = null;
@@ -847,7 +863,7 @@ export function PersonScreen() {
           }}
         />
       </Sheet>
-      <Sheet visible={editingDetails} title={t('person.details')} doneLabel={t('common.done')} onClose={finishDetails}>
+      <Sheet visible={editingDetails} title={t('person.details')} dirty={detailsDirty} onClose={closeDetails}>
         <Field
           label={t('person.name')}
           value={name}
@@ -859,8 +875,17 @@ export function PersonScreen() {
             setNameError('');
           }}
         />
+        <RelationshipField
+          value={relationship}
+          error={relationshipError}
+          onChange={value => {
+            setRelationship(value);
+            setRelationshipError('');
+          }}
+        />
         <Caption>{t('person.interests')}</Caption>
         <TagPicker tags={interestTags} onChange={setInterestTags} />
+        <CircleField value={editCircleId} onChange={setEditCircleId} />
         <Field
           label={t('person.budget')}
           value={budget}
@@ -883,22 +908,13 @@ export function PersonScreen() {
           }}
           keyboardType="number-pad"
         />
-        <RelationshipField
-          value={relationship}
-          error={relationshipError}
-          onChange={value => {
-            setRelationship(value);
-            setRelationshipError('');
-          }}
-        />
-        <CircleField value={editCircleId} onChange={setEditCircleId} />
         <Field
           label={t('person.notes')}
           value={notes}
           onChangeText={value => setNotes(value.slice(0, 300))}
         />
         <Caption>{t('person.notesHint')}</Caption>
-        <Button label={t('person.save')} onPress={() => { saveDetails(); }} />
+        <Button label={t('common.saveChanges')} onPress={() => { saveDetails(); }} />
         <Button
           label={t('person.removePerson', { name: person.name })}
           tone="danger"
@@ -932,12 +948,22 @@ export function PersonScreen() {
           </>
         ) : null}
       </Sheet>
-      <Sheet visible={Boolean(menuOccasion)} title={menuOccasion ? occasionLabel(menuOccasion) : ''} onClose={() => setMenu(null)} onDismiss={flushQueue}>
+      <Sheet
+        visible={Boolean(menuOccasion)}
+        title={menuOccasion ? occasionLabel(menuOccasion) : ''}
+        dirty={occasionDirty}
+        onClose={() => {
+          setOccasionDirty(false);
+          setMenu(null);
+        }}
+        onDismiss={flushQueue}
+      >
         {menuOccasion ? (
           <OccasionMenu
             occasion={menuOccasion}
             hidden={hidden}
             locked={locked}
+            onDirty={setOccasionDirty}
             onClose={() => setMenu(null)}
             onPurchase={idea => {
               queued.current = { kind: 'purchase', id: menuOccasion.id, idea };
@@ -1030,7 +1056,7 @@ export function PersonScreen() {
           giftError={giftError}
           priceError={priceError}
           dateError={dateError}
-          saveLabel={t('person.save')}
+          saveLabel={t('common.saveChanges')}
           saveAccessibilityLabel={t('person.editGiftLabel', { title: gift || t('person.editGift') })}
           onGift={value => {
             setGift(value);
@@ -1119,12 +1145,14 @@ function OccasionMenu({
   locked,
   onClose,
   onPurchase,
+  onDirty,
 }: {
   occasion: Occasion;
   hidden: boolean;
   locked: boolean;
   onClose: () => void;
   onPurchase: (idea: string) => void;
+  onDirty?: (dirty: boolean) => void;
 }) {
   const { snapshot, updateOccasion, deleteOccasion } = useGifteez();
   const [editing, setEditing] = useState(false);
@@ -1141,6 +1169,15 @@ function OccasionMenu({
   const estimated = dateIsEstimated(occasion, (next ?? today).getFullYear());
   const canEdit = !hidden && !locked && (occasionNeedsDate(occasion.type) || estimated);
   const note = presetFor(occasion.type)?.note;
+  const dateDirty = editing && (
+    month !== (occasion.month ? String(occasion.month) : '')
+    || day !== (occasion.day ? String(occasion.day) : '')
+    || (knowYear ? year : '') !== (occasion.year ? String(occasion.year) : '')
+  );
+  useEffect(() => {
+    onDirty?.(Boolean(dateDirty));
+  }, [dateDirty, onDirty]);
+  useEffect(() => () => onDirty?.(false), [onDirty]);
   if (editing) {
     return (
       <>
@@ -1167,7 +1204,7 @@ function OccasionMenu({
           }}
         />
         <Button
-          label={t('person.updateOccasion')}
+          label={t('common.saveChanges')}
           accessibilityLabel={t('person.updateOccasionLabel', { occasion: label })}
           onPress={() => {
             const monthNum = Number(month);
@@ -1517,11 +1554,18 @@ function GiftSheet({
   onClose: () => void;
 }) {
   const [adding, setAdding] = useState(false);
+  const [pickerDirty, setPickerDirty] = useState(false);
+  const started = useRef({ gift, price, date, occasionId: occasionId ?? '' });
+  const dirty = gift !== started.current.gift
+    || price !== started.current.price
+    || date !== started.current.date
+    || (occasionId ?? '') !== started.current.occasionId
+    || (adding && pickerDirty);
   return (
     <Sheet
       visible
       title={adding ? t('person.addOccasionHeading') : title}
-      doneLabel={adding ? undefined : t('common.done')}
+      dirty={dirty}
       onClose={() => { setAdding(false); onClose(); }}
     >
       {adding && personId ? (
@@ -1529,6 +1573,7 @@ function GiftSheet({
           <Button label={t('common.back')} tone="ghost" onPress={() => setAdding(false)} />
           <OccasionPicker
             personId={personId}
+            onDirty={setPickerDirty}
             onAdded={id => {
               setAdding(false);
               if (id) {

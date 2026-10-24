@@ -647,6 +647,9 @@
     "dismiss": "Dismiss",
     "close": "Close",
     "done": "Done",
+    "discardChanges": "Discard changes?",
+    "discard": "Discard",
+    "saveChanges": "Save changes",
     "more": "More",
     "continue": "Continue",
     "loading": "Wrapping things up…"

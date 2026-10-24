@@ -1335,7 +1335,7 @@ export function Sheet({
   onClose,
   onDismiss,
   title,
-  doneLabel,
+  dirty = false,
   compact,
   children,
 }: {
@@ -1344,8 +1344,8 @@ export function Sheet({
   onDismiss?: () => void;
   /** Left-aligned title. The close control sits on the same row. */
   title?: string;
-  /** Replaces the close icon on forms. */
-  doneLabel?: string;
+  /** Close asks before throwing away edits. */
+  dirty?: boolean;
   /** Bottom card sized to its content, for short forms such as reminders. */
   compact?: boolean;
   children: React.ReactNode;
@@ -1397,16 +1397,27 @@ export function Sheet({
       setFooterState(null);
     }
   }, [visible]);
+  const requestClose = () => {
+    if (!dirty) {
+      onClose();
+      return;
+    }
+    confirmDestructive(t('common.discardChanges'), '', t('common.discard')).then(ok => {
+      if (ok) {
+        onClose();
+      }
+    }).catch(() => undefined);
+  };
   return (
     <Modal
       visible={visible}
       transparent={compact}
       animationType={reduce ? 'fade' : 'slide'}
       presentationStyle={compact ? 'overFullScreen' : 'pageSheet'}
-      onRequestClose={onClose}>
+      onRequestClose={requestClose}>
       <View style={compact ? styles.compactRoot : [styles.screen, { backgroundColor: colors.background, paddingTop: Platform.OS === 'ios' ? space.xs : insets.top }]}>
         {compact ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={t('common.close')} onPress={onClose} style={styles.backdrop} />
+          <Pressable accessibilityRole="button" accessibilityLabel={t('common.close')} onPress={requestClose} style={styles.backdrop} />
         ) : null}
         <View style={compact ? [styles.compactCard, { backgroundColor: colors.background, paddingBottom: insets.bottom }] : styles.screen}>
         <SheetFooterContext.Provider value={setFooter}>
@@ -1425,13 +1436,7 @@ export function Sheet({
               style={[type.heading, styles.sheetTitle, { color: colors.text }]}>
               {title ?? ''}
             </Text>
-            {doneLabel ? (
-              <Pressable accessibilityRole="button" accessibilityLabel={doneLabel} onPress={onClose} style={styles.sheetDone}>
-                <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: colors.pink }]}>{doneLabel}</Text>
-              </Pressable>
-            ) : (
-              <IconButton label={t('common.close')} name="close" onPress={onClose} />
-            )}
+            <IconButton label={t('common.close')} name="close" onPress={requestClose} />
           </View>
           <ScrollView contentContainerStyle={[styles.content, { flexGrow: compact ? 0 : 1, paddingBottom: footer ? space.md : compact ? space.md : insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled">
             <Settle distance={10}>

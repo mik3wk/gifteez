@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { isRealMonthDay } from '../domain/logic';
 import {
   nextOccasionDate,
@@ -18,7 +18,15 @@ import { Body, Button, Caption, Chip, Cluster, Field, Select, Stack, Toggle, use
 
 const GROUPS: OccasionPreset['group'][] = ['holiday', 'celebration', 'life'];
 
-export function OccasionPicker({ personId, onAdded }: { personId: string; onAdded?: (occasionId?: string) => void }) {
+export function OccasionPicker({
+  personId,
+  onAdded,
+  onDirty,
+}: {
+  personId: string;
+  onAdded?: (occasionId?: string) => void;
+  onDirty?: (dirty: boolean) => void;
+}) {
   const { addOccasion, snapshot } = useGifteez();
   const setFooter = useSheetFooter();
   const [query, setQuery] = useState('');
@@ -58,6 +66,22 @@ export function OccasionPicker({ personId, onAdded }: { personId: string; onAdde
   submitRef.current = () => {
     void submit();
   };
+  const draftDirty = Boolean(
+    query.trim()
+    || selected
+    || customName.trim()
+    || month
+    || day
+    || year
+    || knowYear
+    || !everyYear
+    || also.length,
+  );
+  useEffect(() => {
+    onDirty?.(draftDirty);
+  }, [draftDirty, onDirty]);
+  useEffect(() => () => onDirty?.(false), [onDirty]);
+
   const buttonLabel = also.length > 0 && occasionName
     ? t('person.addForEveryone', { occasion: occasionName })
     : t('person.addOccasion');

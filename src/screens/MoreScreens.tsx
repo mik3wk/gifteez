@@ -19,6 +19,7 @@ import { SessionEntrance } from '../ui/motion';
 import {
   AppHeader,
   Body,
+  Button,
   Caption,
   Chip,
   Cluster,
@@ -207,7 +208,15 @@ export function SettingsScreen() {
           </SettingsGroup>
         ) : null}
       </SessionEntrance>
-      <Sheet visible={sheet === 'household'} title={t('settings.householdName')} doneLabel={t('common.done')} onClose={saveHousehold}>
+      <Sheet
+        visible={sheet === 'household'}
+        title={t('settings.householdName')}
+        dirty={household.trim() !== (snapshot.profile.householdName ?? '').trim()}
+        onClose={() => {
+          setHousehold(snapshot.profile.householdName ?? '');
+          setSheet(null);
+        }}
+      >
         <Field
           label={t('settings.householdName')}
           value={household}
@@ -217,8 +226,17 @@ export function SettingsScreen() {
           textContentType="name"
           autoComplete="name"
         />
+        <Button label={t('common.saveChanges')} onPress={saveHousehold} />
       </Sheet>
-      <Sheet visible={sheet === 'name'} title={t('settings.yourName')} doneLabel={t('common.done')} onClose={saveGiven}>
+      <Sheet
+        visible={sheet === 'name'}
+        title={t('settings.yourName')}
+        dirty={given.trim() !== (snapshot.profile.givenName ?? '').trim()}
+        onClose={() => {
+          setGiven(snapshot.profile.givenName ?? '');
+          setSheet(null);
+        }}
+      >
         <Field
           label={t('settings.yourName')}
           value={given}
@@ -227,8 +245,9 @@ export function SettingsScreen() {
           textContentType="name"
           autoComplete="name"
         />
+        <Button label={t('common.saveChanges')} onPress={saveGiven} />
       </Sheet>
-      <Sheet visible={sheet === 'remind'} compact title={t('settings.remindMe')} doneLabel={t('common.done')} onClose={() => setSheet(null)}>
+      <Sheet visible={sheet === 'remind'} compact title={t('settings.remindMe')} onClose={() => setSheet(null)}>
         <Caption>{t('settings.reminderDays')}</Caption>
         <Segment
           value={String(lead)}
@@ -267,7 +286,16 @@ export function SettingsScreen() {
           </View>
         ) : null}
       </Sheet>
-      <Sheet visible={sheet === 'budget'} title={t('settings.defaultBudget')} doneLabel={t('common.done')} onClose={saveBudget}>
+      <Sheet
+        visible={sheet === 'budget'}
+        title={t('settings.defaultBudget')}
+        dirty={budget !== budgetField(snapshot.profile.defaultBudgetCents)}
+        onClose={() => {
+          setBudget(budgetField(snapshot.profile.defaultBudgetCents));
+          setBudgetError('');
+          setSheet(null);
+        }}
+      >
         <Field
           label={t('settings.defaultBudget')}
           value={budget}
@@ -282,8 +310,9 @@ export function SettingsScreen() {
           onSubmitEditing={saveBudget}
         />
         <Caption>{t('settings.startingBudgetFooter')}</Caption>
+        <Button label={t('common.saveChanges')} onPress={saveBudget} />
       </Sheet>
-      <Sheet visible={sheet === 'theme'} title={t('settings.theme')} doneLabel={t('common.done')} onClose={() => setSheet(null)}>
+      <Sheet visible={sheet === 'theme'} title={t('settings.theme')} onClose={() => setSheet(null)}>
         <Cluster>
           <Chip label={t('settings.appearanceSystem')} selected={appearance === 'system'} onPress={() => { setAppearance('system').catch(() => undefined); }} />
           <Chip label={t('settings.appearanceLight')} selected={appearance === 'light'} onPress={() => { setAppearance('light').catch(() => undefined); }} />

@@ -83,10 +83,11 @@ export function FairnessScreen() {
       return false;
     }
     const cleaned = cleanCircleName(draft);
+    if (!cleaned) {
+      setNameError(t('fairness.nameInvalid'));
+      return false;
+    }
     if (editor === 'new') {
-      if (!cleaned) {
-        return true;
-      }
       const id = await createCircle(cleaned);
       if (!id) {
         setNameError(t('fairness.nameInvalid'));
@@ -100,11 +101,8 @@ export function FairnessScreen() {
     if (!editor) {
       return true;
     }
-    if (cleaned && cleaned !== editing?.name) {
+    if (cleaned !== editing?.name) {
       await renameCircle(editor, cleaned);
-    } else if (draft.trim() && !cleaned) {
-      setNameError(t('fairness.nameInvalid'));
-      return false;
     }
     const current = editing?.budgetCents ?? null;
     if (cents !== current) {
@@ -130,26 +128,11 @@ export function FairnessScreen() {
     return true;
   }
 
-  async function saveName() {
-    const cleaned = cleanCircleName(draft);
-    if (!cleaned) {
-      setNameError(t('fairness.nameInvalid'));
-      return;
-    }
-    if (editor === 'new') {
-      const id = await createCircle(cleaned);
-      if (!id) {
-        setNameError(t('fairness.nameInvalid'));
-        return;
-      }
-      setEditor(id);
-      setDraft(cleaned);
-      return;
-    }
-    if (editor && cleaned !== editing?.name) {
-      await renameCircle(editor, cleaned);
-    }
-  }
+  const editorDirty = editor == null
+    ? false
+    : editor === 'new'
+      ? Boolean(draft.trim() || budget.trim())
+      : draft.trim() !== (editing?.name ?? '') || budget !== budgetField(editing?.budgetCents);
 
   return (
     <Screen tab="fairness">
@@ -210,14 +193,8 @@ export function FairnessScreen() {
       <Sheet
         visible={editor != null}
         title={editor === 'new' ? t('fairness.newCircle') : editing?.name ?? t('fairness.edit')}
-        doneLabel={t('common.done')}
-        onClose={() => {
-          saveEditor().then(ok => {
-            if (ok) {
-              setEditor(null);
-            }
-          }).catch(() => undefined);
-        }}
+        dirty={editorDirty}
+        onClose={() => setEditor(null)}
       >
         <Field
           label={t('fairness.circleName')}
@@ -241,7 +218,16 @@ export function FairnessScreen() {
           }}
         />
         <Caption>{t('fairness.circleBudgetHint')}</Caption>
-        <Button label={editor === 'new' ? t('fairness.create') : t('fairness.rename')} onPress={() => { saveName().catch(() => undefined); }} />
+        <Button
+          label={t('common.saveChanges')}
+          onPress={() => {
+            saveEditor().then(ok => {
+              if (ok) {
+                setEditor(null);
+              }
+            }).catch(() => undefined);
+          }}
+        />
         {editing ? (
           <>
             <Caption>{t('fairness.addToCircle')}</Caption>

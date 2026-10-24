@@ -89,3 +89,53 @@ test('a confirm opened from a sheet stays in that sheet and cancel leaves it usa
   });
   expect(renderer!.root.findAllByType(Text).filter(node => node.props.children === 'Remove Marie?')).toHaveLength(1);
 });
+
+function labeled(renderer: ReactTestRenderer.ReactTestRenderer, label: string) {
+  return renderer.root.findAllByProps({ accessibilityRole: 'button' }).find(node =>
+    node.findAllByType(Text).some(item => item.props.children === label)
+    || node.props.accessibilityLabel === label,
+  );
+}
+
+test('a dirty sheet asks before closing, and a clean sheet closes', async () => {
+  const onClose = jest.fn();
+  let renderer: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    renderer = ReactTestRenderer.create(
+      <Sheet visible dirty title="Details" onClose={onClose}>
+        <Text>Name</Text>
+      </Sheet>,
+    );
+  });
+  expect(renderer!.root.findAllByType(Text).some(node => node.props.children === 'Done')).toBe(false);
+  await ReactTestRenderer.act(() => {
+    labeled(renderer!, 'Close')?.props.onPress();
+  });
+  expect(onClose).not.toHaveBeenCalled();
+  expect(renderer!.root.findAllByType(Text).some(node => node.props.children === 'Discard changes?')).toBe(true);
+  await ReactTestRenderer.act(async () => {
+    await labeled(renderer!, 'Cancel')?.props.onPress();
+  });
+  expect(onClose).not.toHaveBeenCalled();
+  await ReactTestRenderer.act(() => {
+    labeled(renderer!, 'Close')?.props.onPress();
+  });
+  await ReactTestRenderer.act(async () => {
+    await labeled(renderer!, 'Discard')?.props.onPress();
+  });
+  expect(onClose).toHaveBeenCalledTimes(1);
+
+  const cleanClose = jest.fn();
+  await ReactTestRenderer.act(() => {
+    renderer = ReactTestRenderer.create(
+      <Sheet visible title="Details" onClose={cleanClose}>
+        <Text>Name</Text>
+      </Sheet>,
+    );
+  });
+  await ReactTestRenderer.act(() => {
+    labeled(renderer!, 'Close')?.props.onPress();
+  });
+  expect(cleanClose).toHaveBeenCalledTimes(1);
+  expect(renderer!.root.findAllByType(Text).some(node => node.props.children === 'Discard changes?')).toBe(false);
+});
