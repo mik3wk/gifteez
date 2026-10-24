@@ -1,10 +1,9 @@
-import { emptySnapshot, type Occasion, type Person } from '../src/domain/types';
+import { emptySnapshot, type AppSnapshot, type Occasion, type Person } from '../src/domain/types';
 import {
   bannerDue,
   birthdayNameFromTitle,
   applyGroupRemote,
   canAddPerson,
-  createGroup,
   fairnessRows,
   DEFAULT_GROUP_MAX_MEMBERS,
   groupDisplayName,
@@ -15,6 +14,7 @@ import {
   memberNames,
   mergeRemote,
   nextOccurrence,
+  parkActive,
   parseImport,
   parseLooseDate,
   phoneAllowed,
@@ -157,8 +157,7 @@ test('on-device ideas stay on device, follow tags, and skip thumbs down', () => 
 });
 
 test('free tier stops at five people unless this phone is unlocked', () => {
-  const snapshot = createGroup({
-    snapshot: emptySnapshot(1),
+  const snapshot = ownedList({
     groupId: 'g',
     ownerId: 'owner',
     displayName: 'Mike',
@@ -249,17 +248,16 @@ test('names groups from members, and switching keeps the other list', () => {
   expect(groupDisplayName('', ten)).toBe('Mike, Sam & Jo +7');
   expect(groupDisplayName('', ten).length).toBeLessThanOrEqual(28);
   expect(groupMarker('same').emoji).toBe(groupMarker('same').emoji);
-  const first = createGroup({
-    snapshot: emptySnapshot(1),
+  const first = ownedList({
+    snapshot: { ...emptySnapshot(1), people: [person('p', 'Ada')] },
     groupId: 'g1',
     ownerId: 'u',
     displayName: 'Mike',
     groupName: '',
     now: 1,
   });
-  first.people = [person('p', 'Ada')];
-  const second = createGroup({
-    snapshot: first,
+  const second = ownedList({
+    snapshot: parkActive(first),
     groupId: 'g2',
     ownerId: 'u',
     displayName: 'Mike',
@@ -267,7 +265,7 @@ test('names groups from members, and switching keeps the other list', () => {
     now: 2,
   });
   expect(second.group?.name).toBe('Holidays');
-  expect(second.people).toHaveLength(0);
+  expect(second.people.map(item => item.name)).toEqual(['Ada']);
   expect(second.archives.g1.people.map(item => item.name)).toEqual(['Ada']);
   const back = switchGroup(second, 'g1');
   expect(back?.group?.id).toBe('g1');
@@ -285,8 +283,7 @@ test('a group has room for 9 members, not 10 or 11', () => {
   expect(t('errors.full', { count: DEFAULT_GROUP_MAX_MEMBERS })).toBe(
     'This list already has 10 members, the most a list can have.',
   );
-  const snapshot = createGroup({
-    snapshot: emptySnapshot(1),
+  const snapshot = ownedList({
     groupId: 'g',
     ownerId: 'owner',
     displayName: 'Mike',
@@ -313,8 +310,7 @@ test('a group has room for 9 members, not 10 or 11', () => {
 });
 
 test('unlock stays on this phone and does not follow another owner', () => {
-  const first = createGroup({
-    snapshot: emptySnapshot(1),
+  const first = ownedList({
     groupId: 'g1',
     ownerId: 'me',
     displayName: 'Mike',
@@ -335,8 +331,8 @@ test('unlock stays on this phone and does not follow another owner', () => {
   expect(remote.snapshot.group?.entitled).toBe(true);
   const unlocked = withAccountUnlock(first, true);
   expect(unlocked.group?.entitled).toBe(true);
-  const second = createGroup({
-    snapshot: first,
+  const second = ownedList({
+    snapshot: parkActive(unlocked),
     groupId: 'g2',
     ownerId: 'friend',
     displayName: 'Sam',
@@ -352,6 +348,45 @@ test('unlock stays on this phone and does not follow another owner', () => {
   expect(stamped.archives.g1.group.entitled).toBe(true);
   expect(t('errors.oneList')).toBe('Unlock to add more people.');
 });
+
+function ownedList(input: {
+  snapshot?: AppSnapshot;
+  groupId: string;
+  ownerId: string;
+  displayName: string;
+  groupName: string;
+  now: number;
+}): AppSnapshot {
+  const snapshot = input.snapshot ?? emptySnapshot(input.now);
+  return {
+    ...snapshot,
+    profile: {
+      ...snapshot.profile,
+      uid: input.ownerId,
+      displayName: input.displayName,
+      nameLocked: true,
+      onboarded: true,
+      groupId: input.groupId,
+    },
+    group: {
+      id: input.groupId,
+      name: input.groupName.trim(),
+      ownerId: input.ownerId,
+      memberIds: [input.ownerId],
+      peopleCount: snapshot.people.filter(item => !item.deleted).length,
+      entitled: snapshot.entitlementPaid,
+      currency: 'USD',
+      keyVersion: 0,
+      updatedAt: input.now,
+    },
+    members: [{
+      id: input.ownerId,
+      uid: input.ownerId,
+      displayName: input.displayName,
+      updatedAt: input.now,
+    }],
+  };
+}
 
 function person(id: string, name: string, budgetCents: number | null = null): Person {
   return {

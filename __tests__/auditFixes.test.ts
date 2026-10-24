@@ -2,7 +2,6 @@ import { deleteOccasion, deleteSharedGift, updateOccasionDate, updateSharedGift 
 import { planReminders } from '../src/domain/reminders';
 import { keyToString, openJson, randomKey, sealJson, unwrapKey, wrapKey } from '../src/crypto/crypto';
 import {
-  createGroup,
   dateInYear,
   exportAccount,
   groupCurrency,
@@ -16,8 +15,46 @@ import {
   yearSpentCents,
 } from '../src/domain/logic';
 import { isHiddenFromViewer, pushKind, stripSensitiveForViewer } from '../src/domain/visibility';
-import { emptySnapshot as blank, type Occasion, type OccasionState, type Person } from '../src/domain/types';
+import { emptySnapshot as blank, type AppSnapshot, type Occasion, type OccasionState, type Person } from '../src/domain/types';
 import { formatMoney } from '../src/i18n';
+
+function ownedList(input: {
+  groupId: string;
+  ownerId: string;
+  displayName: string;
+  groupName: string;
+  now: number;
+}): AppSnapshot {
+  const snapshot = blank(input.now);
+  return {
+    ...snapshot,
+    profile: {
+      ...snapshot.profile,
+      uid: input.ownerId,
+      displayName: input.displayName,
+      nameLocked: true,
+      onboarded: true,
+      groupId: input.groupId,
+    },
+    group: {
+      id: input.groupId,
+      name: input.groupName,
+      ownerId: input.ownerId,
+      memberIds: [input.ownerId],
+      peopleCount: 0,
+      entitled: false,
+      currency: 'USD',
+      keyVersion: 0,
+      updatedAt: input.now,
+    },
+    members: [{
+      id: input.ownerId,
+      uid: input.ownerId,
+      displayName: input.displayName,
+      updatedAt: input.now,
+    }],
+  };
+}
 
 function person(id: string, name: string): Person {
   return { id, name, budgetCents: null, tags: [], imported: false, opened: true, createdAt: 1, updatedAt: 1 };
@@ -44,8 +81,7 @@ test('a wedding does not roll into the next year', () => {
 });
 
 test('saving an idea keeps a purchase, and a leaving member loses the claim', () => {
-  const snapshot = createGroup({
-    snapshot: blank(1),
+  const snapshot = ownedList({
     groupId: 'g',
     ownerId: 'owner',
     displayName: 'Owner',
@@ -100,8 +136,7 @@ test('headline spend ignores private gifts', () => {
 });
 
 test('export waits for an account and includes every list', () => {
-  const snapshot = createGroup({
-    snapshot: blank(1),
+  const snapshot = ownedList({
     groupId: 'g',
     ownerId: 'me',
     displayName: 'Me',
@@ -172,8 +207,7 @@ test('reminders schedule the morning of the day and a week before', () => {
 });
 
 test('a buyer or the owner can correct a gift, and an occasion can be removed without its gifts', () => {
-  const snapshot = createGroup({
-    snapshot: blank(1),
+  const snapshot = ownedList({
     groupId: 'g',
     ownerId: 'owner',
     displayName: 'Owner',
