@@ -18,7 +18,7 @@ export function FirstOpenScreen() {
       <Image accessible={false} source={crestSource(scheme)} resizeMode="contain" style={styles.crest} />
       <Title align="center">{t('appName')}</Title>
       <Body align="center">{t('firstOpen.welcomeLead')}</Body>
-      <Button label={t('firstOpen.addFirst')} onPress={() => navigation.navigate('AddPerson')} />
+      <Button label={t('firstOpen.addFirst')} onPress={() => navigation.navigate('FirstAddPerson')} />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('settings.restoreBackup')}

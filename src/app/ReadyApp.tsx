@@ -18,7 +18,7 @@ import { ConfettiBurst, useReduceMotion } from '../ui/motion';
 import { BrandedLoading, ConfirmHost, Notice, OfflineBanner, UnlockSheet, confirmDestructive } from '../ui/ui';
 import type { AppEnv } from '../config/env';
 import { mainAppOpen } from '../domain/onboarding';
-import { peopleThenPerson, type RootStack } from './navigation';
+import { homeTabReset, peopleThenPerson, routeAfterFirstPeople, type RootStack } from './navigation';
 
 const Stack = createNativeStackNavigator<RootStack>();
 const navigationRef = createNavigationContainerRef<RootStack>();
@@ -67,6 +67,8 @@ function Navigator() {
   const showFailure = !coverBoot && !showRecovery && Boolean(gifteez.startupFailure);
   const showNav = !coverBoot && !showRecovery && !gifteez.startupFailure;
   const onboarded = mainAppOpen(gifteez.snapshot);
+  const livingPeople = gifteez.snapshot.people.reduce((count, person) => count + (person.deleted ? 0 : 1), 0);
+  const seenPeople = useRef(livingPeople);
   const resumeId = gifteez.resumePersonId;
   const clearResume = gifteez.clearResumePerson;
   useEffect(() => {
@@ -76,6 +78,25 @@ function Navigator() {
     navigationRef.dispatch(CommonActions.reset(peopleThenPerson(resumeId)));
     clearResume();
   }, [clearResume, navReady, onboarded, resumeId, showNav]);
+  useEffect(() => {
+    if (!showNav || !navReady || !navigationRef.isReady()) {
+      return;
+    }
+    const previous = seenPeople.current;
+    const state = navigationRef.getRootState();
+    const decision = routeAfterFirstPeople({
+      previousPeople: previous,
+      nextPeople: livingPeople,
+      routes: state?.routes ?? [],
+    });
+    if (decision.type === 'reset' && !state?.routeNames?.includes('Home')) {
+      return;
+    }
+    seenPeople.current = livingPeople;
+    if (decision.type === 'reset') {
+      navigationRef.dispatch(CommonActions.reset(homeTabReset()));
+    }
+  }, [livingPeople, navReady, showNav]);
   useEffect(() => {
     if (coverBoot) {
       return undefined;
@@ -137,7 +158,7 @@ function Navigator() {
           ) : (
             <>
               <Stack.Screen name="FirstOpen" component={FirstOpenScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="AddPerson" component={AddPersonScreen} options={{ title: t('person.addTitle') }} />
+              <Stack.Screen name="FirstAddPerson" component={AddPersonScreen} options={{ title: t('person.addTitle') }} />
             </>
           )}
         </Stack.Navigator>

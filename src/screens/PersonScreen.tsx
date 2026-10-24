@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CommonActions, useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStack } from '../app/navigation';
+import { cancelAddAction, homeTabReset, type RootStack } from '../app/navigation';
 import { amazonSearchUrl } from '../domain/amazon';
 import { describeImport } from '../domain/importNote';
 import { mainAppOpen } from '../domain/onboarding';
@@ -1258,7 +1258,18 @@ function AddFormBack() {
     : previous.name === 'Home'
       ? t('people.home')
       : t('people.title');
-  return <BackLink label={label} onPress={() => navigation.goBack()} />;
+  return (
+    <BackLink
+      label={label}
+      onPress={() => {
+        if (navigation.canGoBack()) {
+          navigation.dispatch(cancelAddAction(true));
+          return;
+        }
+        navigation.reset(homeTabReset());
+      }}
+    />
+  );
 }
 
 function leavePerson(navigation: NativeStackNavigationProp<RootStack>) {
