@@ -1,7 +1,7 @@
 import React from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { t } from '../i18n';
-import { stroke, type ArtName, type CelebrateName, type EmptyArtName } from '../theme/tokens';
+import { space, stroke, type ArtName, type CelebrateName, type EmptyArtName } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 
 const SKINS = {
@@ -76,6 +76,21 @@ const CREST = {
   dark: require('../assets/art/crest/crest-wreath-dark.png'),
 };
 
+const HERO_CARD = {
+  light: require('../assets/art/hero/hero-gift-card.png'),
+  dark: require('../assets/art/hero/hero-gift-card-dark.png'),
+};
+
+const BANNER_SLICE = {
+  light: require('../assets/art/banner/ribbon-banner-slice.png'),
+  dark: require('../assets/art/banner/ribbon-banner-slice-dark.png'),
+};
+
+const BANNER_CENTER = {
+  light: require('../assets/art/banner/ribbon-banner-center.png'),
+  dark: require('../assets/art/banner/ribbon-banner-center-dark.png'),
+};
+
 export type SealArtName = keyof typeof SEAL_ART;
 
 /** Line art is already colored. Do not tint these files. */
@@ -106,6 +121,25 @@ export function crestSource(scheme: Scheme): number {
   return scheme === 'dark' ? CREST.dark : CREST.light;
 }
 
+export function heroCardSource(scheme: Scheme): number {
+  return paired(HERO_CARD, scheme);
+}
+
+/** Edge-to-edge satin band. The center bow stays 72pt and is never stretched. */
+export function RibbonBanner() {
+  const { scheme } = useTheme();
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={styles.bannerRow}>
+      <Image accessible={false} source={paired(BANNER_SLICE, scheme)} resizeMode="stretch" style={styles.bannerSlice} />
+      <Image accessible={false} source={paired(BANNER_CENTER, scheme)} resizeMode="contain" style={styles.bannerCenter} />
+      <Image accessible={false} source={paired(BANNER_SLICE, scheme)} resizeMode="stretch" style={styles.bannerSlice} />
+    </View>
+  );
+}
+
 /** Seasonal banners stay the season bitmaps. Occasion emblems are separate. */
 export function SkinBanner({ skinId }: { skinId: string }) {
   const { colors, radius } = useTheme();
@@ -123,4 +157,14 @@ export function SkinBanner({ skinId }: { skinId: string }) {
 const styles = StyleSheet.create({
   frame: { borderWidth: stroke.card, overflow: 'hidden', minHeight: 96, justifyContent: 'center' },
   banner: { width: '100%', height: 96 },
+  bannerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
+    marginTop: 2,
+    marginBottom: 10,
+    marginHorizontal: -space.md,
+  },
+  bannerSlice: { flex: 1, height: 44 },
+  bannerCenter: { width: 72, height: 44 },
 });

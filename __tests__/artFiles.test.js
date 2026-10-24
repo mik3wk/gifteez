@@ -52,6 +52,10 @@ test('every emblem, empty state, and celebration has a 1x, 2x, and 3x sticker', 
   });
   expectScales(path.join(art, 'crest'), 'crest-wreath');
   expectScales(path.join(art, 'crest'), 'crest-wreath-dark');
+  ['hero-gift-card', 'hero-gift-card-dark'].forEach(name => expectScales(path.join(art, 'hero'), name));
+  ['ribbon-banner-slice', 'ribbon-banner-slice-dark', 'ribbon-banner-center', 'ribbon-banner-center-dark'].forEach(name => {
+    expectScales(path.join(art, 'banner'), name);
+  });
 });
 
 test('the iOS marketing icon is a square RGB PNG without alpha', async () => {

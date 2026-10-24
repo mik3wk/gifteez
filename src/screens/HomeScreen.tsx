@@ -1,25 +1,27 @@
 import React, { useLayoutEffect } from 'react';
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
+import { getEnv } from '../config/env';
 import { circleHomeLine, circleSections } from '../domain/circles';
-import { daysUntil, listCurrency, occurrenceYear, yearSpentCents } from '../domain/logic';
+import { canAddPerson, daysUntil, listCurrency, occurrenceYear, yearSpentCents } from '../domain/logic';
 import { isOneTimeOccasion, nextOccasionDate, occasionLabel } from '../domain/occasions';
+import { relationshipLabel } from '../domain/relationship';
 import type { AppSnapshot, GiftRecord, Occasion, OccasionState, Person } from '../domain/types';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, t, timeGreeting } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { occasionLook, space } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
-import { bowSource } from '../ui/art';
-import { MonogramAvatar, WaxSeal } from '../ui/stationery';
+import { heroCardSource, RibbonBanner } from '../ui/art';
+import { WaxSeal } from '../ui/stationery';
 import { ArtSlot, Body, Button, Caption, Card, EmptyState, Heading, Screen, Title } from '../ui/ui';
 
 type Upcoming = { person: Person; occasion: Occasion; date: Date };
 
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, resumePersonId, clearResumePerson } = useGifteez();
+  const { snapshot, resumePersonId, clearResumePerson, openPaywall } = useGifteez();
   const today = new Date();
   const year = today.getFullYear();
   const people = snapshot.people.filter(person => !person.deleted);
@@ -38,37 +40,33 @@ export function HomeScreen() {
     clearResumePerson();
     navigation.navigate('Person', { personId, section: 'ideas' });
   }, [clearResumePerson, navigation, resumePersonId]);
+  function addSomeone() {
+    if (!canAddPerson(snapshot, getEnv().freeTierMaxPeople)) {
+      openPaywall();
+      return;
+    }
+    navigation.navigate('AddPerson');
+  }
 
   return (
     <Screen tab="home">
       <View>
         <Title>{t('appName')}</Title>
-        <Caption tone="text">{timeGreeting(today)}</Caption>
+        <Caption tone="text">{homeGreeting(today, upcoming)}</Caption>
       </View>
       {people.length === 0 ? (
         <EmptyState
           kind="people"
           text={t('people.addFirst')}
           action={t('people.addPerson')}
-          onAction={() => navigation.navigate('AddPerson')}
+          onAction={addSomeone}
         />
       ) : hero ? (
         <Hero item={hero} year={year} snapshot={snapshot} money={money} onOpen={navigation.navigate} />
       ) : (
-        <Card>
-          <Body>{t('people.nothingComing')}</Body>
-          <Button
-            label={t('person.addOccasion')}
-            onPress={() => {
-              if (people.length === 1) {
-                navigation.navigate('Person', { personId: people[0].id, section: 'occasions' });
-                return;
-              }
-              navigation.navigate('People');
-            }}
-          />
-        </Card>
+        <NoOccasion person={people.slice().sort((a, b) => a.name.localeCompare(b.name))[0]} onAdd={navigation.navigate} />
       )}
+      {people.length > 0 ? <RibbonBanner /> : null}
       {coming.length > 0 ? (
         <View style={styles.block}>
           <View style={styles.rowBetween}>
@@ -107,33 +105,83 @@ function Hero({
   money: (cents: number) => string;
   onOpen: NativeStackNavigationProp<RootStack>['navigate'];
 }) {
-  const { colors, scheme, radius } = useTheme();
+  const { colors, scheme, type, typeScale } = useTheme();
+  const { width } = useWindowDimensions();
+  const cardWidth = Math.max(280, width - space.md * 2);
+  const scale = cardWidth / 370;
+  const cardHeight = 230 * scale;
   const today = new Date();
   const spent = yearSpentCents(item.person.id, snapshot.gifts, year);
   const logged = isLogged(item, snapshot.gifts, snapshot.states, today);
   const days = daysUntil(item.date, today);
+  const when = days === 0 ? t('people.today').toUpperCase() : t('people.inDays', { count: days }).toUpperCase();
+  const relationship = relationshipLabel(item.person.relationship);
+  const dateLabel = isOneTimeOccasion(item.occasion) ? formatLongDate(item.date) : formatDate(item.date);
+  const meta = [relationship, dateLabel].filter(Boolean).join(' · ');
   const budget = item.person.budgetCents == null
     ? t('people.heroOpen', { used: money(spent) })
     : t('people.heroBudget', { budget: money(item.person.budgetCents), used: money(spent) });
+  const pad = 22 * scale;
   return (
-    <View style={[styles.hero, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.card }]}>
-      <Image accessible={false} source={bowSource(scheme)} resizeMode="contain" style={styles.heroBow} />
-      <View style={styles.heroBody}>
-        <MonogramAvatar name={item.person.name} personId={item.person.id} size={44} />
-        <View style={styles.copy}>
-          <Heading>{t('people.nextTitle', { name: item.person.name, occasion: occasionLabel(item.occasion).toLowerCase() })}</Heading>
-          <Caption tone="text">{isOneTimeOccasion(item.occasion) ? formatLongDate(item.date) : formatDate(item.date)}</Caption>
-          <Caption tone="text">{days === 0 ? t('people.today') : t('people.inDays', { count: days })}</Caption>
-          <Caption tone="text">{budget}</Caption>
-          {logged ? <WaxSeal state="purchased" size={28} /> : null}
-        </View>
-      </View>
-      <Button
-        label={logged ? t('people.viewGift') : t('people.findGift')}
-        onPress={() => onOpen('Person', { personId: item.person.id, section: logged ? 'history' : 'ideas' })}
+    <View style={[styles.heroWrap, { width: cardWidth, height: cardHeight, marginBottom: 12 * scale }]}>
+      <Image
+        accessible={false}
+        source={heroCardSource(scheme)}
+        resizeMode="contain"
+        style={{ position: 'absolute', left: -14 * scale, top: -16 * scale, width: 398 * scale, height: 266 * scale }}
       />
+      <View style={[styles.heroCopy, { paddingHorizontal: pad, paddingTop: 28 * scale, paddingBottom: pad, maxWidth: cardWidth }]}>
+        <Text
+          maxFontSizeMultiplier={typeScale.caption}
+          style={[type.caption, { color: colors.pink, fontWeight: '600', letterSpacing: 1.4, fontSize: 11 * scale, maxWidth: 238 * scale }]}>
+          {t('people.nextKicker', { when })}
+        </Text>
+        <Text
+          numberOfLines={2}
+          maxFontSizeMultiplier={typeScale.display}
+          style={[type.display, { color: colors.text, fontSize: 28 * scale, lineHeight: 33 * scale, maxWidth: 238 * scale }]}>
+          {t('people.nextTitle', { name: item.person.name, occasion: occasionLabel(item.occasion) })}
+        </Text>
+        <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.muted, fontSize: 14 * scale, maxWidth: 238 * scale }]}>{meta}</Text>
+        <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.muted, fontSize: 14 * scale, maxWidth: 238 * scale }]}>{budget}</Text>
+        {logged ? <WaxSeal state="purchased" size={28} /> : null}
+        <View style={styles.heroSpacer} />
+        <Button
+          label={logged ? t('people.viewGift') : t('people.findGift')}
+          onPress={() => onOpen('Person', { personId: item.person.id, section: logged ? 'history' : 'ideas' })}
+        />
+      </View>
     </View>
   );
+}
+
+function NoOccasion({
+  person,
+  onAdd,
+}: {
+  person: Person;
+  onAdd: NativeStackNavigationProp<RootStack>['navigate'];
+}) {
+  return (
+    <Card>
+      <Body>{t('people.addBirthday', { name: person.name })}</Body>
+      <Button
+        label={t('person.addOccasion')}
+        onPress={() => onAdd('Person', { personId: person.id, section: 'occasions' })}
+      />
+    </Card>
+  );
+}
+
+function homeGreeting(today: Date, upcoming: Upcoming[]): string {
+  const due = upcoming.filter(item => {
+    const days = daysUntil(item.date, today);
+    return days >= 0 && days <= 7;
+  }).length;
+  if (due === 0) {
+    return timeGreeting(today);
+  }
+  return t('people.greetingWithSort', { greeting: timeGreeting(today), count: due });
 }
 
 function ComingRow({
@@ -249,7 +297,7 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   coming: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderWidth: 1, padding: space.sm },
   copy: { flex: 1, gap: 2 },
-  hero: { borderWidth: 1, padding: space.md, gap: space.sm, overflow: 'visible' },
-  heroBody: { flexDirection: 'row', gap: space.sm },
-  heroBow: { position: 'absolute', top: -12, right: -8, width: 48, height: 40 },
+  heroWrap: { overflow: 'visible', alignSelf: 'center' },
+  heroCopy: { flex: 1, gap: 2, overflow: 'visible' },
+  heroSpacer: { flex: 1, minHeight: 8 },
 });
