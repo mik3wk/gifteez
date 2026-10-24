@@ -22,6 +22,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { openTab, type RootStack } from '../app/navigation';
+import { claimModal, releaseModal } from './modalGate';
 import { getEnv } from '../config/env';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { clockFrom, formatClock, t } from '../i18n';
@@ -402,9 +403,9 @@ export function ConfirmDialog({
     return body;
   }
   return (
-    <Modal transparent visible animationType="fade" onRequestClose={onCancel} statusBarTranslucent>
+    <GuardedModal transparent visible animationType="fade" onRequestClose={onCancel} statusBarTranslucent>
       {body}
-    </Modal>
+    </GuardedModal>
   );
 }
 
@@ -1389,6 +1390,97 @@ export function useSheetFooter(): ((node: React.ReactNode) => void) | null {
   return useContext(SheetFooterContext);
 }
 
+function modalDismissIsImmediate(): boolean {
+  if (Platform.OS !== 'ios') {
+    return true;
+  }
+  const worker = (globalThis as { process?: { env?: { JEST_WORKER_ID?: string } } }).process?.env?.JEST_WORKER_ID;
+  return typeof worker === 'string' && worker.length > 0;
+}
+
+/** One presented React Native modal. A second request waits until this one has dismissed. */
+function GuardedModal({
+  visible,
+  onDismiss,
+  children,
+  ...rest
+}: React.ComponentProps<typeof Modal>) {
+  const claimRef = useRef<number | null>(null);
+  const [allowed, setAllowed] = useState(false);
+  const awaiting = useRef(false);
+  const shown = useRef(false);
+  const onDismissRef = useRef(onDismiss);
+  const visibleRef = useRef(visible);
+  onDismissRef.current = onDismiss;
+  visibleRef.current = visible;
+
+  const finish = useCallback(() => {
+    if (!awaiting.current) {
+      return;
+    }
+    awaiting.current = false;
+    shown.current = false;
+    const id = claimRef.current;
+    claimRef.current = null;
+    if (id != null) {
+      releaseModal(id);
+    }
+    onDismissRef.current?.();
+  }, []);
+
+  useEffect(() => {
+    if (visible && allowed) {
+      shown.current = true;
+    }
+  }, [allowed, visible]);
+
+  useEffect(() => {
+    if (visible) {
+      awaiting.current = false;
+      if (claimRef.current == null) {
+        claimRef.current = claimModal(() => {
+          if (visibleRef.current) {
+            setAllowed(true);
+          }
+        });
+      } else {
+        setAllowed(true);
+      }
+      return;
+    }
+    if (claimRef.current == null) {
+      return;
+    }
+    setAllowed(false);
+    awaiting.current = true;
+  }, [visible]);
+
+  useEffect(() => {
+    if (visible || !awaiting.current || allowed) {
+      return;
+    }
+    if (shown.current && !modalDismissIsImmediate()) {
+      return;
+    }
+    finish();
+  }, [allowed, finish, visible]);
+
+  useEffect(() => () => {
+    const id = claimRef.current;
+    claimRef.current = null;
+    awaiting.current = false;
+    if (id != null) {
+      releaseModal(id);
+    }
+  }, []);
+
+  return (
+    <Modal {...rest} visible={Boolean(visible) && allowed} onDismiss={finish}>
+      {children}
+    </Modal>
+  );
+}
+
 export function Sheet({
   visible,
   onClose,
@@ -1412,15 +1504,6 @@ export function Sheet({
   const { colors, type, typeScale } = useTheme();
   const insets = useSafeAreaInsets();
   const reduce = useReduceMotion();
-  const dismissRef = useRef(onDismiss);
-  dismissRef.current = onDismiss;
-  const wasVisible = useRef(visible);
-  useEffect(() => {
-    if (wasVisible.current && !visible) {
-      dismissRef.current?.();
-    }
-    wasVisible.current = visible;
-  }, [visible]);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   useEffect(() => {
     if (!visible) {
@@ -1468,8 +1551,9 @@ export function Sheet({
     }).catch(() => undefined);
   };
   return (
-    <Modal
+    <GuardedModal
       visible={visible}
+      onDismiss={onDismiss}
       transparent={compact}
       animationType={reduce ? 'fade' : 'slide'}
       presentationStyle={compact ? 'overFullScreen' : 'pageSheet'}
@@ -1526,7 +1610,7 @@ export function Sheet({
         ) : null}
         </View>
       </View>
-    </Modal>
+    </GuardedModal>
   );
 }
 

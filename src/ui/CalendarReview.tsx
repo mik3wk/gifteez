@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { getEnv } from '../config/env';
 import { calendarAddLabel, calendarSelection, draftStatus, initiallyChosen, type CalendarDraft } from '../domain/calendarImport';
@@ -37,6 +37,8 @@ export function CalendarReviewLink({
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [ask, setAsk] = useState(false);
+  const paywallAfterClose = useRef(false);
+  const reviewAfterAsk = useRef(false);
 
   async function openReview() {
     setDenied(false);
@@ -63,7 +65,8 @@ export function CalendarReviewLink({
 
   async function addChosen() {
     if (summary.people > 0 && contactAddDecision(summary.people, slotsLeft) === 'paywall') {
-      gifteez.openPaywall();
+      paywallAfterClose.current = true;
+      setOpen(false);
       return;
     }
     setBusy(true);
@@ -133,14 +136,35 @@ export function CalendarReviewLink({
           <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: colors.pink }]}>{label}</Text>
         </Pressable>
       )}
-      <Sheet visible={ask} compact title={t('people.findBirthdays')} onClose={() => setAsk(false)}>
+      <Sheet
+        visible={ask}
+        compact
+        title={t('people.findBirthdays')}
+        onClose={() => setAsk(false)}
+        onDismiss={() => {
+          if (!reviewAfterAsk.current) {
+            return;
+          }
+          reviewAfterAsk.current = false;
+          openReview().catch(() => undefined);
+        }}>
         <Body>{t('importFlow.calendarPreprompt')}</Body>
         <Button label={t('common.continue')} onPress={() => {
+          reviewAfterAsk.current = true;
           setAsk(false);
-          openReview().catch(() => undefined);
         }} />
       </Sheet>
-      <Sheet visible={open} title={t('importFlow.reviewTitle')} onClose={() => setOpen(false)}>
+      <Sheet
+        visible={open}
+        title={t('importFlow.reviewTitle')}
+        onClose={() => setOpen(false)}
+        onDismiss={() => {
+          if (!paywallAfterClose.current) {
+            return;
+          }
+          paywallAfterClose.current = false;
+          gifteez.openPaywall();
+        }}>
         <Caption>{t('importFlow.readOnly')}</Caption>
         {denied ? <Body>{t('importFlow.denied')}</Body> : null}
         {!denied && drafts.length === 0 ? <Body>{t('importFlow.none')}</Body> : null}

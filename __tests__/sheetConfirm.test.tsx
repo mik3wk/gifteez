@@ -127,6 +127,9 @@ test('a dirty sheet asks before closing, and a clean sheet closes', async () => 
 
   const cleanClose = jest.fn();
   await ReactTestRenderer.act(() => {
+    renderer!.unmount();
+  });
+  await ReactTestRenderer.act(() => {
     renderer = ReactTestRenderer.create(
       <Sheet visible title="Details" onClose={cleanClose}>
         <Text>Name</Text>

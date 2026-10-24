@@ -16,7 +16,7 @@ module.exports = {
       env: { node: true },
     },
     {
-      files: ['jest.setup.js'],
+      files: ['jest.setup.js', 'jest.reset.js'],
       env: { jest: true, node: true },
     },
   ],

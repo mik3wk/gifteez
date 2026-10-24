@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { getEnv } from '../config/env';
 import { contactAddDecision, freeSlotsLeft, withDefaultBudget } from '../domain/contactImport';
@@ -31,6 +31,7 @@ export function ContactsReviewLink({
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
+  const paywallAfterClose = useRef(false);
 
   async function openReview() {
     setDenied(false);
@@ -61,7 +62,8 @@ export function ContactsReviewLink({
   async function addChosen() {
     const decision = contactAddDecision(chosen.length, slotsLeft);
     if (decision === 'paywall') {
-      gifteez.openPaywall();
+      paywallAfterClose.current = true;
+      setOpen(false);
       return;
     }
     if (decision !== 'add') {
@@ -90,7 +92,17 @@ export function ContactsReviewLink({
       ) : (
         <Button label={label} tone="secondary" onPress={startReview} />
       )}
-      <Sheet visible={open} title={t('importFlow.contactsTitle')} onClose={() => setOpen(false)}>
+      <Sheet
+        visible={open}
+        title={t('importFlow.contactsTitle')}
+        onClose={() => setOpen(false)}
+        onDismiss={() => {
+          if (!paywallAfterClose.current) {
+            return;
+          }
+          paywallAfterClose.current = false;
+          gifteez.openPaywall();
+        }}>
         <Caption>{t('importFlow.contactsReadOnly')}</Caption>
         {denied ? <Body>{t('importFlow.denied')}</Body> : null}
         {!denied && drafts.length === 0 ? <Body>{t('importFlow.none')}</Body> : null}
