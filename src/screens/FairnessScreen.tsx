@@ -124,6 +124,7 @@ export function FairnessScreen() {
                 key={section.circleId}
                 section={section}
                 money={money}
+                sealBeside
                 onOpenIdeas={personId => navigation.navigate('Person', { personId, section: 'ideas' })}
                 onEdit={() => openEditor(section.circleId)}
               />
@@ -223,7 +224,7 @@ function Uncircled({
 }) {
   const { colors, type, typeScale } = useTheme();
   return (
-    <View style={styles.block}>
+    <View style={styles.uncircled}>
       <Heading>{t('fairness.notInCircle')}</Heading>
       <RowCard>
         {people.map((person, index) => {
@@ -265,7 +266,7 @@ function SuggestionCard({
 
 const styles = StyleSheet.create({
   actions: { gap: space.xs },
-  block: { gap: space.xs },
+  uncircled: { gap: space.lg, marginBottom: space.sm },
   addCircle: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
   plainRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, minHeight: 48, paddingHorizontal: space.sm },
   plainName: { flex: 1 },

@@ -164,7 +164,7 @@ export function ListRow({
       style={[styles.listRow, { borderBottomColor: colors.border, borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth }]}>
       <MonogramAvatar name={name} personId={personId} size={52} />
       <View style={styles.listCopy}>
-        <Text numberOfLines={1} style={[styles.listName, { color: colors.text, fontFamily: type.heading.fontFamily }]}>
+        <Text numberOfLines={2} style={[styles.listName, { color: colors.text, fontFamily: type.heading.fontFamily }]}>
           {name}
           {relationship ? <Text style={[styles.listMeta, { color: colors.muted }]}>{` · ${relationship}`}</Text> : null}
         </Text>
@@ -188,12 +188,15 @@ export function CircleFairnessCard({
   onOpenFairness,
   onOpenIdeas,
   onEdit,
+  sealBeside,
 }: {
   section: CircleSection;
   money: (cents: number) => string;
   onOpenFairness?: () => void;
   onOpenIdeas?: (personId: string) => void;
   onEdit?: () => void;
+  /** Fairness tab: pill sits on the title row and wraps under it when it does not fit. */
+  sealBeside?: boolean;
 }) {
   const { colors, type, typeScale, radius } = useTheme();
   const behind = section.behind[0];
@@ -215,7 +218,17 @@ export function CircleFairnessCard({
   const sealLabel = balanced || !behind
     ? undefined
     : t('fairness.behindSeal', { name: behind.name, amount: money(behind.behindCents) });
-  const head = (
+  const seal = section.status === 'empty' ? null : <SealPill state={balanced ? 'balanced' : 'purchased'} label={sealLabel} />;
+  const head = sealBeside ? (
+    <View style={styles.fairHeadWrap}>
+      <Icon name="scale" color={colors.sunshine} size={28} />
+      <View style={styles.fairTitle}>
+        <Text maxFontSizeMultiplier={typeScale.heading} style={[type.heading, { color: colors.text, fontSize: 22 }]}>{t('fairness.cardTitle')}</Text>
+        <Text maxFontSizeMultiplier={typeScale.caption} numberOfLines={1} style={[type.caption, { color: colors.muted }]}>{section.name}</Text>
+      </View>
+      {seal}
+    </View>
+  ) : (
     <View style={styles.fairHeadBlock}>
       <View style={styles.fairHead}>
         <Icon name="scale" color={colors.sunshine} size={28} />
@@ -224,7 +237,7 @@ export function CircleFairnessCard({
           <Text maxFontSizeMultiplier={typeScale.caption} numberOfLines={1} style={[type.caption, { color: colors.muted }]}>{section.name}</Text>
         </View>
       </View>
-      {section.status === 'empty' ? null : <SealPill state={balanced ? 'balanced' : 'purchased'} label={sealLabel} />}
+      {seal}
     </View>
   );
   const rows = members.map((member, index) => {
@@ -436,8 +449,9 @@ const styles = StyleSheet.create({
   track: { height: 10, borderRadius: 999, overflow: 'hidden' },
   bar: { height: '100%' },
   fairHeadBlock: { gap: space.xs },
+  fairHeadWrap: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.xs },
   fairHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  fairTitle: { flex: 1, gap: 2 },
+  fairTitle: { flexGrow: 1, flexShrink: 1, flexBasis: '60%', gap: 2 },
   fairBody: { gap: space.sm },
   memberLine: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   memberName: { width: 88, fontSize: 15, lineHeight: 20 },

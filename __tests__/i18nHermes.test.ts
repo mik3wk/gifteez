@@ -14,13 +14,15 @@ function withIntl<K extends keyof typeof Intl>(key: K, value: unknown, run: () =
   }
 }
 
-test('the greeting is morning from 5, afternoon from 12, and evening from 17 through 5', () => {
-  expect(timeGreeting(new Date(2026, 0, 1, 4, 30))).toBe('Good evening');
+test('the greeting is morning from 5, afternoon from 12, evening from 17, and hi late at night', () => {
+  expect(timeGreeting(new Date(2026, 0, 1, 4, 30))).toBe('Hi');
+  expect(timeGreeting(new Date(2026, 0, 1, 22, 0))).toBe('Hi');
   expect(timeGreeting(new Date(2026, 0, 1, 5, 0))).toBe('Good morning');
   expect(timeGreeting(new Date(2026, 0, 1, 11, 59))).toBe('Good morning');
   expect(timeGreeting(new Date(2026, 0, 1, 12, 0))).toBe('Good afternoon');
   expect(timeGreeting(new Date(2026, 0, 1, 16, 59))).toBe('Good afternoon');
   expect(timeGreeting(new Date(2026, 0, 1, 17, 0))).toBe('Good evening');
+  expect(timeGreeting(new Date(2026, 0, 1, 21, 59))).toBe('Good evening');
 });
 
 test('whole dollar amounts can drop the trailing cents', () => {

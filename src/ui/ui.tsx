@@ -127,7 +127,12 @@ export function Screen({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={headerHeight ?? 0}>
       {pinned ? (
-        <View accessibilityRole="header" style={[styles.pinned, { paddingTop: topPad }]}>{pinned}</View>
+        <View
+          accessibilityRole="header"
+          collapsable={false}
+          style={[styles.pinned, { paddingTop: topPad, zIndex: 20, elevation: 20, backgroundColor: colors.background }]}>
+          {pinned}
+        </View>
       ) : null}
       <ScrollView
         style={[styles.screen, { overflow: 'visible' }]}
@@ -143,7 +148,7 @@ export function Screen({
         <View style={styles.column}>{children}</View>
       </ScrollView>
       {coverStatus ? (
-        <View pointerEvents="none" style={[styles.statusBar, { height: insets.top, backgroundColor: colors.background }]} />
+        <View pointerEvents="none" style={[styles.statusBar, styles.statusBarFront, { height: insets.top, backgroundColor: colors.background }]} />
       ) : null}
       {bar ? (
         <View
@@ -186,14 +191,14 @@ export function Progress({ step, total }: { step: number; total: number }) {
   );
 }
 
-export function Title({ children, accessibilityLabel }: { children: string; accessibilityLabel?: string }) {
+export function Title({ children, accessibilityLabel, align }: { children: string; accessibilityLabel?: string; align?: 'center' }) {
   const { colors, type, typeScale } = useTheme();
   return (
     <Text
       accessibilityRole="header"
       accessibilityLabel={accessibilityLabel ?? children}
       maxFontSizeMultiplier={typeScale.title}
-      style={[type.title, styles.ink, { color: colors.text }]}>
+      style={[type.title, styles.ink, align === 'center' ? styles.centerText : null, { color: colors.text }]}>
       {children}
     </Text>
   );
@@ -208,10 +213,10 @@ export function Heading({ children, color }: { children: string; color?: string 
   );
 }
 
-export function Body({ children, strong, accessibilityLabel }: { children: string; strong?: boolean; accessibilityLabel?: string }) {
+export function Body({ children, strong, accessibilityLabel, align }: { children: string; strong?: boolean; accessibilityLabel?: string; align?: 'center' }) {
   const { colors, type, typeScale } = useTheme();
   return (
-    <Text accessibilityLabel={accessibilityLabel} maxFontSizeMultiplier={typeScale.body} style={[strong ? type.heading : type.body, styles.ink, { color: colors.text }]}>
+    <Text accessibilityLabel={accessibilityLabel} maxFontSizeMultiplier={typeScale.body} style={[strong ? type.heading : type.body, styles.ink, align === 'center' ? styles.centerText : null, { color: colors.text }]}>
       {children}
     </Text>
   );
@@ -509,6 +514,7 @@ export function Field({
   returnKeyType,
   textContentType,
   autoComplete,
+  autoCorrect,
   onSubmitEditing,
   onBlur,
 }: {
@@ -523,6 +529,7 @@ export function Field({
   returnKeyType?: 'done' | 'next' | 'go' | 'search';
   textContentType?: 'name' | 'emailAddress' | 'telephoneNumber' | 'oneTimeCode' | 'none';
   autoComplete?: 'name' | 'email' | 'tel' | 'sms-otp' | 'off';
+  autoCorrect?: boolean;
   onSubmitEditing?: () => void;
   onBlur?: () => void;
 }) {
@@ -540,7 +547,8 @@ export function Field({
         placeholderTextColor={colors.muted}
         keyboardType={keyboardType}
         autoCapitalize={textContentType === 'name' ? 'words' : keyboardType === 'email-address' ? 'none' : 'sentences'}
-        autoCorrect={textContentType === 'name' || keyboardType === 'email-address' ? false : undefined}
+        autoCorrect={autoCorrect ?? (textContentType === 'name' || keyboardType === 'email-address' ? false : undefined)}
+        spellCheck={autoCorrect === false ? false : undefined}
         returnKeyType={returnKeyType}
         textContentType={textContentType}
         autoComplete={autoComplete}
@@ -1462,6 +1470,8 @@ export function Toggle({
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   statusBar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 4 },
+  statusBarFront: { zIndex: 30, elevation: 30 },
+  centerText: { textAlign: 'center', alignSelf: 'stretch' },
   pinned: { paddingHorizontal: space.md, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center', gap: space.sm },
   modalFill: { flex: 1, justifyContent: 'center', padding: space.lg },
   content: { paddingHorizontal: space.md, flexGrow: 1, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center', overflow: 'visible' },

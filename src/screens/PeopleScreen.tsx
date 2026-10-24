@@ -76,7 +76,15 @@ export function PeopleScreen() {
         </Pressable>
       </View>
       {accountUnlocked(snapshot) ? null : <Caption>{t('people.freeCount', { used: Math.min(used, limit), limit })}</Caption>}
-      <Field label={t('people.search')} value={query} onChangeText={setQuery} returnKeyType="search" />
+      <Field
+        label={t('people.search')}
+        value={query}
+        onChangeText={setQuery}
+        returnKeyType="search"
+        autoCorrect={false}
+        autoComplete="off"
+        textContentType="none"
+      />
       {snapshot.people.some(person => !person.deleted) ? null : (
         <EmptyState kind="people" text={t('people.addFirst')} action={t('people.addPerson')} onAction={addSomeone} />
       )}

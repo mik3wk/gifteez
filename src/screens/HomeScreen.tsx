@@ -28,7 +28,7 @@ export function HomeScreen() {
   const year = today.getFullYear();
   const people = snapshot.people.filter(person => !person.deleted);
   const upcoming = upcomingRows(people, snapshot.occasions, today);
-  const hero = upcoming[0];
+  const hero = upcoming.find(item => !isLogged(item, snapshot.gifts, snapshot.states, today)) ?? upcoming[0];
   const listed = upcoming.slice(0, 5);
   const featured = homeCircle(circleSections(snapshot, year));
   const money = (cents: number) => formatMoney(cents, deviceLocale(), listCurrency(snapshot), true);
@@ -69,7 +69,14 @@ export function HomeScreen() {
           onAction={addSomeone}
         />
       ) : hero ? (
-        <Hero item={hero} year={year} snapshot={snapshot} money={money} onOpen={navigation.navigate} />
+        <Hero
+          item={hero}
+          year={year}
+          snapshot={snapshot}
+          money={money}
+          onOpen={navigation.navigate}
+          viewGift={isLogged(hero, snapshot.gifts, snapshot.states, today)}
+        />
       ) : (
         <NoOccasion person={people.slice().sort((a, b) => a.name.localeCompare(b.name))[0]} onAdd={navigation.navigate} />
       )}
@@ -200,12 +207,14 @@ function Hero({
   snapshot,
   money,
   onOpen,
+  viewGift,
 }: {
   item: Upcoming;
   year: number;
   snapshot: AppSnapshot;
   money: (cents: number) => string;
   onOpen: NativeStackNavigationProp<RootStack>['navigate'];
+  viewGift?: boolean;
 }) {
   const { colors, scheme, type, typeScale, radius } = useTheme();
   const today = new Date();
@@ -246,8 +255,9 @@ function Hero({
           <Button
             compact
             serif
-            label={t('people.planGift')}
-            onPress={() => onOpen('Person', { personId: item.person.id, section: 'ideas' })}
+            tone={viewGift ? 'secondary' : 'primary'}
+            label={viewGift ? t('people.viewGift') : t('people.planGift')}
+            onPress={() => onOpen('Person', { personId: item.person.id, section: viewGift ? 'history' : 'ideas' })}
           />
         </View>
       </View>
