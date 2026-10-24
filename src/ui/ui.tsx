@@ -107,6 +107,7 @@ export function Screen({
   tab,
   pinned,
   tight,
+  fill,
 }: {
   children: React.ReactNode;
   footer?: React.ReactNode;
@@ -114,6 +115,8 @@ export function Screen({
   tab?: TabId;
   pinned?: React.ReactNode;
   tight?: boolean;
+  /** Stretch the column so a short screen can place content in the lower half. */
+  fill?: boolean;
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -146,7 +149,7 @@ export function Screen({
           },
         ]}
         keyboardShouldPersistTaps="handled">
-        <View style={styles.column}>{children}</View>
+        <View style={[styles.column, fill ? styles.columnFill : null]}>{children}</View>
       </ScrollView>
       {coverStatus ? (
         <View pointerEvents="none" style={[styles.statusBar, styles.statusBarFront, { height: insets.top, backgroundColor: colors.background }]} />
@@ -831,7 +834,7 @@ export function ArtRow({
   size = 88,
   children,
 }: {
-  art: ArtName;
+  art: ArtName | EmptyArtName;
   size?: number;
   children: React.ReactNode;
 }) {
@@ -1665,6 +1668,7 @@ const styles = StyleSheet.create({
   modalFill: { flex: 1, justifyContent: 'center', padding: space.lg },
   content: { paddingHorizontal: space.md, flexGrow: 1, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center', overflow: 'visible' },
   column: { gap: space.sm, overflow: 'visible' },
+  columnFill: { flexGrow: 1 },
   centered: { justifyContent: 'center' },
   footer: { paddingHorizontal: space.md, paddingTop: space.xs, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 10, elevation: 10 },

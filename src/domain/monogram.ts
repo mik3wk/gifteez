@@ -16,6 +16,12 @@ export function monogramIndex(id: string): number {
   return hash % MONOGRAM_SWATCHES.length;
 }
 
+/** One letter from the signed-in first name. Empty when that name is unset. */
+export function householdCrestLetter(givenName: string | undefined): string {
+  const first = givenName?.trim().split(/\s+/)[0] ?? '';
+  return first.slice(0, 1).toUpperCase();
+}
+
 export function monogramLetters(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) {

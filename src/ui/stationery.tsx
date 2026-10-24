@@ -18,16 +18,19 @@ export function MonogramAvatar({
   personId,
   size = 48,
   crest = false,
+  blank = false,
 }: {
   name: string;
   personId: string;
   size?: number;
   crest?: boolean;
+  /** Crest with no monogram letter. */
+  blank?: boolean;
 }) {
   const { colors, scheme, type, typeScale } = useTheme();
   const swatch = MONOGRAM_SWATCHES[monogramIndex(personId || name || 'gifteez')];
-  const letters = monogramLetters(name) || 'G';
-  const face = (
+  const letters = crest && blank ? '' : (monogramLetters(name) || 'G');
+  const face = letters ? (
     <View
       accessibilityElementsHidden
       style={[
@@ -47,7 +50,7 @@ export function MonogramAvatar({
         {letters}
       </Text>
     </View>
-  );
+  ) : null;
   if (!crest) {
     return face;
   }

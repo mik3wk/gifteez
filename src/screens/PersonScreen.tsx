@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CommonActions, useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { cancelAddAction, homeTabReset, type RootStack } from '../app/navigation';
+import { cancelAddAction, homeTabReset, personBackLabel, type RootStack } from '../app/navigation';
 import { amazonSearchUrl, shopSearchQuery } from '../domain/amazon';
 import { budgetOrigin } from '../domain/budget';
 import { describeImport } from '../domain/importNote';
@@ -1345,7 +1345,7 @@ function leavePerson(navigation: NativeStackNavigationProp<RootStack>) {
 function backLabelFor(navigation: NativeStackNavigationProp<RootStack>): string {
   const state = navigation.getState?.();
   const previous = state?.routes[state.index - 1];
-  return previous?.name === 'Home' ? t('people.home') : t('people.title');
+  return personBackLabel(previous?.name);
 }
 
 function OutlineChip({ label, onPress }: { label: string; onPress: () => void }) {

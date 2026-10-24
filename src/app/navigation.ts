@@ -1,4 +1,5 @@
 import { CommonActions } from '@react-navigation/native';
+import { t } from '../i18n';
 
 export type RootStack = {
   FirstOpen: undefined;
@@ -18,6 +19,17 @@ export const MAIN_ROUTES = ['Home', 'People', 'Person', 'AddPerson', 'Fairness',
 
 export function homeTabReset() {
   return { index: 0 as const, routes: [{ name: 'Home' as const }] };
+}
+
+/** The person screen names the screen underneath. Fairness stays Fairness. */
+export function personBackLabel(previousName?: string): string {
+  if (previousName === 'Home') {
+    return t('people.home');
+  }
+  if (previousName === 'Fairness') {
+    return t('people.fairness');
+  }
+  return t('people.title');
 }
 
 /** Cancel leaves the add screen. With nothing underneath, it opens Home instead of an unhandled GO_BACK. */

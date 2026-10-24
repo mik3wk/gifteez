@@ -7,6 +7,7 @@ import { getEnv } from '../config/env';
 import { circleSections, homeCircle, repeatedRelationship } from '../domain/circles';
 import { canAddPerson, daysUntil, listCurrency, occurrenceYear, yearSpentCents } from '../domain/logic';
 import { isOneTimeOccasion, nextOccasionDate, occasionLabel } from '../domain/occasions';
+import { householdCrestLetter } from '../domain/monogram';
 import { relationshipLabel } from '../domain/relationship';
 import type { AppSnapshot, GiftRecord, Occasion, OccasionState, Person } from '../domain/types';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, formatWeekday, t, timeGreeting } from '../i18n';
@@ -57,6 +58,7 @@ export function HomeScreen() {
       <HomeHeader
         household={household}
         greeting={greeting}
+        letter={householdCrestLetter(snapshot.profile.givenName)}
         onBell={() => setRemindersOpen(true)}
       />
       {people.length === 0 ? (
@@ -150,17 +152,18 @@ function greetingLine(givenName: string | undefined, today: Date): string {
 function HomeHeader({
   household,
   greeting,
+  letter,
   onBell,
 }: {
   household: string;
   greeting: string;
+  letter: string;
   onBell: () => void;
 }) {
   const { colors, type, typeScale } = useTheme();
-  const initial = household.split(/\s+/)[0] || household;
   return (
     <View style={styles.header}>
-      <MonogramAvatar name={initial} personId="household" size={36} crest />
+      <MonogramAvatar name={letter} personId="household" size={36} crest blank={!letter} />
       <View style={styles.headerCopy}>
         <Caption>{greeting}</Caption>
         <Text
