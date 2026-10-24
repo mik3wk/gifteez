@@ -441,7 +441,9 @@
     "newCircle": "New circle",
     "newCircleOption": "New circle…",
     "homePrompt": "Keep siblings even? Set up a circle",
-    "noCircles": "A circle keeps spending even for people who should match.",
+    "noCircles": "A circle keeps spending fair between people you want to treat the same, like siblings.",
+    "circleBudget": "Budget per person",
+    "circleBudgetHint": "New people in this circle start with this amount.",
     "createCircle": "Create a circle",
     "circleName": "Circle name",
     "nameInvalid": "Use letters, numbers, spaces, apostrophes, or hyphens.",
@@ -520,6 +522,8 @@
     "householdName": "Household name",
     "givenName": "Your first name",
     "gifting": "Gifting",
+    "gifts": "Gifts",
+    "reminderTime": "Reminder time",
     "defaultBudget": "Default yearly budget",
     "circles": "Circles",
     "importBackup": "Import and backup",
@@ -569,6 +573,7 @@
     "reviewTitle": "From your calendar",
     "readOnly": "Read-only. Gifteez never changes your calendar.",
     "editName": "Name from the calendar",
+    "addName": "Add a name",
     "matched": "Adds an occasion for {name}",
     "newPerson": "Adds {name}",
     "addOne": "Add 1 occasion",
@@ -602,7 +607,9 @@
     "currency": "Use a 3-letter code, like USD.",
     "sourceKey": "That list's key is not on this phone, so the merge was not started.",
     "mergePush": "The merge did not finish saving, so it was undone.",
-    "notifications": "Notifications stayed off."
+    "notifications": "Notifications stayed off.",
+    "notificationsSettings": "Notifications are off in iOS Settings",
+    "openSettings": "Open Settings"
   },
   "reminders": {
     "title": "Gifteez",

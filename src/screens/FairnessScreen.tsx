@@ -13,7 +13,7 @@ import {
   type CircleSuggestion,
 } from '../domain/circles';
 import { formatSpentOfBudget } from '../domain/budgetBar';
-import { canAddPerson, listCurrency, yearSpentCents } from '../domain/logic';
+import { canAddPerson, listCurrency, parseBudget, yearSpentCents } from '../domain/logic';
 import { relationshipCircleName } from '../domain/relationship';
 import { deviceLocale, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
@@ -45,6 +45,7 @@ export function FairnessScreen() {
     renameCircle,
     deleteCircle,
     setPersonCircle,
+    setCircleBudget,
     acceptCircleSuggestion,
     openPaywall,
   } = useGifteez();
@@ -61,13 +62,54 @@ export function FairnessScreen() {
   const [editor, setEditor] = useState<string | 'new' | null>(null);
   const [draft, setDraft] = useState('');
   const [nameError, setNameError] = useState('');
+  const [budget, setBudget] = useState('');
+  const [budgetError, setBudgetError] = useState('');
   const editing = editor && editor !== 'new' ? snapshot.circles.find(circle => circle.id === editor) : undefined;
 
   function openEditor(id: string) {
     const circle = snapshot.circles.find(item => item.id === id);
     setDraft(circle?.name ?? '');
     setNameError('');
+    setBudget(budgetField(circle?.budgetCents));
+    setBudgetError('');
     setEditor(id);
+  }
+
+  async function saveEditor(): Promise<boolean> {
+    const cents = budget.trim() ? parseBudget(budget) : null;
+    if (budget.trim() && cents == null) {
+      setBudgetError(t('errors.price'));
+      return false;
+    }
+    const cleaned = cleanCircleName(draft);
+    if (editor === 'new') {
+      if (!cleaned) {
+        return true;
+      }
+      const id = await createCircle(cleaned);
+      if (!id) {
+        setNameError(t('fairness.nameInvalid'));
+        return false;
+      }
+      if (cents != null) {
+        await setCircleBudget(id, cents);
+      }
+      return true;
+    }
+    if (!editor) {
+      return true;
+    }
+    if (cleaned && cleaned !== editing?.name) {
+      await renameCircle(editor, cleaned);
+    } else if (draft.trim() && !cleaned) {
+      setNameError(t('fairness.nameInvalid'));
+      return false;
+    }
+    const current = editing?.budgetCents ?? null;
+    if (cents !== current) {
+      await setCircleBudget(editor, cents);
+    }
+    return true;
   }
 
   async function saveName() {
@@ -137,6 +179,8 @@ export function FairnessScreen() {
               onPress={() => {
                 setDraft('');
                 setNameError('');
+                setBudget('');
+                setBudgetError('');
                 setEditor('new');
               }}
               style={styles.addCircle}>
@@ -149,7 +193,13 @@ export function FairnessScreen() {
         visible={editor != null}
         title={editor === 'new' ? t('fairness.newCircle') : editing?.name ?? t('fairness.edit')}
         doneLabel={t('common.done')}
-        onClose={() => setEditor(null)}
+        onClose={() => {
+          saveEditor().then(ok => {
+            if (ok) {
+              setEditor(null);
+            }
+          }).catch(() => undefined);
+        }}
       >
         <Field
           label={t('fairness.circleName')}
@@ -160,6 +210,17 @@ export function FairnessScreen() {
             setNameError('');
           }}
         />
+        <Field
+          label={t('fairness.circleBudget')}
+          value={budget}
+          error={budgetError}
+          keyboardType="decimal-pad"
+          onChangeText={value => {
+            setBudget(value);
+            setBudgetError('');
+          }}
+        />
+        <Caption>{t('fairness.circleBudgetHint')}</Caption>
         <Button label={editor === 'new' ? t('fairness.create') : t('fairness.rename')} onPress={() => { saveName().catch(() => undefined); }} />
         {editing ? (
           <>
@@ -202,6 +263,14 @@ export function FairnessScreen() {
       </Sheet>
     </Screen>
   );
+}
+
+function budgetField(cents: number | null | undefined): string {
+  if (cents == null) {
+    return '';
+  }
+  const dollars = cents / 100;
+  return Number.isInteger(dollars) ? String(dollars) : dollars.toFixed(2);
 }
 
 function AddCircleLabel({ label }: { label: string }) {
@@ -266,7 +335,7 @@ function SuggestionCard({
 
 const styles = StyleSheet.create({
   actions: { gap: space.xs },
-  uncircled: { gap: space.lg, marginBottom: space.sm },
+  uncircled: { gap: space.lg, marginTop: space.lg, marginBottom: space.sm },
   addCircle: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
   plainRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, minHeight: 48, paddingHorizontal: space.sm },
   plainName: { flex: 1 },

@@ -5,7 +5,8 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import DeviceInfo from 'react-native-device-info';
 import type { RootStack } from '../app/navigation';
-import { accountUnlocked } from '../domain/logic';
+import { describeImport } from '../domain/importNote';
+import { accountUnlocked, parseBudget } from '../domain/logic';
 import { t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import type { SkinId } from '../theme/skins';
@@ -40,7 +41,7 @@ const SKIN_CHOICES: Array<{ id: SkinId | 'auto'; label: string }> = [
 
 const LEAD_CHOICES = [1, 3, 7, 14];
 
-type SheetId = 'household' | 'name' | 'remind' | 'theme' | 'privacy' | 'contact' | 'skins' | 'unlock';
+type SheetId = 'household' | 'name' | 'remind' | 'theme' | 'privacy' | 'contact' | 'skins' | 'unlock' | 'budget';
 
 export function SettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
@@ -55,8 +56,12 @@ export function SettingsScreen() {
     updateProfile,
     previewSkin,
     skinPreview,
+    importFromContacts,
   } = useGifteez();
   const [sheet, setSheet] = useState<SheetId | null>(null);
+  const [budget, setBudget] = useState('');
+  const [budgetError, setBudgetError] = useState('');
+  const [importNote, setImportNote] = useState('');
   const [household, setHousehold] = useState(snapshot.profile.householdName ?? '');
   const [given, setGiven] = useState(snapshot.profile.givenName ?? '');
   const [lead, setLead] = useState(snapshot.profile.reminderLeadDays ?? 7);
@@ -101,6 +106,31 @@ export function SettingsScreen() {
     }
   }
 
+  function openBudget() {
+    setBudget(budgetField(snapshot.profile.defaultBudgetCents));
+    setBudgetError('');
+    setSheet('budget');
+  }
+
+  function saveBudget() {
+    if (!budget.trim()) {
+      setSheet(null);
+      if (snapshot.profile.defaultBudgetCents != null) {
+        updateProfile({ defaultBudgetCents: null }).catch(() => undefined);
+      }
+      return;
+    }
+    const cents = parseBudget(budget);
+    if (cents == null) {
+      setBudgetError(t('errors.price'));
+      return;
+    }
+    setSheet(null);
+    if (cents !== snapshot.profile.defaultBudgetCents) {
+      updateProfile({ defaultBudgetCents: cents }).catch(() => undefined);
+    }
+  }
+
   function saveGiven() {
     const next = given.trim().slice(0, 40);
     setSheet(null);
@@ -124,6 +154,14 @@ export function SettingsScreen() {
         <SettingsGroup title={t('settings.appearance')}>
           <SettingsRow icon="sparkle" label={t('settings.theme')} value={themeValue} onPress={() => setSheet('theme')} />
         </SettingsGroup>
+        <SettingsGroup title={t('settings.gifts')}>
+          <SettingsRow
+            icon="gift"
+            label={t('settings.defaultBudget')}
+            value={budgetLabel(snapshot.profile.defaultBudgetCents)}
+            onPress={openBudget}
+          />
+        </SettingsGroup>
         <SettingsGroup title={t('settings.plus')}>
           <SettingsRow
             icon="gift"
@@ -141,7 +179,15 @@ export function SettingsScreen() {
             label={t('people.findBirthdays')}
             row={open => <SettingsRow icon="calendar" label={t('people.findBirthdays')} onPress={open} />}
           />
+          <SettingsRow
+            icon="people"
+            label={t('settings.contacts')}
+            onPress={() => {
+              importFromContacts().then(result => setImportNote(describeImport(result))).catch(() => undefined);
+            }}
+          />
         </SettingsGroup>
+        {importNote ? <Caption>{importNote}</Caption> : null}
         <SettingsGroup title={t('settings.about')}>
           <SettingsRow icon="heart" label={t('settings.privacyTitle')} onPress={() => setSheet('privacy')} />
           <SettingsRow icon="heart" label={t('settings.contact')} onPress={() => setSheet('contact')} />
@@ -180,7 +226,7 @@ export function SettingsScreen() {
           autoComplete="name"
         />
       </Sheet>
-      <Sheet visible={sheet === 'remind'} title={t('settings.remindMe')} doneLabel={t('common.done')} onClose={() => setSheet(null)}>
+      <Sheet visible={sheet === 'remind'} compact title={t('settings.remindMe')} doneLabel={t('common.done')} onClose={() => setSheet(null)}>
         <Caption>{t('settings.reminderDays')}</Caption>
         <Segment
           value={String(lead)}
@@ -192,16 +238,46 @@ export function SettingsScreen() {
           }}
         />
         {sheet === 'remind' ? (
-          <DateTimePicker
-            mode="time"
-            display="spinner"
-            value={clock}
-            onValueChange={(_event, date) => {
-              setClock(date);
-              updateProfile({ reminderHour: date.getHours(), reminderMinute: date.getMinutes() }).catch(() => undefined);
+          <View
+            accessible
+            accessibilityRole="adjustable"
+            accessibilityLabel={t('settings.reminderTime')}
+            accessibilityValue={{ text: formatClock(clock.getHours(), clock.getMinutes()) }}
+            accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+            onAccessibilityAction={event => {
+              const step = event.nativeEvent.actionName === 'increment' ? 15 : -15;
+              const next = new Date(clock.getTime() + step * 60 * 1000);
+              setClock(next);
+              updateProfile({ reminderHour: next.getHours(), reminderMinute: next.getMinutes() }).catch(() => undefined);
             }}
-          />
+            style={styles.timeWheel}>
+            <DateTimePicker
+              mode="time"
+              display="spinner"
+              value={clock}
+              style={styles.timeWheel}
+              accessibilityLabel={t('settings.reminderTime')}
+              onValueChange={(_event, date) => {
+                setClock(date);
+                updateProfile({ reminderHour: date.getHours(), reminderMinute: date.getMinutes() }).catch(() => undefined);
+              }}
+            />
+          </View>
         ) : null}
+      </Sheet>
+      <Sheet visible={sheet === 'budget'} title={t('settings.defaultBudget')} doneLabel={t('common.done')} onClose={saveBudget}>
+        <Field
+          label={t('settings.defaultBudget')}
+          value={budget}
+          error={budgetError}
+          keyboardType="decimal-pad"
+          onChangeText={value => {
+            setBudget(value);
+            setBudgetError('');
+          }}
+          onSubmitEditing={saveBudget}
+        />
+        <Caption>{t('person.perYear')}</Caption>
       </Sheet>
       <Sheet visible={sheet === 'theme'} title={t('settings.theme')} doneLabel={t('common.done')} onClose={() => setSheet(null)}>
         <Cluster>
@@ -322,6 +398,19 @@ export function SettingsRow({
   );
 }
 
+function budgetField(cents: number | null | undefined): string {
+  if (cents == null) {
+    return '';
+  }
+  const dollars = cents / 100;
+  return Number.isInteger(dollars) ? String(dollars) : dollars.toFixed(2);
+}
+
+function budgetLabel(cents: number | null | undefined): string | undefined {
+  const shown = budgetField(cents);
+  return shown ? `$${shown}` : undefined;
+}
+
 function clockFrom(hour: number, minute: number): Date {
   return new Date(2026, 0, 1, hour, minute, 0, 0);
 }
@@ -337,6 +426,7 @@ const styles = StyleSheet.create({
   groupLabel: { textTransform: 'uppercase', letterSpacing: 0.6, marginLeft: space.md },
   card: { borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
   row: { minHeight: 52, flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.md, gap: space.sm },
+  timeWheel: { height: 180 },
   tile: { width: 28, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   label: { flex: 1 },
   value: { maxWidth: '46%', textAlign: 'right' },
