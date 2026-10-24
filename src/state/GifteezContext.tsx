@@ -29,7 +29,7 @@ import { emptySnapshot, type AppSnapshot, type GiftIdea, type Occasion, type Occ
 import { formatDate, t } from '../i18n';
 import { applyAppearance, loadAppearance, saveAppearance, type AppearanceChoice } from '../platform/appearance';
 import { isIncomingBackup, pickBackupText, readBackupUri, shareBackupFile } from '../platform/backupFile';
-import { keepPreviousBlob, readCacheBlob, writeCacheBlob } from '../platform/cache';
+import { readCacheBlob, readSnapshotSlots, writeSnapshotSlots } from '../platform/cache';
 import { deviceId } from '../platform/device';
 import { activeSkinParam, callFunction, downloadSkin, ensureAnonymousUser, initFirebase } from '../platform/firebase';
 import { importContacts, sweepBirthdays } from '../platform/importers';
@@ -38,7 +38,7 @@ import { applyReminderPlan, cancelReminderPlan, requestReminderPermission } from
 import { loadSecret, saveSecret } from '../platform/secure';
 import { occasionLabel, planOccasion, presetFor } from '../domain/occasions';
 import { exportBackup, migrateToLocal, parseBackup, summarizeBackup, type BackupFailure } from '../domain/backup';
-import { CacheStageError, decideCacheLoad, decideCommit, type CacheLoadFailure } from '../domain/snapshotLoad';
+import { CacheStageError, decideCacheLoad, decideCommit, planSnapshotWrite, snapshotContentKey, type CacheLoadFailure } from '../domain/snapshotLoad';
 import { normalizeStoredDate, parseLocalDate } from '../domain/calendarDate';
 import { relationshipCircleName, relationshipLabel, storeRelationship, type RelationshipPresetKey } from '../domain/relationship';
 import { acceptSuggestion, addCircle, assignCircle, cleanCircleName, removeCircle, renameCircle as renameStoredCircle } from '../domain/circles';
@@ -160,6 +160,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const sealedHold = useRef<string | null>(null);
   const cacheReady = useRef(false);
   const persistedPeople = useRef(0);
+  const lastContent = useRef<string | null>(null);
   const [startupDetail, setStartupDetail] = useState<string | null>(null);
   const [resumePersonId, setResumePersonId] = useState<string | null>(null);
   const clearResumePerson = useCallback(() => setResumePersonId(null), []);
@@ -201,11 +202,23 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     snapshotRef.current = stored;
     persistedPeople.current = nextPeople;
     setSnapshot(stored);
+    const nextContent = snapshotContentKey(next);
+    if (lastContent.current != null && lastContent.current === nextContent) {
+      return;
+    }
     const key = await ensureDeviceKey();
     const sealed = sealJson(next, key);
-    const current = await readCacheBlob();
-    await keepPreviousBlob(current, sealed);
-    await writeCacheBlob(sealed);
+    const plan = planSnapshotWrite({
+      lastContent: lastContent.current,
+      nextContent,
+      slots: await readSnapshotSlots(),
+      nextBlob: sealed,
+    });
+    if (!plan.write) {
+      return;
+    }
+    await writeSnapshotSlots(plan.slots);
+    lastContent.current = nextContent;
   }, []);
 
   const undoRestore = useRef<(() => Promise<void>) | null>(null);
@@ -329,6 +342,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         snapshotRef.current = loaded;
         persistedPeople.current = loaded.people.filter(person => !person.deleted).length;
         sealedHold.current = null;
+        lastContent.current = snapshotContentKey(result.snapshot);
         cacheReady.current = true;
         setRecoveryStage(null);
         setDataRecovery(false);

@@ -1,5 +1,7 @@
 import { keyFromString, keyToString, openJson, randomKey, sealJson } from '../src/crypto/crypto';
-import { CacheStageError, decideCacheLoad, decideCommit, normalizeStoredSnapshot } from '../src/domain/snapshotLoad';
+import { emptySnapshot } from '../src/domain/types';
+import { migrateToLocal } from '../src/domain/backup';
+import { CacheStageError, decideCacheLoad, decideCommit, normalizeStoredSnapshot, planSnapshotWrite, snapshotContentKey, type SnapshotSlots } from '../src/domain/snapshotLoad';
 
 function round5bList() {
   return {
@@ -233,4 +235,53 @@ test('a save before hydration, or an empty list over a real one, does not write'
     nextPeople: 1,
   });
   expect(sealed).toBe('hold');
+});
+
+test('a relaunch of the same list does not rotate the older copies', () => {
+  const slots: SnapshotSlots = { current: 'sealed-good', prev: 'sealed-older', prev2: 'sealed-oldest', prev3: null };
+  const same = planSnapshotWrite({
+    lastContent: 'marie',
+    nextContent: 'marie',
+    slots,
+    nextBlob: 'sealed-again',
+  });
+  expect(same.write).toBe(false);
+  expect(same.slots).toEqual(slots);
+
+  const edited = planSnapshotWrite({
+    lastContent: 'marie',
+    nextContent: 'marie-edited',
+    slots,
+    nextBlob: 'sealed-bad',
+  });
+  expect(edited.write).toBe(true);
+  expect(edited.slots).toEqual({
+    current: 'sealed-bad',
+    prev: 'sealed-good',
+    prev2: 'sealed-older',
+    prev3: 'sealed-oldest',
+  });
+  const again = planSnapshotWrite({
+    lastContent: 'marie-edited',
+    nextContent: 'marie-edited',
+    slots: edited.slots,
+    nextBlob: 'sealed-relaunch',
+  });
+  expect(again.write).toBe(false);
+  expect(again.slots.prev).toBe('sealed-good');
+  expect(again.slots.prev2).toBe('sealed-older');
+});
+
+test('the content key follows the list, not the people count or the key order', () => {
+  const first = emptySnapshot(1);
+  first.people = [{ id: 'p', name: 'Marie', budgetCents: null, tags: [], imported: false, opened: true, createdAt: 1, updatedAt: 1 }];
+  const renamed = {
+    ...first,
+    people: [{ ...first.people[0], name: 'Marie Claire' }],
+  };
+  expect(snapshotContentKey(first)).not.toBe(snapshotContentKey(renamed));
+  expect(first.people).toHaveLength(renamed.people.length);
+  expect(snapshotContentKey({ b: 1, a: { d: 2, c: 3 } })).toBe(snapshotContentKey({ a: { c: 3, d: 2 }, b: 1 }));
+  const migrated = migrateToLocal(first);
+  expect(snapshotContentKey(migrateToLocal(migrated))).toBe(snapshotContentKey(migrated));
 });

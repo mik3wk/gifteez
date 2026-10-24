@@ -83,6 +83,9 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
     getItem: jest.fn(async () => null),
     setItem: jest.fn(async () => undefined),
     removeItem: jest.fn(async () => undefined),
+    getMany: jest.fn(async keys => Object.fromEntries(keys.map(key => [key, null]))),
+    setMany: jest.fn(async () => undefined),
+    removeMany: jest.fn(async () => undefined),
   },
 }));
 

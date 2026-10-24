@@ -304,6 +304,60 @@ export function peopleShrinkBlocked(storedPeople: number, nextPeople: number, al
   return nextPeople * 2 < storedPeople;
 }
 
+/** Stable identity of a snapshot. Key order does not matter, so a re-save of the same list matches. */
+export function snapshotContentKey(value: unknown): string {
+  return stableStringify(value);
+}
+
+function stableStringify(value: unknown): string {
+  if (value === undefined) {
+    return 'null';
+  }
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value) ?? 'null';
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(item => stableStringify(item)).join(',')}]`;
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).filter(key => record[key] !== undefined).sort();
+  return `{${keys.map(key => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`;
+}
+
+export type SnapshotSlots = {
+  current: string | null;
+  prev: string | null;
+  prev2: string | null;
+  prev3: string | null;
+};
+
+/**
+ * Skip a write when the plaintext matches the last one, even if the ciphertext would differ.
+ * A real change keeps the replaced blob, then the two before it.
+ */
+export function planSnapshotWrite(input: {
+  lastContent: string | null;
+  nextContent: string;
+  slots: SnapshotSlots;
+  nextBlob: string;
+}): { write: boolean; slots: SnapshotSlots } {
+  if (input.lastContent != null && input.lastContent === input.nextContent) {
+    return { write: false, slots: input.slots };
+  }
+  if (!input.slots.current || input.slots.current === input.nextBlob) {
+    return { write: true, slots: { ...input.slots, current: input.nextBlob } };
+  }
+  return {
+    write: true,
+    slots: {
+      current: input.nextBlob,
+      prev: input.slots.current,
+      prev2: input.slots.prev,
+      prev3: input.slots.prev2,
+    },
+  };
+}
+
 /** No disk write until hydration has finished, and no empty overwrite of a real list. */
 export function decideCommit(input: {
   hydrated: boolean;
