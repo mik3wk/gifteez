@@ -1,4 +1,4 @@
-import { exportBackup, migrateToLocal, parseBackup } from '../src/domain/backup';
+import { exportBackup, migrateToLocal, parseBackup, summarizeBackup } from '../src/domain/backup';
 import { emptySnapshot, type GiftRecord, type IdeaCacheEntry, type Occasion, type OccasionState, type Person } from '../src/domain/types';
 
 function person(): Person {
@@ -115,6 +115,28 @@ test('a backup is rejected when the file, version, shape, or relationship is wro
     ...base,
     people: [{ id: 'ada', name: 'Ada', relationship: 'Mom!' }],
   }), 1)).toEqual({ ok: false, reason: 'shape' });
+});
+
+test('a restore preview counts people, occasions, ideas, and the backup date', () => {
+  const snapshot = emptySnapshot(1);
+  snapshot.people = [person(), { ...person(), id: 'gone', name: 'Gone', deleted: true }];
+  snapshot.occasions = [occasion()];
+  snapshot.ideas = [{ ...idea(), ideas: ['A novel', 'A mug'] }];
+  snapshot.gifts = [gift()];
+  const text = exportBackup(snapshot, new Date('2026-10-24T15:00:00Z'));
+  const summary = summarizeBackup(text);
+  expect(summary.ok).toBe(true);
+  if (!summary.ok) {
+    return;
+  }
+  expect(summary.summary).toMatchObject({
+    people: 1,
+    occasions: 1,
+    ideas: 2,
+    gifts: 1,
+    exportedAt: '2026-10-24T15:00:00.000Z',
+  });
+  expect(summarizeBackup('{').ok).toBe(false);
 });
 
 test('the first local launch folds a private gift in and drops group claims', () => {

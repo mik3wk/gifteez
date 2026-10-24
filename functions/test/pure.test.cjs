@@ -5,9 +5,6 @@ const path = require('node:path');
 const { canRefresh, emptyUsage, nextUsage } = require('../lib/caps');
 const { decidePersonWrite, lockedPersonIds } = require('../lib/peopleCap');
 const { shouldRevokeEntitlement, configuredVerdict } = require('../lib/entitlement');
-const { planAccountDeletion, decideRotationClaim, canReceiveList } = require('../lib/groupAdmin');
-const { DEFAULT_GROUP_MAX_MEMBERS, groupHasRoom } = require('../lib/members');
-const { FREE_OWNED_LIST_LIMIT, decideOwnedCreate, ownerEntitledForMember, releaseOwnedId } = require('../lib/lists');
 const { fingerprint } = require('../lib/fingerprint');
 const { parseIdeas } = require('../lib/ideas');
 const { appleTransactionGrants, googlePurchaseGrants } = require('../lib/iap');
@@ -81,11 +78,7 @@ test('people slots stop at the free limit on the list, and extras lock instead o
   assert.equal(configuredVerdict(false, 'revoked'), 'not_configured');
 });
 
-test('a group accepts a 9th member and refuses the 10th and 11th', () => {
-  assert.equal(DEFAULT_GROUP_MAX_MEMBERS, 10);
-  assert.equal(groupHasRoom(9, DEFAULT_GROUP_MAX_MEMBERS), true);
-  assert.equal(groupHasRoom(10, DEFAULT_GROUP_MAX_MEMBERS), false);
-  assert.equal(groupHasRoom(11, DEFAULT_GROUP_MAX_MEMBERS), false);
+test('firestore rules no longer cover groups or invites', () => {
   const root = path.join(__dirname, '..', '..');
   const rules = fs.readFileSync(path.join(root, 'firestore.rules'), 'utf8');
   assert.equal(rules.includes('match /groups/'), false);
@@ -101,52 +94,7 @@ test('a group accepts a 9th member and refuses the 10th and 11th', () => {
   assert.match(fnEnv, /FREE_TIER_MAX_PEOPLE=5/);
 });
 
-test('a free account cannot start a second list, a paid account can, and joining is not limited', () => {
-  assert.equal(FREE_OWNED_LIST_LIMIT, 1);
-  const first = decideOwnedCreate({
-    entitled: false,
-    ownedGroupIds: [],
-    groupId: 'g1',
-    groupExists: false,
-    existingOwnerId: '',
-    uid: 'me',
-  });
-  assert.equal(first.ok, true);
-  const second = decideOwnedCreate({
-    entitled: false,
-    ownedGroupIds: ['g1'],
-    groupId: 'g2',
-    groupExists: false,
-    existingOwnerId: '',
-    uid: 'me',
-  });
-  assert.equal(second.ok, false);
-  if (!second.ok) {
-    assert.equal(second.reason, 'one-list');
-  }
-  const paid = decideOwnedCreate({
-    entitled: true,
-    ownedGroupIds: ['g1'],
-    groupId: 'g2',
-    groupExists: false,
-    existingOwnerId: '',
-    uid: 'me',
-  });
-  assert.equal(paid.ok, true);
-  if (paid.ok) {
-    assert.deepEqual(paid.ownedGroupIds, ['g1', 'g2']);
-  }
-  const freed = releaseOwnedId(['g1'], 'g1');
-  assert.deepEqual(freed, []);
-  const again = decideOwnedCreate({
-    entitled: false,
-    ownedGroupIds: freed,
-    groupId: 'g2',
-    groupExists: false,
-    existingOwnerId: '',
-    uid: 'me',
-  });
-  assert.equal(again.ok, true);
+test('deployed callables stay the entitlement and idea proxy', () => {
   const root = path.join(__dirname, '..', '..');
   const rules = fs.readFileSync(path.join(root, 'firestore.rules'), 'utf8');
   assert.match(rules, /match \/accounts\/\{uid\}/);
@@ -157,17 +105,9 @@ test('a free account cannot start a second list, a paid account can, and joining
   assert.equal(index.includes('export const createOwnedGroup'), false);
   assert.equal(index.includes('export const writePerson'), false);
   assert.equal(index.includes('applyEntitlement'), false);
-  assert.equal(ownerEntitledForMember({ memberIds: ['owner', 'joiner'], uid: 'joiner', groupEntitled: false }), false);
-  assert.equal(ownerEntitledForMember({ memberIds: ['owner', 'joiner'], uid: 'joiner', groupEntitled: true }), true);
-  assert.equal(ownerEntitledForMember({ memberIds: ['owner'], uid: 'stranger', groupEntitled: true }), false);
   assert.equal(index.includes('claimPersonSlot'), false);
   assert.match(index, /collection\('accounts'\)/);
   assert.match(index, /recheckEntitlements/);
-  assert.equal(canReceiveList({ entitled: false, ownedGroupIds: ['g1'], groupId: 'g2' }), false);
-  assert.equal(decideRotationClaim({ needsRotation: true, rotatingBy: '', uid: 'a', member: true }), true);
-  assert.deepEqual(planAccountDeletion([{ id: 'g', ownerId: 'me', memberIds: ['me', 'sam'] }], 'me'), [
-    { groupId: 'g', action: 'transfer-and-remove', nextOwnerId: 'sam' },
-  ]);
   const ideas = index.slice(index.indexOf('export const generateGiftIdeas'), index.indexOf('export const getEntitlement'));
   assert.match(ideas, /account\.data\(\)\?\.entitled === true \|\| await isPaid\(id\)/);
   assert.equal(ideas.includes('assertPerson'), false);

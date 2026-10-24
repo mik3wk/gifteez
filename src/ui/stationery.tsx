@@ -87,7 +87,7 @@ export function MonogramAvatar({
 }
 
 export function WaxSeal({ state, size = 28 }: { state: SealState; size?: number }) {
-  const { scheme, type, typeScale } = useTheme();
+  const { colors, scheme, type, typeScale } = useTheme();
   const paint = SEAL_PAINT[scheme][state];
   const label = t(`seal.${state}`);
   return (
@@ -105,7 +105,7 @@ export function WaxSeal({ state, size = 28 }: { state: SealState; size?: number 
         ]}>
         <Icon name={SEAL_ICON[state]} color={paint.ink} size={Math.max(14, size * 0.5)} />
       </View>
-      <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: paint.ink }]}>{label}</Text>
+      <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: colors.text }]}>{label}</Text>
     </View>
   );
 }
@@ -163,7 +163,7 @@ export function GiftTagCard({
           {budgetLabel ? (
             <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: colors.text }]}>{budgetLabel}</Text>
           ) : null}
-          <View style={[styles.track, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+          <View style={[styles.track, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, borderWidth: StyleSheet.hairlineWidth }]}>
             {amount > 0 ? <View style={[styles.bar, { width: `${Math.round(amount * 100)}%`, backgroundColor: colors.teal }]} /> : null}
           </View>
           {seal ? <WaxSeal state={seal} /> : null}
@@ -215,7 +215,7 @@ export function FairnessCard({
             <View
               accessibilityRole="progressbar"
               accessibilityLabel={label}
-              style={[styles.track, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+              style={[styles.track, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, borderWidth: StyleSheet.hairlineWidth }]}>
               {bar.fraction > 0 ? (
                 <View style={[styles.bar, { width: `${Math.round(bar.fraction * 100)}%`, backgroundColor: colors.teal }]} />
               ) : null}
@@ -251,13 +251,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  holeWrap: { position: 'absolute', top: 10, left: 10, width: 18, height: 28 },
+  holeWrap: { position: 'absolute', top: 8, alignSelf: 'center', left: '50%', marginLeft: -9, width: 18, height: 22 },
   string: { position: 'absolute', top: 0, left: 7, width: 1, height: 16 },
   hole: { position: 'absolute', top: 12, width: 14, height: 14, borderRadius: 7, borderWidth: 1 },
   faintBow: { position: 'absolute', top: 8, right: 10, opacity: 0.35 },
-  tagBody: { flexDirection: 'row', gap: space.sm, paddingTop: space.sm },
+  tagBody: { flexDirection: 'row', gap: space.sm, paddingTop: 28 },
   copy: { flex: 1, gap: space.xxs },
-  track: { height: 10, borderRadius: 999, borderWidth: 1, overflow: 'hidden' },
+  track: { height: 10, borderRadius: 999, overflow: 'hidden' },
   bar: { height: '100%' },
   fairHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   fairRow: { gap: space.xxs },

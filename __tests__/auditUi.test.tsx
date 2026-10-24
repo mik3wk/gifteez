@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Share, Text } from 'react-native';
+import { Text } from 'react-native';
 
 jest.mock('react-native-safe-area-context', () => {
   const ReactActual = require('react');
@@ -35,13 +35,20 @@ jest.mock('../src/state/GifteezContext', () => {
     updatedAt: 1,
   }];
   const setReminders = jest.fn();
+  const shareBackup = jest.fn(async () => undefined);
   return {
     setReminders,
+    shareBackup,
     useGifteez: () => ({
       snapshot,
       colors: BUNDLED_SKINS.base,
       exportBackup: () => '{"version":1}',
+      shareBackup,
+      pickBackup: jest.fn(async () => undefined),
+      previewBackup: jest.fn(),
       restoreBackup: jest.fn(async () => 'ok'),
+      appearance: 'system',
+      setAppearance: jest.fn(async () => undefined),
       setReminders,
       buy: jest.fn(),
       restorePurchases: jest.fn(),
@@ -69,7 +76,9 @@ const { setReminders } = jest.requireMock('../src/state/GifteezContext') as {
 };
 
 test('settings shares a backup and labels reminders', async () => {
-  const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: Share.sharedAction, activityType: undefined });
+  const { shareBackup } = jest.requireMock('../src/state/GifteezContext') as {
+    shareBackup: jest.Mock;
+  };
   let renderer: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(() => {
     renderer = ReactTestRenderer.create(
@@ -80,18 +89,17 @@ test('settings shares a backup and labels reminders', async () => {
     );
   });
   const exportButton = renderer!.root.findAllByProps({ accessibilityRole: 'button' }).find(node =>
-    node.findAllByType(Text).some(item => item.props.children === 'Export backup'),
+    node.findAllByType(Text).some(item => item.props.children === 'Back up your list'),
   );
   expect(exportButton).toBeDefined();
   await ReactTestRenderer.act(() => {
     exportButton?.props.onPress();
   });
-  expect(share).toHaveBeenCalledWith({ title: 'gifteez-backup.json', message: '{"version":1}' });
+  expect(shareBackup).toHaveBeenCalled();
   expect(renderer!.root.findAllByProps({ accessibilityLabel: 'Turn occasion reminders on or off' }).length).toBeGreaterThan(0);
   const reminders = renderer!.root.findByProps({ accessibilityLabel: 'Turn occasion reminders on or off' });
   await ReactTestRenderer.act(() => {
     reminders.props.onPress();
   });
   expect(setReminders).toHaveBeenCalledWith(true);
-  share.mockRestore();
 });

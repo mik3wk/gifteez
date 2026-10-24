@@ -19,27 +19,6 @@ import {
   type RemoteRecord,
 } from './types';
 
-const ADJECTIVES = [
-  'Bubbly', 'Cosmic', 'Dapper', 'Fuzzy', 'Jolly', 'Mighty', 'Nimble', 'Peppy',
-  'Quirky', 'Sunny', 'Witty', 'Zesty', 'Brave', 'Calm', 'Dandy', 'Eager',
-  'Fancy', 'Gentle', 'Happy', 'Jazzy', 'Kind', 'Lucky', 'Merry', 'Noble',
-  'Plucky', 'Rapid', 'Silly', 'Tiny', 'Vivid', 'Wiggly',
-];
-
-const NOUNS = [
-  'Aardvark', 'Badger', 'Cactus', 'Dolphin', 'Falcon', 'Gingerbread', 'Hedgehog',
-  'Iguana', 'Jaguar', 'Kiwi', 'Lemur', 'Mongoose', 'Narwhal', 'Otter', 'Penguin',
-  'Quokka', 'Raccoon', 'Sloth', 'Taco', 'Unicorn', 'Walrus', 'Yak', 'Biscuit',
-  'Comet', 'Donut', 'Firefly', 'Gadget', 'Hazelnut', 'Jellybean', 'Muffin',
-];
-
-export function sillyName(seed: string): string {
-  const hash = hashToUint(seed || 'gifteez');
-  const adjective = ADJECTIVES[hash % ADJECTIVES.length];
-  const noun = NOUNS[Math.floor(hash / ADJECTIVES.length) % NOUNS.length];
-  return `${adjective} ${noun}`;
-}
-
 export function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -226,37 +205,6 @@ export function canAddPerson(snapshot: AppSnapshot, freeLimit: number): boolean 
     return true;
   }
   return activePeopleCount(snapshot) < freeLimit;
-}
-
-/** Free accounts start one list. Joined lists are not counted. */
-export const FREE_OWNED_LIST_LIMIT = 1;
-
-export function ownedGroupIds(snapshot: AppSnapshot, uid: string): string[] {
-  if (!uid) {
-    return [];
-  }
-  const ids = new Set<string>();
-  if (snapshot.group?.ownerId === uid) {
-    ids.add(snapshot.group.id);
-  }
-  for (const archive of Object.values(snapshot.archives ?? {})) {
-    if (archive.group.ownerId === uid) {
-      ids.add(archive.group.id);
-    }
-  }
-  for (const item of snapshot.roster ?? []) {
-    if (item.ownerId === uid) {
-      ids.add(item.id);
-    }
-  }
-  return [...ids];
-}
-
-export function canStartAnotherList(snapshot: AppSnapshot, uid: string): boolean {
-  if (snapshot.entitlementPaid) {
-    return true;
-  }
-  return ownedGroupIds(snapshot, uid).length < FREE_OWNED_LIST_LIMIT;
 }
 
 export const DEFAULT_LIST_CURRENCY = 'USD';

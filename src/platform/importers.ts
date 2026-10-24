@@ -1,5 +1,6 @@
 import Contacts from 'react-native-contacts';
 import CalendarEvents from 'react-native-calendar-events';
+import { monthDayFromStored } from '../domain/calendarDate';
 import { birthdayNameFromTitle } from '../domain/logic';
 import type { ImportedPerson } from '../domain/logic';
 
@@ -48,12 +49,12 @@ export async function sweepBirthdays(): Promise<ImportedPerson[] | 'denied'> {
       return;
     }
     seen.add(key);
-    const when = new Date(event.startDate);
+    const parts = monthDayFromStored(String(event.startDate ?? ''));
     people.push({
       name,
       budgetCents: null,
-      month: Number.isNaN(when.getTime()) ? undefined : when.getMonth() + 1,
-      day: Number.isNaN(when.getTime()) ? undefined : when.getDate(),
+      month: parts?.month,
+      day: parts?.day,
       tags: [],
     });
   });

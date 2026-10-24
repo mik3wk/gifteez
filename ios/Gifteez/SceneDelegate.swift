@@ -111,6 +111,11 @@ class SceneDelegate: RCTDefaultReactNativeFactoryDelegate, UIWindowSceneDelegate
 
   /// Matches LaunchBackground.colorset so the window does not flash white or black.
   private static var launchBackground: UIColor {
-    UIColor(named: "LaunchBackground") ?? UIColor(red: 0.984, green: 0.973, blue: 0.953, alpha: 1)
+    UIColor(named: "LaunchBackground") ?? UIColor { trait in
+      if trait.userInterfaceStyle == .dark {
+        return UIColor(red: 0.109803921568627, green: 0.094117647058824, blue: 0.086274509803922, alpha: 1)
+      }
+      return UIColor(red: 0.984313725490196, green: 0.972549019607843, blue: 0.952941176470588, alpha: 1)
+    }
   }
 }

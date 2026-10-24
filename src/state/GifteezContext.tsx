@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Appearance } from 'react-native';
+import { Appearance, Linking, Platform } from 'react-native';
 import type { AppEnv } from '../config/env';
 import { keyFromString, keyToString, openJson, randomId, randomKey, sealJson } from '../crypto/crypto';
 import { ideaCacheId, suggestIdeas } from '../domain/ideas';
@@ -18,7 +18,6 @@ import {
   parseImport,
   clearIdea,
   saveIdea,
-  sillyName,
   upcomingOccasion,
   updatePerson,
   upsertIdeas,
@@ -26,7 +25,9 @@ import {
   withProfile,
 } from '../domain/logic';
 import { emptySnapshot, type AppSnapshot, type Occasion, type OccasionType, type Person } from '../domain/types';
-import { t, todayIso } from '../i18n';
+import { formatDate, t } from '../i18n';
+import { applyAppearance, loadAppearance, saveAppearance, type AppearanceChoice } from '../platform/appearance';
+import { isIncomingBackup, pickBackupText, readBackupUri, shareBackupFile } from '../platform/backupFile';
 import { readCacheBlob, writeCacheBlob } from '../platform/cache';
 import { deviceId } from '../platform/device';
 import { activeSkinParam, callFunction, downloadSkin, ensureAnonymousUser, initFirebase } from '../platform/firebase';
@@ -35,7 +36,8 @@ import { buyUnlock, connectStore, finishOwned, listenToPurchases, loadOwned, pur
 import { applyReminderPlan, cancelReminderPlan, requestReminderPermission } from '../platform/reminders';
 import { loadSecret, saveSecret } from '../platform/secure';
 import { occasionLabel, planOccasion, presetFor } from '../domain/occasions';
-import { exportBackup, migrateToLocal, parseBackup, type BackupFailure } from '../domain/backup';
+import { exportBackup, migrateToLocal, parseBackup, summarizeBackup, type BackupFailure } from '../domain/backup';
+import { normalizeStoredDate, parseLocalDate } from '../domain/calendarDate';
 import { cleanRelationship } from '../domain/relationship';
 import { haptic } from '../platform/haptics';
 import type { CelebrateName } from '../theme/tokens';
@@ -92,7 +94,20 @@ type GifteezApi = {
   cloudRemaining: Record<string, number>;
   setReminders: (enabled: boolean) => Promise<void>;
   exportBackup: () => string;
+  shareBackup: () => Promise<void>;
+  pickBackup: () => Promise<void>;
+  previewBackup: (text: string) => void;
   restoreBackup: (text: string) => Promise<BackupFailure | 'ok'>;
+  incomingBackup: { preview: string } | null;
+  acceptIncomingBackup: () => Promise<void>;
+  clearIncomingBackup: () => void;
+  paywallOpen: boolean;
+  dismissPaywall: () => void;
+  cancelPendingAdd: () => void;
+  completedPersonId: string | null;
+  clearCompletedPerson: () => void;
+  appearance: AppearanceChoice;
+  setAppearance: (choice: AppearanceChoice) => Promise<void>;
   finishWelcome: () => Promise<void>;
   buy: () => Promise<void>;
   restorePurchases: () => Promise<void>;
@@ -141,6 +156,12 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const [storeProduct, setStoreProduct] = useState<StoreProduct | null>(null);
   const [storeReady, setStoreReady] = useState(false);
   const [cloudRemaining, setCloudRemaining] = useState<Record<string, number>>({});
+  const [paywallOpen, setPaywallOpen] = useState(false);
+  const [completedPersonId, setCompletedPersonId] = useState<string | null>(null);
+  const [appearance, setAppearanceChoice] = useState<AppearanceChoice>('system');
+  const [incomingBackup, setIncomingBackup] = useState<{ text: string; preview: string } | null>(null);
+  const pendingAdd = useRef<{ person: Person; hadPeople: boolean } | null>(null);
+  const finishPendingRef = useRef<() => Promise<void>>(async () => undefined);
   const downloadedRef = useRef(downloaded);
   downloadedRef.current = downloaded;
 
@@ -221,6 +242,39 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     return current;
   }, []);
 
+  finishPendingRef.current = async () => {
+    const pending = pendingAdd.current;
+    if (!pending || !snapshotRef.current.entitlementPaid) {
+      return;
+    }
+    const result = addPerson({ snapshot: snapshotRef.current, person: pending.person, freeLimit: env.freeTierMaxPeople });
+    if (!result.ok) {
+      return;
+    }
+    pendingAdd.current = null;
+    setPaywallOpen(false);
+    await commit(result.snapshot);
+    if (!pending.hadPeople && !pending.person.imported) {
+      setConfetti(count => count + 1);
+    }
+    setCompletedPersonId(pending.person.id);
+    sync().catch(() => undefined);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    loadAppearance().then(choice => {
+      if (cancelled) {
+        return;
+      }
+      setAppearanceChoice(choice);
+      applyAppearance(choice);
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -237,9 +291,6 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           await initFirebase(env);
           const uid = await ensureAnonymousUser();
           next = loaded.profile.uid === uid ? loaded : withProfile(loaded, { uid });
-          if (!next.profile.displayName) {
-            next = withProfile(next, { displayName: sillyName(uid) });
-          }
           await commit(next);
         } catch {
           // The list is already on the phone. Auth is only for cloud ideas and purchase checks.
@@ -289,12 +340,12 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         }
       }
     })();
-    const appearance = Appearance.addChangeListener(({ colorScheme }) => {
+    const schemeListener = Appearance.addChangeListener(({ colorScheme }) => {
       setColors(withColorScheme(paletteRef.current, colorScheme));
     });
     return () => {
       cancelled = true;
-      appearance.remove();
+      schemeListener.remove();
     };
   }, [bootId, commit, env, paint]);
 
@@ -309,6 +360,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           if (result.verified) {
             await commit(withAccountUnlock(snapshotRef.current, true));
             await finishOwned(purchase);
+            await finishPendingRef.current();
             haptic('success');
           }
         })
@@ -342,7 +394,12 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       };
       const result = addPerson({ snapshot: snapshotRef.current, person, freeLimit: env.freeTierMaxPeople });
       if (!result.ok) {
-        fail(result.error);
+        if (result.error === 'cap') {
+          pendingAdd.current = { person, hadPeople: snapshotRef.current.people.some(item => !item.deleted) };
+          setPaywallOpen(true);
+        } else {
+          fail(result.error);
+        }
         break;
       }
       let next = result.snapshot;
@@ -362,6 +419,66 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     }
     return count;
   }, [commit, env.freeTierMaxPeople, fail, sync]);
+
+  const stageRestore = useCallback((text: string) => {
+    const summary = summarizeBackup(text);
+    if (!summary.ok) {
+      setError(t('settings.restoreInvalid'));
+      haptic('error');
+      return;
+    }
+    setIncomingBackup({
+      text,
+      preview: t('settings.backupPreview', {
+        people: summary.summary.people,
+        occasions: summary.summary.occasions,
+        ideas: summary.summary.ideas,
+        date: backupWhen(summary.summary.exportedAt),
+      }),
+    });
+  }, []);
+
+  const applyRestore = useCallback(async (text: string): Promise<BackupFailure | 'ok'> => {
+    const parsed = parseBackup(text, Date.now());
+    if (!parsed.ok) {
+      return parsed.reason;
+    }
+    const current = snapshotRef.current;
+    await commit(restoredSnapshot(current, parsed.snapshot));
+    offerUndo(t('settings.restoreDone'), async () => {
+      await commit(current);
+      sync().catch(() => undefined);
+    }, () => sync());
+    return 'ok';
+  }, [commit, offerUndo, sync]);
+
+  useEffect(() => {
+    if (!ready) {
+      return undefined;
+    }
+    let cancelled = false;
+    const take = (url: string | null) => {
+      if (!url || cancelled || !isIncomingBackup(url)) {
+        return;
+      }
+      const name = decodeURIComponent(url.split('/').pop() || 'backup.gifteez');
+      readBackupUri(url, name).then(text => {
+        if (!cancelled) {
+          stageRestore(text);
+        }
+      }).catch(() => {
+        if (!cancelled) {
+          setError(t('settings.restoreInvalid'));
+        }
+      });
+    };
+    Linking.getInitialURL().then(url => take(url ?? null)).catch(() => undefined);
+    const sub = Linking.addEventListener('url', event => take(event.url));
+    return () => {
+      cancelled = true;
+      sub.remove();
+    };
+  }, [ready, stageRestore]);
 
   const api = useMemo<GifteezApi>(() => ({
     ready,
@@ -416,9 +533,16 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       };
       const result = addPerson({ snapshot: snapshotRef.current, person, freeLimit: env.freeTierMaxPeople });
       if (!result.ok) {
+        if (result.error === 'cap') {
+          pendingAdd.current = { person, hadPeople };
+          setPaywallOpen(true);
+          return null;
+        }
         fail(result.error);
         return null;
       }
+      pendingAdd.current = null;
+      setPaywallOpen(false);
       await commit(result.snapshot);
       if (!hadPeople && !person.imported) {
         setConfetti(count => count + 1);
@@ -519,7 +643,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         fail('price');
         return false;
       }
-      const purchasedOn = date.trim() ? date.trim() : todayIso();
+      const purchasedOn = normalizeStoredDate(date);
       const year = Number(purchasedOn.slice(0, 4)) || occurrenceYear(occasion, new Date());
       await commit(logPurchase({
         snapshot: snapshotRef.current,
@@ -626,7 +750,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       const cacheId = ideaCacheId(personId, occasionKey, 'cloud');
       const existing = snapshotRef.current.ideas.find(item => item.id === cacheId && !item.deleted);
       try {
-        const result = await callFunction<CloudResult>(env, 'generateGiftIdeas', {
+        const result = await withTimeout(callFunction<CloudResult>(env, 'generateGiftIdeas', {
           deviceId: await deviceId(),
           personId,
           refresh: Boolean(existing),
@@ -639,7 +763,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
             likes: snapshotRef.current.feedback.filter(item => item.personId === personId && item.vote === 'up').map(item => item.idea),
             dislikes: snapshotRef.current.feedback.filter(item => item.personId === personId && item.vote === 'down').map(item => item.idea),
           },
-        });
+        }));
         setCloudRemaining(current => ({ ...current, [personId]: result.remaining }));
         await commit(upsertIdeas(snapshotRef.current, {
           id: cacheId,
@@ -652,8 +776,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           updatedAt: Date.now(),
         }));
       } catch (caught) {
-        const code = caught instanceof Error && 'code' in caught ? String((caught as { code?: string }).code) : '';
-        fail(code.includes('resource-exhausted') ? 'capReached' : 'functions');
+        // Every failure, including App Check, a 404, a timeout, and a network error, is shown in the sheet.
+        throw caught;
       }
     },
     setReminders: async enabled => {
@@ -669,25 +793,49 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       await scheduleReminders(snapshotRef.current);
     },
     exportBackup: () => exportBackup(snapshotRef.current),
-    restoreBackup: async text => {
-      const parsed = parseBackup(text, Date.now());
-      if (!parsed.ok) {
-        return parsed.reason;
+    shareBackup: async () => {
+      const json = exportBackup(snapshotRef.current);
+      const saved = await shareBackupFile(json);
+      if (!saved) {
+        return;
       }
-      const current = snapshotRef.current;
-      await commit({
-        ...parsed.snapshot,
-        entitlementPaid: current.entitlementPaid,
-        profile: {
-          ...parsed.snapshot.profile,
-          uid: current.profile.uid,
-          reminders: current.profile.reminders,
-          createdAt: current.profile.createdAt || parsed.snapshot.profile.createdAt,
-          displayName: current.profile.displayName,
-          onboarded: true,
-        },
-      });
-      return 'ok';
+      const count = snapshotRef.current.people.filter(person => !person.deleted).length;
+      showNotice(t('settings.backupSaved', { count, date: formatDate(new Date()) }));
+    },
+    pickBackup: async () => {
+      const text = await pickBackupText();
+      if (text == null) {
+        return;
+      }
+      stageRestore(text);
+    },
+    previewBackup: stageRestore,
+    restoreBackup: text => applyRestore(text),
+    incomingBackup: incomingBackup ? { preview: incomingBackup.preview } : null,
+    acceptIncomingBackup: async () => {
+      const pending = incomingBackup;
+      setIncomingBackup(null);
+      if (!pending) {
+        return;
+      }
+      const result = await applyRestore(pending.text);
+      if (result !== 'ok') {
+        fail('invalid');
+      }
+    },
+    clearIncomingBackup: () => setIncomingBackup(null),
+    paywallOpen,
+    dismissPaywall: () => setPaywallOpen(false),
+    cancelPendingAdd: () => {
+      pendingAdd.current = null;
+      setPaywallOpen(false);
+    },
+    completedPersonId,
+    clearCompletedPerson: () => setCompletedPersonId(null),
+    appearance,
+    setAppearance: async choice => {
+      setAppearanceChoice(choice);
+      await saveAppearance(choice);
     },
     finishWelcome: async () => {
       await commit(withProfile(snapshotRef.current, { onboarded: true }));
@@ -698,7 +846,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         fail(title.trim() ? 'price' : 'invalid');
         return false;
       }
-      const purchasedOn = date.trim() ? date.trim() : todayIso();
+      const purchasedOn = normalizeStoredDate(date);
       const result = privateGift
         ? updatePrivateGift({ snapshot: snapshotRef.current, giftId, title, priceCents, purchasedOn, now: Date.now() })
         : updateSharedGift({ snapshot: snapshotRef.current, giftId, uid: snapshotRef.current.profile.uid, title, priceCents, purchasedOn, now: Date.now() });
@@ -765,7 +913,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       try {
         const owned = await loadOwned(env.iapProductId);
         if (owned.length === 0) {
-          setError(t('settings.storeMissing'));
+          setError(t(Platform.OS === 'android' ? 'settings.noPurchaseGoogle' : 'settings.noPurchaseApple'));
           haptic('error');
           return;
         }
@@ -778,6 +926,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           if (paid.verified) {
             await commit(withAccountUnlock(snapshotRef.current, true));
             await finishOwned(purchase);
+            await finishPendingRef.current();
             haptic('success');
             return;
           }
@@ -812,7 +961,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       return addImported(rows);
     },
-  }), [addImported, canUndo, clearResumePerson, cloudRemaining, colors, commit, confetti, env, error, fail, notice, noticeArt, offerUndo, offline, onNavigate, ready, resumePersonId, runUndo, setNotice, showNotice, skinId, snapshot, startupDetail, startupFailure, storeProduct, storeReady, sync]);
+  }), [addImported, appearance, applyRestore, canUndo, clearResumePerson, cloudRemaining, colors, commit, completedPersonId, confetti, env, error, fail, incomingBackup, notice, noticeArt, offerUndo, offline, onNavigate, paywallOpen, ready, resumePersonId, runUndo, setNotice, showNotice, skinId, snapshot, stageRestore, startupDetail, startupFailure, storeProduct, storeReady, sync]);
 
   return <GifteezContext.Provider value={api}>{children}</GifteezContext.Provider>;
 }
@@ -900,6 +1049,48 @@ function withOnDeviceIdeas(snapshot: AppSnapshot, personId: string): AppSnapshot
   });
 }
 
+
+const CLOUD_TIMEOUT_MS = 20000;
+
+function withTimeout<T>(work: Promise<T>, ms = CLOUD_TIMEOUT_MS): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(Object.assign(new Error('timeout'), { code: 'timeout' })), ms);
+    work.then(
+      value => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      error => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+function restoredSnapshot(current: AppSnapshot, parsed: AppSnapshot): AppSnapshot {
+  return {
+    ...parsed,
+    entitlementPaid: current.entitlementPaid,
+    profile: {
+      ...parsed.profile,
+      uid: current.profile.uid,
+      reminders: current.profile.reminders,
+      createdAt: current.profile.createdAt || parsed.profile.createdAt,
+      displayName: current.profile.displayName,
+      onboarded: true,
+    },
+  };
+}
+
+function backupWhen(value: string): string {
+  const local = parseLocalDate(value);
+  if (local) {
+    return formatDate(local);
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '' : formatDate(parsed);
+}
 
 async function verifyPurchase(env: AppEnv, proof: { transactionId: string; token: string; platform: 'ios' | 'android' }): Promise<{ verified: boolean; reason?: string }> {
   return callFunction<{ verified: boolean; reason?: string }>(env, 'verifyUnlock', {

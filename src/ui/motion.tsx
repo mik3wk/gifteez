@@ -132,9 +132,9 @@ export function Shimmer({ label }: { label: string }) {
   const bars = [styles.barWide, styles.barMid, styles.barShort];
   return (
     <View accessibilityRole="progressbar" accessibilityLabel={label} accessibilityState={{ busy: true }} style={styles.shimmer}>
-      {bars.map(width => (
+      {bars.map((width, index) => (
         <Animated.View
-          key={String(width)}
+          key={index}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
           style={[styles.bar, width, { backgroundColor: colors.surfaceAlt, borderColor: colors.outline }, reduce ? styles.steady : style]}

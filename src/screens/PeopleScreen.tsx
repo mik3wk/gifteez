@@ -1,24 +1,22 @@
 import React, { useLayoutEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { openTab, type RootStack } from '../app/navigation';
-import { daysUntil, listCurrency, occurrenceYear, sortPeople, statusFor, upcomingOccasion, yearSpentCents, fairnessRows } from '../domain/logic';
+import type { RootStack } from '../app/navigation';
+import { daysUntil, listCurrency, occurrenceYear, sortPeople, upcomingOccasion, yearSpentCents, fairnessRows } from '../domain/logic';
 import { personSeal } from '../domain/seal';
 import type { Occasion, OccasionState } from '../domain/types';
 import { isOneTimeOccasion, occasionLabel } from '../domain/occasions';
 import { isHiddenFromViewer, isPersonLocked } from '../domain/visibility';
-import { deviceLocale, formatDate, formatLongDate, formatMoney, t } from '../i18n';
+import { deviceLocale, formatDate, formatLongDate, formatMoney, t, timeGreeting } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
-import { useGroupLabel } from '../ui/heading';
 import { SessionEntrance } from '../ui/motion';
 import { FairnessCard, GiftTagCard, RibbonDivider } from '../ui/stationery';
-import { AppHeader, Button, EmptyState, PersonRow, Screen, SectionHeader, StatRow, StatTile } from '../ui/ui';
+import { AppHeader, Button, EmptyState, PersonRow, Screen, SectionHeader } from '../ui/ui';
 import { summaryPrimaryLabel } from './personSummary';
 
 export function PeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
   const { snapshot, resumePersonId, clearResumePerson } = useGifteez();
-  const heading = useGroupLabel();
   const today = new Date();
   const people = sortPeople(snapshot.people, snapshot.occasions, today);
   const year = today.getFullYear();
@@ -36,16 +34,6 @@ export function PeopleScreen() {
 
   const nextPerson = people.find(person => upcomingOccasion(person.id, snapshot.occasions, today));
   const next = nextPerson ? upcomingOccasion(nextPerson.id, snapshot.occasions, today) : null;
-  const upcomingCount = people.filter(person => {
-    const item = upcomingOccasion(person.id, snapshot.occasions, today);
-    return item != null && daysUntil(item.date, today) <= 120;
-  }).length;
-  const spentValues = people.map(person => yearSpentCents(person.id, snapshot.gifts, year));
-  const spread = spentValues.length === 0 ? 0 : Math.max(...spentValues) - Math.min(...spentValues);
-  const balanced = spread === 0 || (Math.max(...spentValues) > 0 && spread <= Math.max(...spentValues) * 0.25);
-  const greeting = snapshot.profile.displayName.trim()
-    ? t('people.greeting', { name: snapshot.profile.displayName.trim() })
-    : undefined;
   const nextHero = next && nextPerson ? heroState(next.occasion, snapshot.states, today) : undefined;
   const heroLabel = next && nextPerson
     ? summaryPrimaryLabel({
@@ -61,7 +49,7 @@ export function PeopleScreen() {
 
   return (
     <Screen tab="people">
-      <AppHeader title={heading.label} greeting={greeting} />
+      <AppHeader title={t('people.home')} greeting={timeGreeting(today)} />
       <SessionEntrance id="people">
       {next && nextPerson ? (
         <GiftTagCard
@@ -94,17 +82,6 @@ export function PeopleScreen() {
         money={cents => formatMoney(cents, deviceLocale(), listCurrency(snapshot), true)}
       />
       <RibbonDivider />
-      <StatRow>
-        <StatTile value={String(people.length)} label={t('people.statPeople')} icon="people" tint="pink" />
-        <StatTile value={String(upcomingCount)} label={t('people.statUpcoming')} icon="calendar" tint="teal" />
-        <StatTile
-          value={balanced ? t('people.fairnessBalanced') : t('people.fairnessCheck')}
-          label={t('people.statFairness')}
-          icon="scale"
-          tint="lilac"
-          onPress={() => openTab(navigation, 'Fairness')}
-        />
-      </StatRow>
       {people.length === 0 ? (
         <EmptyState kind="people" text={t('people.empty')} action={t('people.add')} onAction={() => navigation.navigate('AddPerson')} />
       ) : null}
@@ -119,28 +96,15 @@ export function PeopleScreen() {
         const hidden = isHiddenFromViewer(person, snapshot.profile.uid);
         const money = (cents: number) => formatMoney(cents, deviceLocale(), listCurrency(snapshot), true);
         const spent = yearSpentCents(person.id, snapshot.gifts, year);
-        const budget = hidden
-          ? ''
-          : person.budgetCents == null
-            ? t('people.spent', { used: money(spent) })
-            : t('people.budgetLeft', { used: money(spent), budget: money(person.budgetCents) });
-        const state = hidden || !item ? undefined : heroState(item.occasion, snapshot.states, today);
-        const status = hidden || !item ? null : statusFor(item.occasion, snapshot.states, today);
-        const logged = Boolean(item && snapshot.gifts.some(gift => (
-          gift.personId === person.id && gift.occasionId === item.occasion.id && gift.year === occurrenceYear(item.occasion, today) && !gift.deleted
-        )));
-        const seal = hidden || !status ? undefined : personSeal({
-          status,
-          claimed: Boolean(state?.claimedBy),
-          logged,
-        });
         const when = item
           ? `${occasionLabel(item.occasion)} ${isOneTimeOccasion(item.occasion) ? formatLongDate(item.date) : formatDate(item.date)}`
           : t('people.noOccasion');
         const days = item ? daysUntil(item.date, today) : null;
         const trailing = days == null ? undefined : days === 0 ? t('people.today') : t('people.inDays', { count: days });
-        const statusText = seal ? t(`seal.${seal}`) : '';
         const progress = hidden || person.budgetCents == null || person.budgetCents <= 0 ? null : spent / person.budgetCents;
+        const budgetLine = hidden || person.budgetCents == null
+          ? ''
+          : t('people.budgetYear', { used: money(spent), budget: money(person.budgetCents) });
         return (
           <PersonRow
             key={person.id}
@@ -150,11 +114,10 @@ export function PeopleScreen() {
             occasionId={item?.occasion.type}
             occasionLabel={item ? occasionLabel(item.occasion) : undefined}
             trailing={trailing}
-            budget={budget}
+            budget={budgetLine}
             progress={progress}
-            seal={seal}
             note={person.imported && !person.opened ? t('people.imported') : t('people.noOccasion')}
-            accessibilityLabel={[person.name, person.relationship, when, budget, statusText].filter(Boolean).join(', ')}
+            accessibilityLabel={[person.name, person.relationship, when, budgetLine].filter(Boolean).join(', ')}
             onPress={() => navigation.navigate('Person', { personId: person.id })}
           />
         );

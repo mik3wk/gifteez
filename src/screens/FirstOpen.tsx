@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { cleanRelationship } from '../domain/relationship';
 import { t } from '../i18n';
 import { haptic } from '../platform/haptics';
@@ -7,7 +7,16 @@ import { RelationshipField } from '../ui/RelationshipField';
 import { Body, Button, Field, Screen, Title } from '../ui/ui';
 
 export function FirstOpenScreen() {
-  const { addPerson, openPerson, finishWelcome } = useGifteez();
+  const { addPerson, openPerson, finishWelcome, completedPersonId, clearCompletedPerson } = useGifteez();
+  useEffect(() => {
+    if (!completedPersonId) {
+      return;
+    }
+    const personId = completedPersonId;
+    clearCompletedPerson();
+    openPerson(personId);
+    finishWelcome().then(() => haptic('success')).catch(() => undefined);
+  }, [clearCompletedPerson, completedPersonId, finishWelcome, openPerson]);
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
   const [relationship, setRelationship] = useState('');

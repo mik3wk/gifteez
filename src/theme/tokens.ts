@@ -3,7 +3,7 @@ import { Platform, type TextStyle, type ViewStyle } from 'react-native';
 /**
  * Sticker tokens. Screens read these through useTheme(), not as raw hexes.
  * Occasion art is the PNG set in src/assets/art. To add a skin, add an ArtName,
- * drop skin-<name>.png at @1x/@2x/@3x, and point the preset at it in OCCASION_LOOK.
+ * drop emblem-<name>.png at @1x/@2x/@3x, and point the preset at it in OCCASION_LOOK.
  */
 
 /**
@@ -148,52 +148,57 @@ export type ArtName =
   | 'father'
   | 'graduation'
   | 'house'
-  | 'gift';
+  | 'gift'
+  | 'crescent'
+  | 'lantern'
+  | 'harvest'
+  | 'toast'
+  | 'bloom';
 
 export type ChipTint = 'pink' | 'teal' | 'sunshine' | 'lilac';
 
 export type OccasionLook = { art: ArtName; emoji: string; chip: ChipTint };
 
-const GIFT: OccasionLook = { art: 'gift', emoji: '🎁', chip: 'pink' };
+const GIFT: OccasionLook = { art: 'gift', emoji: '', chip: 'pink' };
 
-/** Every preset maps to a skin. Unmapped ids, including custom, use the gift. */
+/** Every preset maps to a line-art emblem. Unmapped ids, including custom, use the gift. */
 export const OCCASION_LOOK: Record<string, OccasionLook> = {
-  birthday: { art: 'birthday', emoji: '🎂', chip: 'pink' },
-  christmas: { art: 'holiday', emoji: '🎄', chip: 'teal' },
-  anniversary: { art: 'anniversary', emoji: '💍', chip: 'lilac' },
-  valentines: { art: 'valentine', emoji: '💝', chip: 'pink' },
-  'mothers-day': { art: 'mother', emoji: '🌸', chip: 'pink' },
-  'fathers-day': { art: 'father', emoji: '👔', chip: 'teal' },
-  hanukkah: { art: 'hanukkah', emoji: '🕎', chip: 'sunshine' },
-  thanksgiving: { art: 'holiday', emoji: '🦃', chip: 'sunshine' },
-  'new-year': { art: 'holiday', emoji: '🎉', chip: 'lilac' },
-  wedding: { art: 'wedding', emoji: '💒', chip: 'lilac' },
-  graduation: { art: 'graduation', emoji: '🎓', chip: 'sunshine' },
+  birthday: { art: 'birthday', emoji: '', chip: 'pink' },
+  christmas: { art: 'holiday', emoji: '', chip: 'teal' },
+  anniversary: { art: 'anniversary', emoji: '', chip: 'lilac' },
+  valentines: { art: 'valentine', emoji: '', chip: 'pink' },
+  'mothers-day': { art: 'mother', emoji: '', chip: 'pink' },
+  'fathers-day': { art: 'father', emoji: '', chip: 'teal' },
+  hanukkah: { art: 'hanukkah', emoji: '', chip: 'sunshine' },
+  thanksgiving: { art: 'harvest', emoji: '', chip: 'sunshine' },
+  'new-year': { art: 'toast', emoji: '', chip: 'lilac' },
+  wedding: { art: 'wedding', emoji: '', chip: 'lilac' },
+  graduation: { art: 'graduation', emoji: '', chip: 'sunshine' },
   'just-because': GIFT,
-  easter: { art: 'holiday', emoji: '🐣', chip: 'lilac' },
-  'lunar-new-year': { art: 'holiday', emoji: '🧧', chip: 'sunshine' },
-  diwali: { art: 'diwali', emoji: '🪔', chip: 'sunshine' },
-  'eid-fitr': { art: 'holiday', emoji: '🌙', chip: 'teal' },
-  'eid-adha': { art: 'holiday', emoji: '🌙', chip: 'teal' },
-  halloween: { art: 'holiday', emoji: '🎃', chip: 'sunshine' },
-  'independence-day': { art: 'holiday', emoji: '🎆', chip: 'pink' },
-  'st-patricks': { art: 'holiday', emoji: '☘️', chip: 'teal' },
-  kwanzaa: { art: 'holiday', emoji: '🕯️', chip: 'sunshine' },
-  teacher: { art: 'gift', emoji: '🍎', chip: 'pink' },
-  'secret-santa': { art: 'holiday', emoji: '🎅', chip: 'teal' },
-  engagement: { art: 'anniversary', emoji: '💍', chip: 'lilac' },
-  'bridal-shower': { art: 'wedding', emoji: '💐', chip: 'lilac' },
-  'baby-shower': { art: 'baby', emoji: '🍼', chip: 'pink' },
-  birth: { art: 'baby', emoji: '👶', chip: 'pink' },
-  housewarming: { art: 'house', emoji: '🏠', chip: 'teal' },
-  'bar-mitzvah': { art: 'gift', emoji: '✡️', chip: 'lilac' },
-  quinceanera: { art: 'gift', emoji: '👑', chip: 'pink' },
-  communion: { art: 'gift', emoji: '🕊️', chip: 'lilac' },
-  retirement: { art: 'gift', emoji: '🎁', chip: 'teal' },
-  promotion: { art: 'gift', emoji: '🎉', chip: 'sunshine' },
-  'get-well': { art: 'gift', emoji: '💐', chip: 'teal' },
-  sympathy: { art: 'gift', emoji: '🤍', chip: 'lilac' },
-  'thank-you': { art: 'gift', emoji: '🙏', chip: 'sunshine' },
+  easter: { art: 'bloom', emoji: '', chip: 'lilac' },
+  'lunar-new-year': { art: 'lantern', emoji: '', chip: 'sunshine' },
+  diwali: { art: 'diwali', emoji: '', chip: 'sunshine' },
+  'eid-fitr': { art: 'crescent', emoji: '', chip: 'teal' },
+  'eid-adha': { art: 'crescent', emoji: '', chip: 'teal' },
+  halloween: { art: 'harvest', emoji: '', chip: 'sunshine' },
+  'independence-day': { art: 'gift', emoji: '', chip: 'pink' },
+  'st-patricks': { art: 'gift', emoji: '', chip: 'teal' },
+  kwanzaa: { art: 'gift', emoji: '', chip: 'sunshine' },
+  teacher: { art: 'gift', emoji: '', chip: 'pink' },
+  'secret-santa': { art: 'gift', emoji: '', chip: 'teal' },
+  engagement: { art: 'anniversary', emoji: '', chip: 'lilac' },
+  'bridal-shower': { art: 'wedding', emoji: '', chip: 'lilac' },
+  'baby-shower': { art: 'baby', emoji: '', chip: 'pink' },
+  birth: { art: 'baby', emoji: '', chip: 'pink' },
+  housewarming: { art: 'house', emoji: '', chip: 'teal' },
+  'bar-mitzvah': { art: 'gift', emoji: '', chip: 'lilac' },
+  quinceanera: { art: 'gift', emoji: '', chip: 'pink' },
+  communion: { art: 'bloom', emoji: '', chip: 'lilac' },
+  retirement: { art: 'toast', emoji: '', chip: 'teal' },
+  promotion: { art: 'toast', emoji: '', chip: 'sunshine' },
+  'get-well': { art: 'bloom', emoji: '', chip: 'teal' },
+  sympathy: { art: 'bloom', emoji: '', chip: 'lilac' },
+  'thank-you': { art: 'gift', emoji: '', chip: 'sunshine' },
   custom: GIFT,
 };
 

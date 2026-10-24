@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, useColorScheme, View } from 'react-native';
 import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -13,7 +13,7 @@ import { GifteezProvider, useGifteez } from '../state/GifteezContext';
 import { listenForReminderOpens } from '../platform/reminders';
 import { sticker, type as appType } from '../theme/tokens';
 import { ConfettiBurst, useReduceMotion } from '../ui/motion';
-import { BrandedLoading, ConfirmHost, Notice, OfflineBanner } from '../ui/ui';
+import { BrandedLoading, ConfirmHost, Notice, OfflineBanner, UnlockSheet, confirmDestructive } from '../ui/ui';
 import type { AppEnv } from '../config/env';
 import type { RootStack } from './navigation';
 
@@ -140,8 +140,38 @@ function Navigator() {
         </View>
       ) : null}
       {showNav ? <ConfirmHost /> : null}
+      {showNav ? <UnlockSheet visible={gifteez.paywallOpen} onClose={gifteez.dismissPaywall} /> : null}
+      {showNav ? <IncomingRestore /> : null}
     </View>
   );
+}
+
+function IncomingRestore() {
+  const { incomingBackup, acceptIncomingBackup, clearIncomingBackup } = useGifteez();
+  const pending = useRef<string | null>(null);
+  useEffect(() => {
+    if (!incomingBackup || pending.current === incomingBackup.preview) {
+      return;
+    }
+    pending.current = incomingBackup.preview;
+    confirmDestructive(
+      t('settings.restoreTitle'),
+      incomingBackup.preview,
+      t('settings.restoreConfirm'),
+      t('settings.restoreConfirmLabel'),
+    ).then(ok => {
+      pending.current = null;
+      if (ok) {
+        acceptIncomingBackup().catch(() => undefined);
+        return;
+      }
+      clearIncomingBackup();
+    }).catch(() => {
+      pending.current = null;
+      clearIncomingBackup();
+    });
+  }, [acceptIncomingBackup, clearIncomingBackup, incomingBackup]);
+  return null;
 }
 
 const styles = StyleSheet.create({

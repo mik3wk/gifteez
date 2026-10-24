@@ -12,7 +12,7 @@ import { dateIsEstimated, isOneTimeOccasion, nextOccasionDate, occasionLabel, oc
 import type { Occasion, OccasionState } from '../domain/types';
 import { cleanRelationship } from '../domain/relationship';
 import { initialPersonSection, summaryPrimary, summaryPrimaryLabel } from './personSummary';
-import { deviceLocale, formatDate, formatLongDate, formatMoney, t, todayIso } from '../i18n';
+import { deviceLocale, formatDate, formatLongDate, formatMoney, formatStoredDate, t, todayIso } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { occasionLook, space } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
@@ -33,6 +33,7 @@ import {
   EmptyState,
   Field,
   GhostRow,
+  Display,
   Heading,
   IconButton,
   OccasionChip,
@@ -53,8 +54,21 @@ type Queue =
   | { kind: 'edit'; id: string; privateGift: boolean };
 
 export function AddPersonScreen() {
-  const navigation = useNavigation();
-  const { addPerson } = useGifteez();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
+  const { addPerson, completedPersonId, clearCompletedPerson, cancelPendingAdd } = useGifteez();
+  const cancelAdd = useRef(cancelPendingAdd);
+  cancelAdd.current = cancelPendingAdd;
+  useEffect(() => {
+    if (!completedPersonId) {
+      return;
+    }
+    const personId = completedPersonId;
+    clearCompletedPerson();
+    navigation.replace('Person', { personId });
+  }, [clearCompletedPerson, completedPersonId, navigation]);
+  useEffect(() => () => {
+    cancelAdd.current();
+  }, []);
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
   const [relationship, setRelationship] = useState('');
@@ -94,7 +108,7 @@ export function AddPersonScreen() {
           }
           const id = await addPerson({ name, budget: '', tags: [], relationship: cleaned });
           if (id) {
-            (navigation as { navigate: (screen: string, params: { personId: string }) => void }).navigate('Person', { personId: id });
+            navigation.replace('Person', { personId: id });
           }
         }}
       />
@@ -148,6 +162,8 @@ export function PersonScreen() {
   const [editingDetails, setEditingDetails] = useState(false);
   const [addingOccasion, setAddingOccasion] = useState(false);
   const [tuning, setTuning] = useState(false);
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [cloudError, setCloudError] = useState(false);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [moment, setMoment] = useState<'wrap' | null>(null);
   const queued = useRef<Queue | null>(null);
@@ -303,7 +319,7 @@ export function PersonScreen() {
               <View style={styles.avatarName}>
                 <MonogramAvatar name={person.name} personId={person.id} />
                 <View style={styles.personCopy}>
-                  <Heading>{person.name}</Heading>
+                  <Display lines={2}>{person.name}</Display>
                   {person.relationship ? <Caption tone="text">{person.relationship}</Caption> : null}
                 </View>
               </View>
@@ -403,7 +419,7 @@ export function PersonScreen() {
                 <View style={styles.ideaRow}>
                   <View style={styles.ideaCopy}>
                     <Body>{item.title}</Body>
-                    <Caption tone="text">{`${money(item.priceCents)} · ${formatLongDate(new Date(item.purchasedOn))}`}</Caption>
+                    <Caption tone="text">{`${money(item.priceCents)} · ${formatStoredDate(item.purchasedOn)}`}</Caption>
                   </View>
                   {editable && !locked ? (
                     <IconButton
@@ -442,8 +458,37 @@ export function PersonScreen() {
         />
         <Button label={t('person.refresh')} tone="secondary" onPress={() => refreshIdeas(person.id)} />
         {cloudRemaining[person.id] != null ? <Body>{t('person.cloudLeft', { count: cloudRemaining[person.id] })}</Body> : null}
-        <Button label={t('person.cloud')} tone="secondary" onPress={() => cloudIdeas(person.id)} />
+        {cloudBusy ? <Shimmer label={t('person.ideasLoading')} /> : null}
+        {cloudError ? <Body>{t('person.ideasError')}</Body> : null}
+        <Button
+          label={cloudError ? t('person.ideasRetry') : t('person.cloud')}
+          tone="secondary"
+          onPress={async () => {
+            setCloudBusy(true);
+            setCloudError(false);
+            try {
+              await cloudIdeas(person.id);
+            } catch {
+              setCloudError(true);
+            } finally {
+              setCloudBusy(false);
+            }
+          }}
+        />
         <Body>{t('person.cloudHint')}</Body>
+        {ideas.map(idea => (
+          <IdeaRow
+            key={`device-${idea}`}
+            idea={idea}
+            saved={savedFor(idea)}
+            color={savedFor(idea) ? colors.pink : colors.text}
+            onSave={() => onSaveIdea(idea)}
+            onMenu={() => {
+              queuedMenu.current = { kind: 'idea', idea };
+              setTuning(false);
+            }}
+          />
+        ))}
         {cloudList.map(idea => (
           <IdeaRow
             key={`cloud-${idea}`}
@@ -849,7 +894,6 @@ function SpendBreakdown({ personId, budgetCents, money }: { personId: string; bu
   const allTotal = allTimeSpentCents(personId, snapshot.gifts);
   return (
     <Card>
-      <Heading>{t('person.spendTitle')}</Heading>
       <Body>{t('person.yearTotal', { amount: money(yearTotal) })}</Body>
       <Body>{t('person.allTotal', { amount: money(allTotal) })}</Body>
       <Body>{budgetCents == null ? t('person.noBudget') : t('person.budgetLine', { amount: money(budgetCents) })}</Body>

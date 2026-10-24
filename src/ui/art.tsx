@@ -12,30 +12,37 @@ const SKINS = {
   summer: require('../assets/skins/summer.png'),
 };
 
-const SKIN_ART: Record<ArtName, number> = {
-  birthday: require('../assets/art/skins/skin-birthday.png'),
-  anniversary: require('../assets/art/skins/skin-anniversary.png'),
-  wedding: require('../assets/art/skins/skin-wedding.png'),
-  baby: require('../assets/art/skins/skin-baby.png'),
-  holiday: require('../assets/art/skins/skin-holiday.png'),
-  hanukkah: require('../assets/art/skins/skin-hanukkah.png'),
-  diwali: require('../assets/art/skins/skin-diwali.png'),
-  valentine: require('../assets/art/skins/skin-valentine.png'),
-  mother: require('../assets/art/skins/skin-mother.png'),
-  father: require('../assets/art/skins/skin-father.png'),
-  graduation: require('../assets/art/skins/skin-graduation.png'),
-  house: require('../assets/art/skins/skin-house.png'),
-  gift: require('../assets/art/skins/skin-gift.png'),
+type Scheme = 'light' | 'dark';
+
+const EMBLEM: Record<ArtName, { light: number; dark: number }> = {
+  birthday: { light: require('../assets/art/emblems/emblem-birthday.png'), dark: require('../assets/art/emblems/emblem-birthday-dark.png') },
+  anniversary: { light: require('../assets/art/emblems/emblem-anniversary.png'), dark: require('../assets/art/emblems/emblem-anniversary-dark.png') },
+  wedding: { light: require('../assets/art/emblems/emblem-wedding.png'), dark: require('../assets/art/emblems/emblem-wedding-dark.png') },
+  baby: { light: require('../assets/art/emblems/emblem-baby.png'), dark: require('../assets/art/emblems/emblem-baby-dark.png') },
+  holiday: { light: require('../assets/art/emblems/emblem-holiday.png'), dark: require('../assets/art/emblems/emblem-holiday-dark.png') },
+  hanukkah: { light: require('../assets/art/emblems/emblem-hanukkah.png'), dark: require('../assets/art/emblems/emblem-hanukkah-dark.png') },
+  diwali: { light: require('../assets/art/emblems/emblem-diwali.png'), dark: require('../assets/art/emblems/emblem-diwali-dark.png') },
+  valentine: { light: require('../assets/art/emblems/emblem-valentine.png'), dark: require('../assets/art/emblems/emblem-valentine-dark.png') },
+  mother: { light: require('../assets/art/emblems/emblem-mother.png'), dark: require('../assets/art/emblems/emblem-mother-dark.png') },
+  father: { light: require('../assets/art/emblems/emblem-father.png'), dark: require('../assets/art/emblems/emblem-father-dark.png') },
+  graduation: { light: require('../assets/art/emblems/emblem-graduation.png'), dark: require('../assets/art/emblems/emblem-graduation-dark.png') },
+  house: { light: require('../assets/art/emblems/emblem-house.png'), dark: require('../assets/art/emblems/emblem-house-dark.png') },
+  gift: { light: require('../assets/art/emblems/emblem-gift.png'), dark: require('../assets/art/emblems/emblem-gift-dark.png') },
+  crescent: { light: require('../assets/art/emblems/emblem-crescent.png'), dark: require('../assets/art/emblems/emblem-crescent-dark.png') },
+  lantern: { light: require('../assets/art/emblems/emblem-lantern.png'), dark: require('../assets/art/emblems/emblem-lantern-dark.png') },
+  harvest: { light: require('../assets/art/emblems/emblem-harvest.png'), dark: require('../assets/art/emblems/emblem-harvest-dark.png') },
+  toast: { light: require('../assets/art/emblems/emblem-toast.png'), dark: require('../assets/art/emblems/emblem-toast-dark.png') },
+  bloom: { light: require('../assets/art/emblems/emblem-bloom.png'), dark: require('../assets/art/emblems/emblem-bloom-dark.png') },
 };
 
-const EMPTY_ART: Record<EmptyArtName, number> = {
-  people: require('../assets/art/empty/empty-people.png'),
-  fairness: require('../assets/art/empty/empty-fairness.png'),
-  occasions: require('../assets/art/empty/empty-occasions.png'),
-  ideas: require('../assets/art/empty/empty-ideas.png'),
-  group: require('../assets/art/empty/empty-group.png'),
-  error: require('../assets/art/empty/empty-error.png'),
-  offline: require('../assets/art/empty/empty-offline.png'),
+const EMPTY_ART: Record<EmptyArtName, { light: number; dark: number }> = {
+  people: { light: require('../assets/art/empty/empty-people.png'), dark: require('../assets/art/empty/empty-people-dark.png') },
+  fairness: { light: require('../assets/art/empty/empty-fairness.png'), dark: require('../assets/art/empty/empty-fairness-dark.png') },
+  occasions: { light: require('../assets/art/empty/empty-occasions.png'), dark: require('../assets/art/empty/empty-occasions-dark.png') },
+  ideas: { light: require('../assets/art/empty/empty-ideas.png'), dark: require('../assets/art/empty/empty-ideas-dark.png') },
+  group: { light: require('../assets/art/empty/empty-group.png'), dark: require('../assets/art/empty/empty-group-dark.png') },
+  error: { light: require('../assets/art/empty/empty-error.png'), dark: require('../assets/art/empty/empty-error-dark.png') },
+  offline: { light: require('../assets/art/empty/empty-offline.png'), dark: require('../assets/art/empty/empty-offline-dark.png') },
 };
 
 const CELEBRATE_ART: Record<CelebrateName, number> = {
@@ -44,23 +51,26 @@ const CELEBRATE_ART: Record<CelebrateName, number> = {
   purchase: require('../assets/art/celebrate/celebrate-purchase.png'),
 };
 
-/** Group list mark. The file is the gift sticker, not a face. */
-export const GROUP_AVATAR = require('../assets/art/avatars/group-avatar.png');
-
 /** Confetti for the first person added. Metro includes the @2x and @3x siblings. */
 export const CONFETTI_BURST = require('../assets/art/celebrate/confetti-burst.png');
 
-export function artSource(name: ArtName | EmptyArtName | CelebrateName): number {
+function paired(pair: { light: number; dark: number }, scheme: Scheme): number {
+  return scheme === 'dark' ? pair.dark : pair.light;
+}
+
+/** Line art is already colored. Do not tint these files. */
+export function artSource(name: ArtName | EmptyArtName | CelebrateName, scheme: Scheme = 'light'): number {
   if (Object.prototype.hasOwnProperty.call(EMPTY_ART, name)) {
-    return EMPTY_ART[name as EmptyArtName];
+    return paired(EMPTY_ART[name as EmptyArtName], scheme);
   }
   if (Object.prototype.hasOwnProperty.call(CELEBRATE_ART, name)) {
     return CELEBRATE_ART[name as CelebrateName];
   }
-  return SKIN_ART[name as ArtName] ?? SKIN_ART.gift;
+  const emblem = EMBLEM[name as ArtName] ?? EMBLEM.gift;
+  return paired(emblem, scheme);
 }
 
-/** Seasonal banners stay the season bitmaps. Occasion skins are separate. */
+/** Seasonal banners stay the season bitmaps. Occasion emblems are separate. */
 export function SkinBanner({ skinId }: { skinId: string }) {
   const { colors, radius } = useTheme();
   const source = SKINS[skinId as keyof typeof SKINS] ?? SKINS.base;

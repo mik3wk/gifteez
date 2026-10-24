@@ -29,7 +29,7 @@ test('plural copy works when Hermes has no Intl.PluralRules', () => {
     expect(t('people.inDays', { count: 1 })).toBe('in 1 day');
     expect(t('people.daysUnit', { count: 3 })).toBe('days');
     expect(t('importFlow.added', { count: 1 })).toContain('person');
-    expect(t('groupScreen.inviteHint', { count: 8 })).toContain('8');
+    expect(t('people.inDays', { count: 8 })).toContain('8');
   });
 });
 

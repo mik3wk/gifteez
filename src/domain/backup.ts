@@ -192,3 +192,36 @@ export function migrateToLocal(snapshot: AppSnapshot): AppSnapshot {
     entitlementPaid: snapshot.entitlementPaid,
   };
 }
+
+export type BackupSummary = {
+  people: number;
+  occasions: number;
+  ideas: number;
+  gifts: number;
+  exportedAt: string;
+};
+
+/** Counts for the restore preview. Ideas are the suggestions, not the cache rows. */
+export function summarizeBackup(text: string): { ok: true; summary: BackupSummary } | { ok: false; reason: BackupFailure } {
+  const parsed = parseBackup(text, Date.now());
+  if (!parsed.ok) {
+    return parsed;
+  }
+  let exportedAt = '';
+  try {
+    const raw = JSON.parse(text) as { exportedAt?: unknown };
+    exportedAt = typeof raw.exportedAt === 'string' ? raw.exportedAt : '';
+  } catch {
+    exportedAt = '';
+  }
+  return {
+    ok: true,
+    summary: {
+      people: parsed.snapshot.people.filter(person => !person.deleted).length,
+      occasions: parsed.snapshot.occasions.filter(item => !item.deleted).length,
+      ideas: parsed.snapshot.ideas.filter(item => !item.deleted).reduce((sum, item) => sum + item.ideas.length, 0),
+      gifts: parsed.snapshot.gifts.filter(item => !item.deleted).length,
+      exportedAt,
+    },
+  };
+}

@@ -27,10 +27,17 @@ function expectScales(dir, name) {
   expect(fs.existsSync(path.join(dir, `${name}@3x.png`))).toBe(true);
 }
 
-test('every skin, empty state, and celebration has a 1x, 2x, and 3x sticker', () => {
+test('every emblem, empty state, and celebration has a 1x, 2x, and 3x sticker', () => {
   expect(skins).toHaveLength(13);
-  skins.forEach(name => expectScales(path.join(art, 'skins'), `skin-${name}`));
-  empties.forEach(name => expectScales(path.join(art, 'empty'), `empty-${name}`));
+  const emblems = [...skins, 'bloom', 'crescent', 'harvest', 'lantern', 'toast'];
+  emblems.forEach(name => {
+    expectScales(path.join(art, 'emblems'), `emblem-${name}`);
+    expectScales(path.join(art, 'emblems'), `emblem-${name}-dark`);
+  });
+  empties.forEach(name => {
+    expectScales(path.join(art, 'empty'), `empty-${name}`);
+    expectScales(path.join(art, 'empty'), `empty-${name}-dark`);
+  });
   celebrate.forEach(name => expectScales(path.join(art, 'celebrate'), name));
   expectScales(path.join(art, 'avatars'), 'group-avatar');
   expect(fs.existsSync(path.join(art, 'celebrate', 'confetti-burst.png'))).toBe(true);

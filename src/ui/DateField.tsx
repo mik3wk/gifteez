@@ -1,6 +1,7 @@
 import React, { useLayoutEffect, useRef, useState, type ComponentRef } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { parseLocalDate } from '../domain/calendarDate';
 import { formatDate, formatLongDate, t, todayIso } from '../i18n';
 import { useTheme } from '../theme/useTheme';
 import { space, stroke, touch } from '../theme/tokens';
@@ -115,7 +116,8 @@ function Wheel({
   }
   function onScrollEndDrag(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const velocity = event.nativeEvent.velocity?.y ?? 0;
-    if (velocity !== 0) {
+    // A slow drag can report a tiny velocity and then never fire momentum.
+    if (Math.abs(velocity) >= 0.2) {
       return;
     }
     const raw = event.nativeEvent.targetContentOffset?.y ?? event.nativeEvent.contentOffset.y;
@@ -137,7 +139,14 @@ function Wheel({
         decelerationRate="fast"
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior="never"
-        onMomentumScrollEnd={event => selectCentered(event.nativeEvent.contentOffset.y)}
+        onMomentumScrollEnd={event => {
+          const y = event.nativeEvent.contentOffset.y;
+          const next = centeredIndex(y, items.length);
+          if (Math.abs(y - next * WHEEL_ROW) > 1) {
+            scrollToExact(next * WHEEL_ROW, true);
+          }
+          selectCentered(y);
+        }}
         onScrollEndDrag={onScrollEndDrag}>
         {items.map(item => {
           const selected = item.id === value;
@@ -228,12 +237,7 @@ export function DateField({
 }
 
 function parseIso(value: string): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
-  if (!match) {
-    return null;
-  }
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  return Number.isNaN(date.getTime()) ? null : date;
+  return parseLocalDate(value);
 }
 
 const styles = StyleSheet.create({

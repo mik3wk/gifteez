@@ -1,4 +1,5 @@
 import { NativeModules, Platform } from 'react-native';
+import { localIso, parseLocalDate } from '../domain/calendarDate';
 import enUS from './en-US.json';
 
 type Vars = Record<string, string | number>;
@@ -164,7 +165,22 @@ export function formatLongDate(date: Date, locale = deviceLocale()): string {
 }
 
 export function todayIso(date = new Date()): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day}`;
+  return localIso(date);
+}
+
+/** Show a stored yyyy-mm-dd in local calendar terms. */
+export function formatStoredDate(value: string, locale = deviceLocale()): string {
+  const date = parseLocalDate(value);
+  return date ? formatLongDate(date, locale) : value;
+}
+
+export function timeGreeting(date = new Date()): string {
+  const hour = date.getHours();
+  if (hour < 12) {
+    return t('people.greetingMorning');
+  }
+  if (hour < 17) {
+    return t('people.greetingAfternoon');
+  }
+  return t('people.greetingEvening');
 }

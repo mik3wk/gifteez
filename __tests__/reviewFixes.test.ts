@@ -87,7 +87,7 @@ test('light icon ink clears 3:1 on white and the scrim stays black', () => {
 test('every occasion preset has a sticker skin', () => {
   OCCASION_PRESETS.forEach(preset => {
     expect(occasionLook(preset.id).art).toBeTruthy();
-    expect(occasionLook(preset.id).emoji).toBeTruthy();
+    expect(occasionLook(preset.id).emoji).toBe('');
   });
   expect(occasionLook('not-a-real-occasion').art).toBe('gift');
 });

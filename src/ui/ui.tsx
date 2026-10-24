@@ -23,15 +23,14 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { openTab, type RootStack } from '../app/navigation';
 import { getEnv } from '../config/env';
-import { formatMoney, t } from '../i18n';
+import { t } from '../i18n';
 import { hideNativeSplash } from '../platform/splash';
 import { useGifteez } from '../state/GifteezContext';
 import { useTheme } from '../theme/useTheme';
 import { iconOnSurface, layout, occasionLook, scrim, space, sticker, stroke, touch, type ArtName, type CelebrateName, type ChipTint, type EmptyArtName } from '../theme/tokens';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { artSource } from './art';
-import { BowMark, MonogramAvatar, WaxSeal } from './stationery';
-import type { SealState } from '../domain/seal';
+import { BowMark, MonogramAvatar } from './stationery';
 import { Icon, type IconName } from './icons';
 import { CelebrateArt, Settle, useReduceMotion, useStickerMotion } from './motion';
 
@@ -705,12 +704,13 @@ export function ArtSlot({
   name: ArtName | EmptyArtName | CelebrateName;
   size?: number;
 }) {
+  const { scheme } = useTheme();
   return (
     <Image
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       accessibilityIgnoresInvertColors
-      source={artSource(name)}
+      source={artSource(name, scheme)}
       resizeMode="contain"
       style={{ width: size, height: size }}
     />
@@ -732,10 +732,6 @@ export function ArtRow({
       <View style={styles.personCopy}>{children}</View>
     </View>
   );
-}
-
-export function GroupAvatar({ size = 48, label = '' }: { size?: number; label?: string }) {
-  return <MonogramAvatar name={label} personId={label || 'group'} size={size} crest />;
 }
 
 export function EmptyState({
@@ -836,7 +832,7 @@ export function ProgressBar({ value }: { value: number | null }) {
     <View
       accessibilityRole="progressbar"
       accessibilityValue={{ min: 0, max: 100, now: Math.round(amount * 100) }}
-      style={[styles.track, { borderColor: colors.outline, backgroundColor: colors.surfaceAlt, borderRadius: radius.pill }]}>
+      style={[styles.track, { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.surfaceAlt, borderRadius: radius.pill }]}>
       {amount > 0 ? (
         <View style={[styles.bar, { width: `${Math.round(amount * 100)}%`, backgroundColor: colors.teal, borderRadius: radius.pill }]} />
       ) : null}
@@ -853,15 +849,20 @@ export function OccasionChip({
   label: string;
   trailing?: string;
 }) {
-  const { colors, type, typeScale } = useTheme();
+  const { colors, scheme, type, typeScale } = useTheme();
   const look = occasionLook(occasionId);
   const fill = colors[look.chip];
   const ink = colors[`on${look.chip[0].toUpperCase()}${look.chip.slice(1)}` as 'onPink'];
   const words = trailing ? `${label} ${trailing}` : label;
-  const text = `${look.emoji} ${words}`;
   return (
-    <View style={[styles.chip, { backgroundColor: fill, borderColor: colors.outline, alignSelf: 'flex-start' }]}>
-      <Text accessibilityLabel={words} maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: ink }]}>{text}</Text>
+    <View style={[styles.chip, styles.occasionChip, { backgroundColor: fill, borderColor: colors.outline, alignSelf: 'flex-start' }]}>
+      <Image
+        accessibilityElementsHidden
+        source={artSource(look.art, scheme)}
+        resizeMode="contain"
+        style={styles.occasionEmblem}
+      />
+      <Text accessibilityLabel={words} maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: ink }]}>{words}</Text>
     </View>
   );
 }
@@ -990,7 +991,6 @@ export function PersonRow({
   budget,
   progress,
   note,
-  seal,
   onPress,
   accessibilityLabel,
 }: {
@@ -1003,7 +1003,6 @@ export function PersonRow({
   budget: string;
   progress: number | null;
   note?: string;
-  seal?: SealState;
   onPress: () => void;
   accessibilityLabel: string;
 }) {
@@ -1015,14 +1014,13 @@ export function PersonRow({
         <View style={styles.personCopy}>
           <Heading>{name}</Heading>
           {relationship ? <Caption tone="text">{relationship}</Caption> : null}
+          {budget ? <Caption tone="text">{budget}</Caption> : null}
           {occasionId && occasionLabel ? (
             <OccasionChip occasionId={occasionId} label={occasionLabel} trailing={trailing} />
           ) : (
             <Caption>{note || ''}</Caption>
           )}
-          {budget ? <Caption tone="text">{budget}</Caption> : null}
           {progress != null ? <ProgressBar value={progress} /> : null}
-          {seal ? <WaxSeal state={seal} /> : null}
         </View>
         <Icon name="chevron" color={colors.muted} />
       </View>
@@ -1037,7 +1035,6 @@ export function AppHeader({ title, greeting }: { title: string; greeting?: strin
   return (
     <View style={styles.header}>
       <View style={styles.headerCopy}>
-        <GroupAvatar size={64} label={title} />
         <View style={styles.personCopy}>
           {greeting ? <Caption>{greeting}</Caption> : null}
           <Display lines={1}>{title}</Display>
@@ -1253,17 +1250,24 @@ export function Sheet({
   );
 }
 
+export function priceLabel(displayPrice?: string | null): string {
+  const price = displayPrice?.trim();
+  if (price) {
+    return t('settings.unlockPrice', { price });
+  }
+  return t('settings.unlockFallback');
+}
+
 export function UnlockSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { buy, restorePurchases, storeProduct, storeReady } = useGifteez();
-  const price = storeProduct?.displayPrice || formatMoney(Math.round(getEnv().iapPriceUsd * 100));
+  const { buy, restorePurchases, storeProduct } = useGifteez();
   return (
     <Sheet visible={visible} onClose={onClose}>
-      <Title>{t('settings.unlock')}</Title>
-      <Body>{t('errors.oneList')}</Body>
-      <Body>{t('settings.unlockPrice', { price })}</Body>
-      {storeReady ? null : <Body>{t('settings.storeMissing')}</Body>}
-      <Button label={t('settings.unlock')} onPress={buy} />
+      <Title>{t('settings.keepEveryone')}</Title>
+      <Body>{t('settings.keepEveryoneBody', { count: getEnv().freeTierMaxPeople })}</Body>
+      <Body>{priceLabel(storeProduct?.displayPrice)}</Body>
+      <Button label={t('settings.unlockAction')} onPress={buy} />
       <Button label={t('settings.restore')} tone="secondary" onPress={restorePurchases} />
+      <Button label={t('settings.notNow')} tone="ghost" onPress={onClose} />
     </Sheet>
   );
 }
@@ -1318,7 +1322,7 @@ export function Chip({
       accessibilityState={{ selected: Boolean(selected) }}
       hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
       onPress={onPress}
-      style={block ? styles.blockChip : null}>
+      style={block ? styles.blockChip : styles.chipWrap}>
       {({ pressed }) => (
         <StickerBox
           fill={selected ? colors.pink : colors.surface}
@@ -1326,8 +1330,7 @@ export function Chip({
           borderWidth={stroke.inner}
           pressed={pressed}
           shadow={false}>
-          <View style={[styles.chip, styles.chipPress, block ? styles.chipBlock : null]}>
-            {selected ? <Icon name="check" color={ink} size={16} /> : null}
+          <View style={[styles.chipPress, block ? styles.chipBlock : null]}>
             <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: ink }]}>{label}</Text>
           </View>
         </StickerBox>
@@ -1433,7 +1436,10 @@ const styles = StyleSheet.create({
   track: { height: 14, borderWidth: stroke.inner, overflow: 'hidden', justifyContent: 'center' },
   bar: { height: 10, marginHorizontal: 1 },
   chip: { borderWidth: stroke.inner, borderRadius: 999, minHeight: 32, paddingHorizontal: space.xs, paddingVertical: space.xxs, justifyContent: 'center' },
-  chipPress: { minHeight: touch.minTarget, flexDirection: 'row', alignItems: 'center', gap: space.xxs },
+  occasionChip: { flexDirection: 'row', alignItems: 'center', gap: space.xxs, flexShrink: 0 },
+  occasionEmblem: { width: 22, height: 22 },
+  chipWrap: { alignSelf: 'flex-start', flexShrink: 0 },
+  chipPress: { minHeight: touch.minTarget, flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.sm },
   chipBlock: { minHeight: touch.minTarget, alignItems: 'center' },
   blockChip: { alignSelf: 'stretch' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.xs },

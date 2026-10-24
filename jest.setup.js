@@ -45,6 +45,47 @@ jest.mock('react-native-reanimated', () => {
   };
 });
 
+jest.mock('react-native-blob-util', () => ({
+  __esModule: true,
+  default: {
+    fs: {
+      dirs: { CacheDir: '/tmp' },
+      writeFile: jest.fn(async () => undefined),
+      readFile: jest.fn(async () => ''),
+    },
+  },
+}));
+
+jest.mock('@react-native-documents/picker', () => ({
+  pick: jest.fn(async () => []),
+  saveDocuments: jest.fn(async () => undefined),
+  keepLocalCopy: jest.fn(async () => []),
+  types: { json: 'application/json' },
+  errorCodes: { OPERATION_CANCELED: 'OPERATION_CANCELED' },
+  isErrorWithCode: () => false,
+}));
+
+jest.mock('react-native-device-info', () => ({
+  __esModule: true,
+  default: {
+    getVersion: () => '0.0.1',
+    getBuildNumber: () => '1',
+    getUniqueId: async () => 'device',
+  },
+  getVersion: () => '0.0.1',
+  getBuildNumber: () => '1',
+  getUniqueId: async () => 'device',
+}));
+
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  __esModule: true,
+  default: {
+    getItem: jest.fn(async () => null),
+    setItem: jest.fn(async () => undefined),
+    removeItem: jest.fn(async () => undefined),
+  },
+}));
+
 jest.mock('react-native-get-random-values', () => {
   const { webcrypto } = require('crypto');
   if (typeof global.crypto !== 'object' || global.crypto == null) {

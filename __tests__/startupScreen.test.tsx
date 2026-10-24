@@ -44,7 +44,7 @@ test('the startup screen names the cause and retries', async () => {
   const retry = renderer!.root.findAllByProps({ accessibilityLabel: 'Retry starting Gifteez' })
     .find(node => node.props.accessibilityRole === 'button');
   expect(title).toBeTruthy();
-  expect(JSON.stringify(renderer!.toJSON())).toContain('Anonymous sign-in is turned off');
+  expect(JSON.stringify(renderer!.toJSON())).toContain('Anonymous sign-in is off, so cloud ideas cannot start.');
   expect(JSON.stringify(renderer!.toJSON())).toContain('auth/operation-not-allowed');
   await ReactTestRenderer.act(() => {
     retry?.props.onPress();
