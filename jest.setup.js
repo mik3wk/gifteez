@@ -107,3 +107,19 @@ jest.mock('react-native-get-random-values', () => {
     global.crypto.getRandomValues = array => webcrypto.getRandomValues(array);
   }
 });
+
+jest.mock('react-native-contacts', () => ({
+  __esModule: true,
+  default: {
+    requestPermission: jest.fn(async () => 'denied'),
+    getAllWithoutPhotos: jest.fn(async () => []),
+  },
+}));
+
+jest.mock('react-native-calendar-events', () => ({
+  __esModule: true,
+  default: {
+    requestPermissions: jest.fn(async () => 'denied'),
+    fetchAllEvents: jest.fn(async () => []),
+  },
+}));

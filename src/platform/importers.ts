@@ -1,5 +1,6 @@
 import Contacts from 'react-native-contacts';
 import CalendarEvents from 'react-native-calendar-events';
+import { draftsFromEvents, type CalendarDraft } from '../domain/calendarImport';
 import { monthDayFromStored } from '../domain/calendarDate';
 import { birthdayNameFromTitle } from '../domain/logic';
 import type { ImportedPerson } from '../domain/logic';
@@ -25,6 +26,19 @@ export async function importContacts(): Promise<ImportedPerson[] | 'denied'> {
     }
     return [person];
   });
+}
+
+/** Read the next year of events. Nothing is written back to the calendar. */
+export async function scanCalendar(people: Array<{ id: string; name: string; deleted?: boolean }>): Promise<CalendarDraft[] | 'denied'> {
+  const permission = await CalendarEvents.requestPermissions(true);
+  if (permission !== 'authorized') {
+    return 'denied';
+  }
+  const start = new Date();
+  const end = new Date();
+  end.setMonth(end.getMonth() + 12);
+  const events = await CalendarEvents.fetchAllEvents(start.toISOString(), end.toISOString());
+  return draftsFromEvents(events, people);
 }
 
 export async function sweepBirthdays(): Promise<ImportedPerson[] | 'denied'> {

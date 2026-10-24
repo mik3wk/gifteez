@@ -7,6 +7,7 @@ import { accountUnlocked, parseBudget } from '../domain/logic';
 import { t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import type { SkinId } from '../theme/skins';
+import { CalendarReviewLink } from '../ui/CalendarReview';
 import { SessionEntrance } from '../ui/motion';
 import {
   AppHeader,
@@ -43,7 +44,6 @@ export function SettingsScreen() {
     restorePurchases,
     storeProduct,
     importFromContacts,
-    importFromCalendar,
     shareBackup,
     pickBackup,
     storeBusy,
@@ -190,11 +190,7 @@ export function SettingsScreen() {
           <Button label={t('settings.export')} tone="secondary" onPress={() => { shareBackup().catch(() => undefined); }} />
           <Button label={t('settings.restoreBackup')} tone="secondary" onPress={() => { pickBackup().catch(() => undefined); }} />
           <Body>{t('settings.calendarHint')}</Body>
-          <Button
-            label={t('settings.findEvents')}
-            tone="secondary"
-            onPress={async () => setMessage(await describeImport(await importFromCalendar()))}
-          />
+          <CalendarReviewLink label={t('settings.findEvents')} button />
           <Body>{t('settings.contactsHint')}</Body>
           <Button
             label={t('settings.contacts')}

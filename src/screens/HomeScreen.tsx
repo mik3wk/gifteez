@@ -14,8 +14,8 @@ import { useGifteez } from '../state/GifteezContext';
 import { space } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { RibbonBanner, tagBowSource, tagStringSource } from '../ui/art';
-import { Icon } from '../ui/icons';
 import { BudgetBar, CircleFairnessCard, ListRow, MonogramAvatar, RowCard, SealPill } from '../ui/stationery';
+import { CalendarReviewLink } from '../ui/CalendarReview';
 import { Body, Button, Caption, Card, EmptyState, IconButton, Screen, Sheet } from '../ui/ui';
 
 type Upcoming = { person: Person; occasion: Occasion; date: Date };
@@ -287,17 +287,7 @@ function NoOccasion({
 }
 
 function CalendarAction() {
-  const { colors, type, typeScale } = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={t('people.findBirthdays')}
-      onPress={() => undefined}
-      style={styles.calendar}>
-      <Icon name="calendar" color={colors.pink} size={18} />
-      <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: colors.pink }]}>{t('people.findBirthdays')}</Text>
-    </Pressable>
-  );
+  return <CalendarReviewLink label={t('people.findBirthdays')} />;
 }
 
 function rowBudget(person: Person, snapshot: AppSnapshot, year: number, money: (cents: number) => string): string {
@@ -356,5 +346,4 @@ const styles = StyleSheet.create({
   heroTitle: { fontSize: 28, lineHeight: 32 },
   heroFoot: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   heroBudget: { flex: 1 },
-  calendar: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', minHeight: 44 },
 });
