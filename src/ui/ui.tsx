@@ -1126,6 +1126,7 @@ export function IconButton({
   color,
   filled,
   size = 22,
+  word,
 }: {
   label: string;
   name: IconName;
@@ -1133,11 +1134,17 @@ export function IconButton({
   color?: string;
   filled?: boolean;
   size?: number;
+  /** Visible word when the icon alone would not say what the control does. */
+  word?: string;
 }) {
-  const { colors } = useTheme();
+  const { colors, type, typeScale } = useTheme();
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.iconButton}>
-      <Icon name={name} color={color || colors.text} filled={filled} size={size} />
+      {word ? (
+        <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: color || colors.pink }]}>{word}</Text>
+      ) : (
+        <Icon name={name} color={color || colors.text} filled={filled} size={size} />
+      )}
     </Pressable>
   );
 }

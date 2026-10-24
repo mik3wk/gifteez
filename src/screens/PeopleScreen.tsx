@@ -13,7 +13,7 @@ import { useGifteez } from '../state/GifteezContext';
 import { space } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { ListRow, RowCard } from '../ui/stationery';
-import { Body, Caption, EmptyState, Field, Screen, Title } from '../ui/ui';
+import { Caption, EmptyState, Field, Screen, Title } from '../ui/ui';
 
 export function PeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
@@ -81,7 +81,7 @@ export function PeopleScreen() {
         <EmptyState kind="people" text={t('people.addFirst')} action={t('people.addPerson')} onAction={addSomeone} />
       )}
       {needle && people.length === 0 && snapshot.people.some(person => !person.deleted) ? (
-        <Body>{t('people.noMatch', { query: query.trim() })}</Body>
+        <EmptyState kind="people" text={t('people.noMatch', { query: query.trim() })} />
       ) : null}
       {people.length > 0 ? (
         <RowCard>

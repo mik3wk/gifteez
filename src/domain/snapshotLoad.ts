@@ -213,6 +213,10 @@ function normalizeProfile(value: unknown, base: Profile, hasPeople: boolean): Pr
     ...(currency ? { currency } : {}),
     ...(householdName ? { householdName } : {}),
     ...(givenName ? { givenName } : {}),
+    ...(raw.promptedCircle === true ? { promptedCircle: true } : {}),
+    ...(typeof raw.defaultBudgetCents === 'number' && raw.defaultBudgetCents >= 0 ? { defaultBudgetCents: Math.round(raw.defaultBudgetCents) } : {}),
+    ...(typeof raw.reminderLeadDays === 'number' && raw.reminderLeadDays >= 0 && raw.reminderLeadDays <= 30 ? { reminderLeadDays: Math.round(raw.reminderLeadDays) } : {}),
+    ...(typeof raw.reminderHour === 'number' && raw.reminderHour >= 0 && raw.reminderHour <= 23 ? { reminderHour: Math.round(raw.reminderHour) } : {}),
   };
 }
 

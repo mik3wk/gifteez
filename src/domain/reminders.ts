@@ -14,12 +14,12 @@ export type ReminderSlot = {
   occasionId: string;
 };
 
-function atMorning(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 9, 0, 0, 0);
+function atHour(date: Date, hour: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, 0, 0, 0);
 }
 
-function daysBefore(date: Date, days: number): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - days, 9, 0, 0, 0);
+function daysBefore(date: Date, days: number, hour: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - days, hour, 0, 0, 0);
 }
 
 /** Day-of and one week before, at 9:00 local. Past times are skipped. */
@@ -28,12 +28,16 @@ export function planReminders(input: {
   occasions: Occasion[];
   now: Date;
   enabled: boolean;
+  leadDays?: number;
+  hour?: number;
 }): ReminderSlot[] {
   if (!input.enabled) {
     return [];
   }
   const slots: ReminderSlot[] = [];
   const now = input.now.getTime();
+  const leadDays = input.leadDays != null && input.leadDays >= 0 ? input.leadDays : 7;
+  const hour = input.hour != null && input.hour >= 0 && input.hour <= 23 ? input.hour : 9;
   input.occasions.filter(occasion => !occasion.deleted).forEach(occasion => {
     const person = input.people.find(item => item.id === occasion.personId && !item.deleted);
     if (!person) {
@@ -45,8 +49,8 @@ export function planReminders(input: {
     }
     const year = when.getFullYear();
     const candidates: Array<{ kind: ReminderKind; at: Date }> = [
-      { kind: 'week', at: daysBefore(when, 7) },
-      { kind: 'day', at: atMorning(when) },
+      { kind: 'week', at: daysBefore(when, leadDays, hour) },
+      { kind: 'day', at: atHour(when, hour) },
     ];
     candidates.forEach(candidate => {
       if (candidate.at.getTime() <= now) {

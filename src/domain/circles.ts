@@ -22,6 +22,24 @@ export function isEvenSpend(spentCents: number, topCents: number): boolean {
   return Math.max(0, topCents - spentCents) <= evenGapCents(topCents);
 }
 
+/** The first relationship shared by two or more people, for the one-time Home prompt. */
+export function repeatedRelationship(people: Person[]): RelationshipPresetKey | null {
+  const counts = new Map<RelationshipPresetKey, number>();
+  people.filter(person => !person.deleted).forEach(person => {
+    const key = relationshipKey(person.relationship);
+    if (!key) {
+      return;
+    }
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+  for (const [key, count] of counts) {
+    if (count >= 2) {
+      return key;
+    }
+  }
+  return null;
+}
+
 export function cleanCircleName(value: string): string | null {
   const trimmed = value.trim().replace(/\s+/g, ' ');
   if (!trimmed || trimmed.length > 40) {

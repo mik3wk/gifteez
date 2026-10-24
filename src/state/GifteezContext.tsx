@@ -123,6 +123,9 @@ type GifteezApi = {
   clearCompletedPerson: () => void;
   appearance: AppearanceChoice;
   setAppearance: (choice: AppearanceChoice) => Promise<void>;
+  skinPreview: SkinId | 'remote';
+  previewSkin: (id: SkinId | 'remote') => void;
+  updateProfile: (patch: Partial<AppSnapshot['profile']>) => Promise<void>;
   finishWelcome: () => Promise<void>;
   buy: () => Promise<void>;
   restorePurchases: () => Promise<void>;
@@ -181,6 +184,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [completedPersonId, setCompletedPersonId] = useState<string | null>(null);
   const [appearance, setAppearanceChoice] = useState<AppearanceChoice>('system');
+  const skinOverride = useRef<SkinId | 'remote'>('remote');
+  const [skinPreview, setSkinPreview] = useState<SkinId | 'remote'>('remote');
   const [incomingBackup, setIncomingBackup] = useState<{ text: string; preview: string } | null>(null);
   const pendingAdd = useRef<{ person: Person; hadPeople: boolean } | null>(null);
   const finishPendingRef = useRef<() => Promise<void>>(async () => undefined);
@@ -361,7 +366,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         try {
           const skinValue = await activeSkinParam(env);
           const resolved = resolveSkin({ remoteValue: skinValue, today: new Date(), downloaded: downloadedRef.current });
-          if (!cancelled) {
+          if (!cancelled && skinOverride.current === 'remote') {
             setSkinId(resolved.id);
             paint(resolved.colors);
           }
@@ -371,8 +376,10 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
               const withDownload = { ...downloadedRef.current, [resolved.id]: payload };
               const again = resolveSkin({ remoteValue: skinValue, today: new Date(), downloaded: withDownload });
               setDownloaded(withDownload);
-              setSkinId(again.id);
-              paint(again.colors);
+              if (skinOverride.current === 'remote') {
+                setSkinId(again.id);
+                paint(again.colors);
+              }
             }
           }
           const store = await connectStore(env.iapProductId);
@@ -640,6 +647,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       await commit(result.snapshot);
       if (!hadPeople && !person.imported) {
         setConfetti(count => count + 1);
+        setResumePersonId(person.id);
+        await commit(withProfile(snapshotRef.current, { onboarded: true }));
       }
       sync().catch(() => undefined);
       return person.id;
@@ -1016,6 +1025,35 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     finishWelcome: async () => {
       await commit(withProfile(snapshotRef.current, { onboarded: true }));
     },
+    updateProfile: async patch => {
+      await commit(withProfile(snapshotRef.current, patch));
+      if (patch.reminders === 'on' || patch.reminderHour != null || patch.reminderLeadDays != null) {
+        scheduleReminders(snapshotRef.current).catch(() => undefined);
+      }
+    },
+    skinPreview,
+    previewSkin: id => {
+      skinOverride.current = id;
+      setSkinPreview(id);
+      if (id === 'remote') {
+        const resolved = resolveSkin({ remoteValue: 'auto', today: new Date(), downloaded: downloadedRef.current });
+        setSkinId(resolved.id);
+        paint(resolved.colors);
+        return;
+      }
+      const bundled = id === 'spring'
+        ? parseSkin(require('../../skins/spring.json'))
+        : id === 'summer'
+          ? parseSkin(require('../../skins/summer.json'))
+          : null;
+      const downloaded = bundled ? { ...downloadedRef.current, [id]: bundled } : downloadedRef.current;
+      if (bundled) {
+        setDownloaded(downloaded);
+      }
+      const resolved = colorsFor(id, downloaded);
+      setSkinId(resolved.id);
+      paint(resolved.colors);
+    },
     updateGift: async (giftId, title, price, date, privateGift) => {
       const priceCents = parseBudget(price);
       if (!title.trim() || priceCents == null) {
@@ -1153,7 +1191,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       return addImported(rows);
     },
-  }), [addImported, appearance, applyRestore, canUndo, clearResumePerson, cloudRemaining, colors, commit, completedPersonId, confetti, dataRecovery, env, error, fail, incomingBackup, notice, noticeArt, offerUndo, offline, onNavigate, paywallOpen, ready, recoveryStage, resumePersonId, runUndo, setNotice, showNotice, skinId, snapshot, stageRestore, startupDetail, startupFailure, storeBusy, storeProduct, storeReady, sync]);
+  }), [addImported, appearance, applyRestore, canUndo, clearResumePerson, cloudRemaining, colors, commit, completedPersonId, confetti, dataRecovery, env, error, fail, incomingBackup, notice, noticeArt, offerUndo, offline, onNavigate, paint, paywallOpen, ready, recoveryStage, resumePersonId, runUndo, setNotice, showNotice, skinId, skinPreview, snapshot, stageRestore, startupDetail, startupFailure, storeBusy, storeProduct, storeReady, sync]);
 
   return <GifteezContext.Provider value={api}>{children}</GifteezContext.Provider>;
 }
@@ -1205,6 +1243,8 @@ async function scheduleReminders(snapshot: AppSnapshot): Promise<void> {
     occasions: snapshot.occasions,
     now: new Date(),
     enabled: true,
+    leadDays: snapshot.profile.reminderLeadDays,
+    hour: snapshot.profile.reminderHour,
   });
   await applyReminderPlan(slots);
 }

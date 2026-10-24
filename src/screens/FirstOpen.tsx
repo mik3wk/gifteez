@@ -1,79 +1,36 @@
-import React, { useEffect, useState } from 'react';
-import { storeRelationship } from '../domain/relationship';
+import React from 'react';
+import { Image, Pressable, StyleSheet, Text } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStack } from '../app/navigation';
 import { t } from '../i18n';
-import { haptic } from '../platform/haptics';
 import { useGifteez } from '../state/GifteezContext';
-import { CircleField } from '../ui/CircleField';
-import { RelationshipField } from '../ui/RelationshipField';
-import { Body, Button, Field, Screen, Title } from '../ui/ui';
+import { useTheme } from '../theme/useTheme';
+import { crestSource } from '../ui/art';
+import { Body, Button, Screen, Title } from '../ui/ui';
 
 export function FirstOpenScreen() {
-  const { addPerson, openPerson, finishWelcome, completedPersonId, clearCompletedPerson } = useGifteez();
-  useEffect(() => {
-    if (!completedPersonId) {
-      return;
-    }
-    const personId = completedPersonId;
-    clearCompletedPerson();
-    openPerson(personId);
-    finishWelcome().then(() => haptic('success')).catch(() => undefined);
-  }, [clearCompletedPerson, completedPersonId, finishWelcome, openPerson]);
-  const [name, setName] = useState('');
-  const [nameError, setNameError] = useState('');
-  const [relationship, setRelationship] = useState('');
-  const [relationshipError, setRelationshipError] = useState('');
-  const [circleId, setCircleId] = useState('');
-
+  const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
+  const { pickBackup } = useGifteez();
+  const { colors, scheme, type, typeScale } = useTheme();
   return (
     <Screen>
-      <Title>{t('firstOpen.title')}</Title>
-      <Body>{t('firstOpen.lead')}</Body>
-      <Field
-        label={t('firstOpen.theirName')}
-        value={name}
-        error={nameError}
-        onChangeText={value => {
-          setName(value);
-          setNameError('');
-        }}
-      />
-      <RelationshipField
-        value={relationship}
-        error={relationshipError}
-        onChange={value => {
-          setRelationship(value);
-          setRelationshipError('');
-        }}
-      />
-      <CircleField value={circleId} onChange={setCircleId} />
-      <Button
-        label={t('firstOpen.start')}
-        onPress={async () => {
-          const trimmed = name.trim();
-          if (!trimmed) {
-            setNameError(t('errors.name'));
-            return;
-          }
-          const cleaned = storeRelationship(relationship);
-          if (cleaned == null) {
-            setRelationshipError(t('relationship.invalid'));
-            return;
-          }
-          const id = await addPerson({
-            name: trimmed,
-            budget: '',
-            tags: [],
-            relationship: cleaned,
-            ...(circleId ? { circleId } : {}),
-          });
-          if (!id) {
-            return;
-          }
-          await finishWelcome();
-          openPerson(id);
-          haptic('success');
-        }}
-      />
+      <Image accessible={false} source={crestSource(scheme)} resizeMode="contain" style={styles.crest} />
+      <Title>{t('appName')}</Title>
+      <Body>{t('firstOpen.welcomeLead')}</Body>
+      <Button label={t('firstOpen.addFirst')} onPress={() => navigation.navigate('AddPerson')} />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('settings.restoreBackup')}
+        onPress={() => { pickBackup().catch(() => undefined); }}
+        style={styles.restore}>
+        <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: colors.pink }]}>{t('settings.restoreBackup')}</Text>
+      </Pressable>
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  crest: { width: 120, height: 120, alignSelf: 'center' },
+  restore: { minHeight: 44, justifyContent: 'center', alignSelf: 'center' },
+});

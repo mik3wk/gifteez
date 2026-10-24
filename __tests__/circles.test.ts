@@ -8,6 +8,7 @@ import {
   isEvenSpend,
   joinNames,
   removeCircle,
+  repeatedRelationship,
 } from '../src/domain/circles';
 import {
   DEFAULT_RELATIONSHIP_KEYS,
@@ -180,4 +181,19 @@ test('a saved keepEven flag becomes one circle named Kept even', () => {
   expect(migrated.circles.filter(circle => circle.name === 'Kept even')).toHaveLength(1);
   expect(JSON.stringify(migrated.people)).not.toContain('keepEven');
   expect(migrated.people.find(item => item.id === 'cam')?.circleId).toBeUndefined();
+});
+
+test('a repeated relationship is offered once, and sister is not the same as brother', () => {
+  expect(repeatedRelationship([
+    person('a', 'Ada', { relationship: 'sister' }),
+    person('b', 'Bea', { relationship: 'sister' }),
+  ])).toBe('sister');
+  expect(repeatedRelationship([
+    person('a', 'Ada', { relationship: 'sister' }),
+    person('b', 'Ben', { relationship: 'brother' }),
+  ])).toBeNull();
+  expect(repeatedRelationship([
+    person('a', 'Ada', { relationship: 'sister', deleted: true }),
+    person('b', 'Bea', { relationship: 'sister' }),
+  ])).toBeNull();
 });

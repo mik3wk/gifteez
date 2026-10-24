@@ -91,7 +91,9 @@ export function AddPersonScreen() {
     }
     const personId = nextId.current;
     nextId.current = null;
-    navigation.replace('Person', { personId });
+    if (navigation.getState()?.routeNames?.includes('Person')) {
+      navigation.replace('Person', { personId, section: 'ideas' });
+    }
   }, [allowLeave, navigation]);
   useEffect(() => {
     if (!completedPersonId) {
@@ -516,7 +518,14 @@ export function PersonScreen() {
             ))
           ) : (
             <>
-              {!findingIdeas && visibleDevice.length === 0 && visibleCloud.length === 0 ? <EmptyState kind="ideas" text={t('person.ideasEmpty')} /> : null}
+              {!findingIdeas && visibleDevice.length === 0 && visibleCloud.length === 0 ? (
+                <EmptyState
+                  kind="ideas"
+                  text={person.tags.length ? t('person.ideasEmpty') : t('person.ideasNeedInterests')}
+                  action={person.tags.length ? undefined : t('person.editShort')}
+                  onAction={person.tags.length ? undefined : openDetails}
+                />
+              ) : null}
               {shownIdeas.map(idea => (
                 <IdeaCard
                   key={`device-${ideaKey(idea)}`}
@@ -574,8 +583,14 @@ export function PersonScreen() {
       ) : null}
       {section === 'occasions' ? (
         <>
-          {occasions.length === 0 ? <EmptyState kind="occasions" text={t('person.occasionsEmpty')} /> : null}
-          {occasions.map(occasion => (
+          {occasions.length === 0 ? (
+            <EmptyState
+              kind="occasions"
+              text={t('person.occasionsEmpty')}
+              action={locked ? undefined : t('person.addOccasion')}
+              onAction={locked ? undefined : () => setAddingOccasion(true)}
+            />
+          ) : occasions.map(occasion => (
             <OccasionRow
               key={occasion.id}
               occasion={occasion}
@@ -584,15 +599,24 @@ export function PersonScreen() {
               onMenu={() => setMenu({ kind: 'occasion', id: occasion.id })}
             />
           ))}
-          {locked ? null : <GhostRow label={t('person.addOccasion')} onPress={() => setAddingOccasion(true)} />}
+          {!locked && occasions.length > 0 ? <GhostRow label={t('person.addOccasion')} onPress={() => setAddingOccasion(true)} /> : null}
           <ReminderOffer />
         </>
       ) : null}
       {section === 'history' && !hidden ? (
         <>
           {showSpend ? <SpendBreakdown personId={person.id} budgetCents={person.budgetCents} money={money} onSetBudget={openDetails} /> : null}
-          {history.length === 0 ? <EmptyState kind="ideas" text={t('person.historyEmpty')} /> : null}
-          {locked ? null : (
+          {history.length === 0 ? (
+            <EmptyState
+              kind="ideas"
+              text={t('person.historyEmpty')}
+              action={locked ? undefined : t('person.logGift')}
+              onAction={locked ? undefined : () => {
+                const occasion = next?.occasion ?? occasions[0];
+                openPurchase(occasion?.id ?? '', nextState?.savedIdea ?? '');
+              }}
+            />
+          ) : locked ? null : (
             <Button
               label={t('person.logGift')}
               tone="secondary"
@@ -615,7 +639,7 @@ export function PersonScreen() {
                     <IconButton
                       label={t('person.giftMenu')}
                       name="more"
-                      filled
+                      word={t('common.more')}
                       onPress={() => setMenu({ kind: 'gift', id: item.id, privateGift: false, title: item.title })}
                     />
                   ) : null}
@@ -934,7 +958,7 @@ function OccasionRow({
           <Caption tone="text">{trailing ? `${when} · ${trailing}` : when}</Caption>
           {status ? <Caption>{status}</Caption> : null}
         </View>
-        <IconButton label={t('person.occasionMenu')} name="more" filled onPress={onMenu} />
+        <IconButton label={t('person.occasionMenu')} name="more" word={t('common.more')} onPress={onMenu} />
       </View>
     </Card>
   );

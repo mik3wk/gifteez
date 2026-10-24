@@ -128,6 +128,7 @@ export function FairnessScreen() {
                 onEdit={() => openEditor(section.circleId)}
               />
             ))}
+            {sections.length === 0 && people.length > 0 ? <Body>{t('fairness.noCircles')}</Body> : null}
             {others.length > 0 ? <Uncircled people={others} gifts={snapshot.gifts} year={year} money={money} /> : null}
             <Pressable
               accessibilityRole="button"
@@ -138,7 +139,7 @@ export function FairnessScreen() {
                 setEditor('new');
               }}
               style={styles.addCircle}>
-              <AddCircleLabel />
+              <AddCircleLabel label={sections.length === 0 ? t('fairness.createCircle') : `+ ${t('fairness.newCircle')}`} />
             </Pressable>
           </>
         )}
@@ -202,10 +203,10 @@ export function FairnessScreen() {
   );
 }
 
-function AddCircleLabel() {
+function AddCircleLabel({ label }: { label: string }) {
   const { colors, type, typeScale } = useTheme();
   return (
-    <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: colors.pink }]}>{`+ ${t('fairness.newCircle')}`}</Text>
+    <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: colors.pink }]}>{label}</Text>
   );
 }
 

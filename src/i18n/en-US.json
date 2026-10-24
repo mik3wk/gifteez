@@ -35,6 +35,8 @@
     "sentence": "Gifteez helps you remember gifts for the people you love, and keep the spending fair.",
     "progress": "Step {step} of {total}",
     "start": "See gift ideas",
+    "welcomeLead": "Plan thoughtful, fair gifts for everyone on your list",
+    "addFirst": "Add your first person",
     "discardTitle": "Discard this person?",
     "discardBody": "The name and details you typed will not be saved.",
     "discard": "Discard"
@@ -203,6 +205,7 @@
     "logGift": "Log a gift",
     "ideasHint": "A few ideas to start. Tap an interest and they get closer.",
     "ideasEmpty": "No ideas yet. Add a date and a few interests.",
+    "ideasNeedInterests": "Add a few interests for better ideas",
     "ideasLoading": "Finding a few ideas…",
     "saveIdeaNeedsDate": "Add a date below and this idea can stay with it.",
     "ideaKept": "Saved with their next occasion.",
@@ -436,6 +439,8 @@
     "newCircle": "New circle",
     "newCircleOption": "New circle…",
     "homePrompt": "Keep siblings even? Set up a circle",
+    "noCircles": "A circle keeps spending even for people who should match.",
+    "createCircle": "Create a circle",
     "circleName": "Circle name",
     "nameInvalid": "Use letters, numbers, spaces, apostrophes, or hyphens.",
     "create": "Create circle",
@@ -521,7 +526,12 @@
     "added": "Added {count}. They stay quiet until you open them.",
     "added_one": "Added {count} person. They stay quiet until you open them.",
     "added_other": "Added {count} people. They stay quiet until you open them.",
-    "denied": "Permission was not granted."
+    "denied": "Permission was not granted.",
+    "reviewTitle": "From your calendar",
+    "matched": "Adds an occasion for {name}",
+    "newPerson": "Adds {name}",
+    "addOne": "Add 1 occasion",
+    "addMany": "Add {count} occasions"
   },
   "sync": {
     "otherDevice": "Updated on another device",
@@ -566,6 +576,7 @@
     "dismiss": "Dismiss",
     "close": "Close",
     "done": "Done",
+    "more": "More",
     "continue": "Continue",
     "loading": "Wrapping things up…"
   },

@@ -121,7 +121,10 @@ function Navigator() {
               <Stack.Screen name="Settings" component={SettingsScreen} options={tabOptions} />
             </>
           ) : (
-            <Stack.Screen name="FirstOpen" component={FirstOpenScreen} options={{ headerShown: false }} />
+            <>
+              <Stack.Screen name="FirstOpen" component={FirstOpenScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="AddPerson" component={AddPersonScreen} options={{ title: t('person.addTitle') }} />
+            </>
           )}
         </Stack.Navigator>
       </NavigationContainer>

@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
 import { getEnv } from '../config/env';
-import { circleSections, homeCircle } from '../domain/circles';
+import { circleSections, homeCircle, repeatedRelationship } from '../domain/circles';
 import { canAddPerson, daysUntil, listCurrency, occurrenceYear, yearSpentCents } from '../domain/logic';
 import { isOneTimeOccasion, nextOccasionDate, occasionLabel } from '../domain/occasions';
 import { relationshipLabel } from '../domain/relationship';
@@ -22,7 +22,7 @@ type Upcoming = { person: Person; occasion: Occasion; date: Date };
 
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, resumePersonId, clearResumePerson, openPaywall, setReminders } = useGifteez();
+  const { snapshot, resumePersonId, clearResumePerson, openPaywall, setReminders, updateProfile } = useGifteez();
   const [remindersOpen, setRemindersOpen] = useState(false);
   const today = new Date();
   const year = today.getFullYear();
@@ -81,8 +81,14 @@ export function HomeScreen() {
           onOpenIdeas={personId => navigation.navigate('Person', { personId, section: 'ideas' })}
         />
       ) : null}
-      {people.length > 0 && !featured && (snapshot.circles ?? []).length === 0 ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={t('fairness.homePrompt')} onPress={() => navigation.navigate('Fairness')}>
+      {people.length > 0 && !featured && (snapshot.circles ?? []).length === 0 && !snapshot.profile.promptedCircle && repeatedRelationship(people) ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('fairness.homePrompt')}
+          onPress={() => {
+            updateProfile({ promptedCircle: true }).catch(() => undefined);
+            navigation.navigate('Fairness');
+          }}>
           <Card>
             <Caption tone="text">{t('fairness.homePrompt')}</Caption>
           </Card>
@@ -271,13 +277,12 @@ function NoOccasion({
   onAdd: NativeStackNavigationProp<RootStack>['navigate'];
 }) {
   return (
-    <Card>
-      <Body>{t('people.addBirthday', { name: person.name })}</Body>
-      <Button
-        label={t('person.addOccasion')}
-        onPress={() => onAdd('Person', { personId: person.id, section: 'occasions' })}
-      />
-    </Card>
+    <EmptyState
+      kind="occasions"
+      text={t('people.addBirthday', { name: person.name })}
+      action={t('person.addOccasion')}
+      onAction={() => onAdd('Person', { personId: person.id, section: 'occasions' })}
+    />
   );
 }
 

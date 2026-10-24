@@ -180,6 +180,14 @@ export type Profile = {
   householdName?: string;
   /** First name in the greeting. Missing means the greeting stands alone. */
   givenName?: string;
+  /** The Home circle prompt has already been offered. */
+  promptedCircle?: boolean;
+  /** Prefills a new person's yearly budget. Missing means no prefill. */
+  defaultBudgetCents?: number | null;
+  /** Days before an occasion to remind. Missing means 7. */
+  reminderLeadDays?: number;
+  /** Local hour for reminders. Missing means 9. */
+  reminderHour?: number;
 };
 
 export type DirtyMap = Record<string, true>;
