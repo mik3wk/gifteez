@@ -4,6 +4,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
+import { amazonSearchUrl } from '../domain/amazon';
 import { INTEREST_TAGS } from '../domain/catalog';
 import { asGiftIdea, ideaCacheId, ideaKey } from '../domain/ideas';
 import type { GiftIdea } from '../domain/types';
@@ -13,6 +14,7 @@ import { dateIsEstimated, isOneTimeOccasion, nextOccasionDate, occasionLabel, oc
 import type { Occasion, OccasionState } from '../domain/types';
 import { relationshipLabel, storeRelationship } from '../domain/relationship';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, formatStoredDate, t, todayIso } from '../i18n';
+import { openInApp } from '../platform/browser';
 import { useGifteez } from '../state/GifteezContext';
 import { occasionLook, space } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
@@ -178,8 +180,11 @@ export function PersonScreen() {
   const [cloudError, setCloudError] = useState(false);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [moment, setMoment] = useState<'wrap' | null>(null);
+  const [buyAsk, setBuyAsk] = useState<GiftIdea | null>(null);
   const queued = useRef<Queue | null>(null);
   const queuedMenu = useRef<Menu | null>(null);
+  const pendingBuy = useRef<GiftIdea | null>(null);
+  const shopping = useRef(false);
 
   useEffect(() => {
     setInterestTags(person?.tags ?? []);
@@ -254,15 +259,45 @@ export function PersonScreen() {
     return savedFor(idea) || snapshot.feedback.some(item => item.personId === personId && item.idea === idea && item.vote === 'up');
   }
 
-  function openPurchase(occasionId: string, idea: string) {
+  function openPurchase(occasionId: string, idea: string, priceDollars?: number) {
     setBuying(occasionId);
     setGift(idea);
-    setPrice('');
+    setPrice(priceDollars != null && priceDollars > 0 ? String(priceDollars) : '');
     setDate(todayIso());
     setGiftError('');
     setPriceError('');
     setDateError('');
     setEditingGift(null);
+  }
+
+  async function shopIdea(idea: GiftIdea | string) {
+    if (shopping.current) {
+      return;
+    }
+    shopping.current = true;
+    const gift = asGiftIdea(idea);
+    try {
+      const { associateTag } = await import('../platform/firebase');
+      const returned = await openInApp(amazonSearchUrl(gift.searchQuery || gift.title, await associateTag()));
+      if (returned) {
+        setBuyAsk(gift);
+      }
+    } catch {
+      // The store did not open. The idea stays here and can still be logged by hand.
+    } finally {
+      shopping.current = false;
+    }
+  }
+
+  function acceptBuy(idea: GiftIdea) {
+    setBuyAsk(null);
+    const occasion = next?.occasion ?? occasions[0];
+    if (!occasion) {
+      pendingBuy.current = idea;
+      setAddingOccasion(true);
+      return;
+    }
+    openPurchase(occasion.id, idea.title, idea.priceMin);
   }
 
   function flushQueue() {
@@ -333,6 +368,7 @@ export function PersonScreen() {
     >
       {section === 'ideas' && !hidden && !locked ? (
         <>
+          {!tuning && buyAsk ? <BuyPrompt idea={buyAsk} onYes={() => acceptBuy(buyAsk)} onNo={() => setBuyAsk(null)} /> : null}
           {findingIdeas && ideas.length === 0 ? <Shimmer label={t('person.ideasLoading')} /> : null}
           {!findingIdeas && visibleDevice.length === 0 && visibleCloud.length === 0 ? <EmptyState kind="ideas" text={t('person.ideasEmpty')} /> : null}
           {shownIdeas.map(idea => (
@@ -344,7 +380,7 @@ export function PersonScreen() {
               onSave={() => onSaveIdea(ideaKey(idea))}
               onUp={() => { vote(person.id, ideaKey(idea), 'up').catch(() => undefined); }}
               onDown={() => { vote(person.id, ideaKey(idea), 'down').catch(() => undefined); }}
-              onShop={() => undefined}
+              onShop={() => { shopIdea(idea).catch(() => undefined); }}
             />
           ))}
           {visibleCloud.map(idea => (
@@ -356,7 +392,7 @@ export function PersonScreen() {
               onSave={() => onSaveIdea(ideaKey(idea))}
               onUp={() => { vote(person.id, ideaKey(idea), 'up').catch(() => undefined); }}
               onDown={() => { vote(person.id, ideaKey(idea), 'down').catch(() => undefined); }}
-              onShop={() => undefined}
+              onShop={() => { shopIdea(idea).catch(() => undefined); }}
             />
           ))}
           <Cluster>
@@ -368,6 +404,7 @@ export function PersonScreen() {
             ) : null}
             <Button label={t('person.tuneIdeas')} tone="ghost" onPress={() => setTuning(true)} />
           </Cluster>
+          <Caption tone="text">{t('shop.disclosure')}</Caption>
         </>
       ) : null}
       {section === 'occasions' ? (
@@ -443,6 +480,7 @@ export function PersonScreen() {
         }}
       >
         <Heading>{t('person.tuneIdeas')}</Heading>
+        {tuning && buyAsk ? <BuyPrompt idea={buyAsk} onYes={() => acceptBuy(buyAsk)} onNo={() => setBuyAsk(null)} /> : null}
         <Body>{t('person.tagsHint')}</Body>
         <TagPicker
           tags={interestTags}
@@ -478,14 +516,31 @@ export function PersonScreen() {
             onSave={() => onSaveIdea(idea.title)}
             onUp={() => { vote(person.id, idea.title, 'up').catch(() => undefined); }}
             onDown={() => { vote(person.id, idea.title, 'down').catch(() => undefined); }}
-            onShop={() => undefined}
+            onShop={() => { shopIdea(idea).catch(() => undefined); }}
           />
         ))}
         {cloudRemaining[person.id] != null ? <Body>{t('person.cloudLeft', { count: cloudRemaining[person.id] })}</Body> : null}
         <Body>{t('person.cloudHint')}</Body>
+        <Caption tone="text">{t('shop.disclosure')}</Caption>
       </Sheet>
-      <Sheet visible={addingOccasion} onClose={() => setAddingOccasion(false)}>
-        <OccasionPicker personId={person.id} onAdded={() => setAddingOccasion(false)} />
+      <Sheet
+        visible={addingOccasion}
+        onClose={() => {
+          setAddingOccasion(false);
+          pendingBuy.current = null;
+        }}
+      >
+        <OccasionPicker
+          personId={person.id}
+          onAdded={id => {
+            const pending = pendingBuy.current;
+            pendingBuy.current = null;
+            setAddingOccasion(false);
+            if (pending && id) {
+              openPurchase(id, pending.title, pending.priceMin);
+            }
+          }}
+        />
       </Sheet>
       <Sheet visible={pickingCircle} onClose={() => setPickingCircle(false)}>
         <Heading>{t('fairness.pickCircle')}</Heading>
@@ -945,6 +1000,17 @@ function TagPicker({ tags, onChange }: { tags: string[]; onChange: (tags: string
         );
       })}
     </Cluster>
+  );
+}
+
+function BuyPrompt({ idea, onYes, onNo }: { idea: GiftIdea; onYes: () => void; onNo: () => void }) {
+  return (
+    <Card>
+      <Heading>{t('person.didYouBuy')}</Heading>
+      <Body>{idea.title}</Body>
+      <Button label={t('person.didYouBuyYes')} onPress={onYes} />
+      <Button label={t('person.didYouBuyNo')} tone="ghost" onPress={onNo} />
+    </Card>
   );
 }
 

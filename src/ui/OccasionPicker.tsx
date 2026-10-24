@@ -18,7 +18,7 @@ import { Body, Button, Chip, Cluster, Field, Heading, Select, Stack, Toggle } fr
 
 const GROUPS: OccasionPreset['group'][] = ['holiday', 'celebration', 'life'];
 
-export function OccasionPicker({ personId, onAdded }: { personId: string; onAdded?: () => void }) {
+export function OccasionPicker({ personId, onAdded }: { personId: string; onAdded?: (occasionId?: string) => void }) {
   const { addOccasion } = useGifteez();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -156,7 +156,7 @@ export function OccasionPicker({ personId, onAdded }: { personId: string; onAdde
         label={t('person.addOccasion')}
         disabled={!picked}
         hint={t('person.pickOccasionFirst')}
-        onPress={() => {
+        onPress={async () => {
           const nameMissing = selected === 'custom' && !customName.trim();
           const monthNum = Number(month);
           const dayNum = Number(day);
@@ -168,8 +168,7 @@ export function OccasionPicker({ personId, onAdded }: { personId: string; onAdde
           if (!picked || nameMissing || dateMissing || yearMissing) {
             return;
           }
-          onAdded?.();
-          return addOccasion(
+          const id = await addOccasion(
             personId,
             selected,
             needsDate ? monthNum : undefined,
@@ -180,6 +179,9 @@ export function OccasionPicker({ personId, onAdded }: { personId: string; onAdde
               recurs: asksRecurrence ? everyYear : true,
             },
           );
+          if (id) {
+            onAdded?.(id);
+          }
         }}
       />
     </Stack>

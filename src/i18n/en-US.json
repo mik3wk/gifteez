@@ -190,6 +190,9 @@
     "notes": "Notes about them",
     "notesHint": "Private. Idea requests use this and never the name.",
     "shopIdea": "Shop this idea",
+    "didYouBuy": "Did you buy it?",
+    "didYouBuyYes": "Yes, log it",
+    "didYouBuyNo": "Not this time",
     "thumbsUp": "More like this",
     "thumbsDown": "Not this",
     "saveIdea": "Save idea",
@@ -398,6 +401,9 @@
     "empty": "Add people to compare spending.",
     "emptyAction": "Add a person",
     "noneYet": "No gifts logged yet, so there is nothing to compare."
+  },
+  "shop": {
+    "disclosure": "As an Amazon Associate, Gifteez earns from qualifying purchases."
   },
   "settings": {
     "title": "Settings",

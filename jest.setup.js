@@ -86,6 +86,15 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
+jest.mock('react-native-inappbrowser-reborn', () => ({
+  __esModule: true,
+  default: {
+    isAvailable: jest.fn(async () => false),
+    open: jest.fn(async () => ({ type: 'cancel' })),
+    close: jest.fn(),
+  },
+}));
+
 jest.mock('react-native-get-random-values', () => {
   const { webcrypto } = require('crypto');
   if (typeof global.crypto !== 'object' || global.crypto == null) {

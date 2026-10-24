@@ -47,6 +47,9 @@ import { Platform } from 'react-native';
 import type { AppEnv } from '../config/env';
 import { isPlaceholder } from '../config/env';
 
+/** Remote Config key. Empty means the Amazon link stays a plain search. */
+export const ASSOCIATE_TAG_PARAM = 'ASSOCIATE_TAG';
+
 export type SealedDoc = {
   id: string;
   updatedAt: number;
@@ -87,7 +90,10 @@ export async function initFirebase(env: AppEnv): Promise<void> {
   }
   const remoteConfig = getRemoteConfig(app);
   remoteConfig.settings.minimumFetchIntervalMillis = env.remoteConfigMinFetchSeconds * 1000;
-  remoteConfig.defaultConfig = { [env.remoteConfigSkinParam]: 'auto' };
+  remoteConfig.defaultConfig = {
+    [env.remoteConfigSkinParam]: 'auto',
+    [ASSOCIATE_TAG_PARAM]: '',
+  };
   started = true;
 }
 
@@ -330,6 +336,16 @@ export async function activeSkinParam(env: AppEnv): Promise<string> {
     return getString(remoteConfig, env.remoteConfigSkinParam) || 'auto';
   } catch {
     return 'auto';
+  }
+}
+
+export async function associateTag(): Promise<string> {
+  try {
+    const remoteConfig = getRemoteConfig();
+    await fetchAndActivate(remoteConfig);
+    return getString(remoteConfig, ASSOCIATE_TAG_PARAM).trim();
+  } catch {
+    return '';
   }
 }
 

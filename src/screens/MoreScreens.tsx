@@ -110,6 +110,7 @@ export function SettingsScreen() {
       <Card>
         <Heading>{t('settings.about')}</Heading>
         <Caption tone="text">{t('settings.aboutVersion', { version: DeviceInfo.getVersion(), build: DeviceInfo.getBuildNumber() })}</Caption>
+        <Caption tone="text">{t('shop.disclosure')}</Caption>
       </Card>
       {message ? <Body>{message}</Body> : null}
       </SessionEntrance>

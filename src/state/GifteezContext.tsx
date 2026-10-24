@@ -84,7 +84,7 @@ type GifteezApi = {
     day?: number,
     year?: number,
     extra?: { label?: string; recurs?: boolean },
-  ) => Promise<void>;
+  ) => Promise<string | null>;
   saveIdeaFor: (occasionId: string, idea: string) => Promise<void>;
   unsaveIdea: (occasionId: string) => Promise<void>;
   toast: (message: string) => void;
@@ -653,15 +653,15 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       });
       if (planned === 'need-date') {
         fail('date');
-        return;
+        return null;
       }
       if (planned === 'need-name') {
         fail('occasionName');
-        return;
+        return null;
       }
       if (!isRealMonthDay(planned.month, planned.day)) {
         fail('invalid');
-        return;
+        return null;
       }
       const occasion: Occasion = {
         id: randomId(),
@@ -679,6 +679,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       haptic('success');
       scheduleReminders(snapshotRef.current).catch(() => undefined);
       sync().catch(() => undefined);
+      return occasion.id;
     },
     saveIdeaFor: async (occasionId, idea) => {
       const occasion = snapshotRef.current.occasions.find(item => item.id === occasionId);
