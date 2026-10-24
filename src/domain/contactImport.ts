@@ -138,6 +138,21 @@ export function contactAddDecision(picked: number, slotsLeft: number | null): 'n
   return 'add';
 }
 
+/** How many free spots remain, or how many extra people need an unlock. */
+export function freeSlotCaption(
+  picked: number,
+  slotsLeft: number | null,
+): { kind: 'hidden' } | { kind: 'left'; left: number } | { kind: 'unlock'; count: number } {
+  if (slotsLeft == null) {
+    return { kind: 'hidden' };
+  }
+  const overflow = picked - slotsLeft;
+  if (overflow > 0) {
+    return { kind: 'unlock', count: overflow };
+  }
+  return { kind: 'left', left: slotsLeft - picked };
+}
+
 export function withDefaultBudget(
   rows: ImportedPerson[],
   defaultBudgetCents: number | null | undefined,

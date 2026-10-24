@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { getEnv } from '../config/env';
 import { calendarAddLabel, calendarSelection, draftStatus, initiallyChosen, type CalendarDraft } from '../domain/calendarImport';
-import { contactAddDecision, freeSlotsLeft } from '../domain/contactImport';
+import { contactAddDecision, freeSlotCaption, freeSlotsLeft } from '../domain/contactImport';
 import { accountUnlocked, activePeopleCount } from '../domain/logic';
 import { scanCalendar } from '../platform/importers';
 import { deviceLocale, formatDate, t } from '../i18n';
@@ -61,7 +61,7 @@ export function CalendarReviewLink({
     getEnv().freeTierMaxPeople,
     accountUnlocked(gifteez.snapshot),
   );
-  const slotsShown = slotsLeft == null ? null : Math.max(0, slotsLeft - summary.people);
+  const slotCaption = freeSlotCaption(summary.people, slotsLeft);
 
   async function addChosen() {
     if (summary.people > 0 && contactAddDecision(summary.people, slotsLeft) === 'paywall') {
@@ -168,7 +168,8 @@ export function CalendarReviewLink({
         <Caption>{t('importFlow.readOnly')}</Caption>
         {denied ? <Body>{t('importFlow.denied')}</Body> : null}
         {!denied && drafts.length === 0 ? <Body>{t('importFlow.none')}</Body> : null}
-        {!denied && slotsShown != null ? <Caption>{t('importFlow.freeLeft', { left: slotsShown, limit: getEnv().freeTierMaxPeople })}</Caption> : null}
+        {!denied && slotCaption.kind === 'left' ? <Caption>{t('importFlow.freeLeft', { left: slotCaption.left, limit: getEnv().freeTierMaxPeople })}</Caption> : null}
+        {!denied && slotCaption.kind === 'unlock' ? <Caption>{t('importFlow.unlockMore', { count: slotCaption.count })}</Caption> : null}
         {drafts.map(draft => {
           const when = formatDate(new Date(2026, draft.month - 1, draft.day), deviceLocale());
           const status = draftStatus(draft);

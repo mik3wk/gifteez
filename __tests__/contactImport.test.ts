@@ -1,5 +1,6 @@
 import Contacts from 'react-native-contacts';
-import { contactAddDecision, contactBirthYear, contactMonthDay, freeSlotsLeft, planImported, withDefaultBudget } from '../src/domain/contactImport';
+import { contactAddDecision, contactBirthYear, contactMonthDay, freeSlotCaption, freeSlotsLeft, planImported, withDefaultBudget } from '../src/domain/contactImport';
+import { t } from '../src/i18n';
 import { importContacts } from '../src/platform/importers';
 
 test('free slots count down from the cap and disappear once unlocked', () => {
@@ -15,6 +16,12 @@ test('a contact import adds the selection only when it fits the free slots', () 
   expect(contactAddDecision(4, 3)).toBe('paywall');
   expect(contactAddDecision(1, 0)).toBe('paywall');
   expect(contactAddDecision(9, null)).toBe('add');
+  expect(freeSlotCaption(0, 0)).toEqual({ kind: 'left', left: 0 });
+  expect(freeSlotCaption(4, 0)).toEqual({ kind: 'unlock', count: 4 });
+  expect(freeSlotCaption(2, 3)).toEqual({ kind: 'left', left: 1 });
+  expect(freeSlotCaption(4, null)).toEqual({ kind: 'hidden' });
+  expect(t('importFlow.unlockMore', { count: 4 })).toBe('Unlock to add 4 more');
+  expect(t('importFlow.unlockMore', { count: 1 })).toBe('Unlock to add 1 more');
 });
 
 test('chosen contacts take the default budget', () => {

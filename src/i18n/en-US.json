@@ -595,6 +595,8 @@
     "contactsReadOnly": "Read-only. Gifteez never changes your contacts.",
     "searchContacts": "Search contacts",
     "freeLeft": "{left} of {limit} free left",
+    "unlockMore_one": "Unlock to add {count} more",
+    "unlockMore_other": "Unlock to add {count} more",
     "addPersonOne": "Add 1 person",
     "addPersonMany": "Add {count} people",
     "editName": "Name from the calendar",

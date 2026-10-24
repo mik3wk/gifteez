@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { getEnv } from '../config/env';
-import { contactAddDecision, freeSlotsLeft, withDefaultBudget } from '../domain/contactImport';
+import { contactAddDecision, freeSlotCaption, freeSlotsLeft, withDefaultBudget } from '../domain/contactImport';
 import type { ImportedPerson } from '../domain/logic';
 import { accountUnlocked, activePeopleCount } from '../domain/logic';
 import { t } from '../i18n';
@@ -57,7 +57,7 @@ export function ContactsReviewLink({
     getEnv().freeTierMaxPeople,
     accountUnlocked(gifteez.snapshot),
   );
-  const slotsShown = slotsLeft == null ? null : Math.max(0, slotsLeft - chosen.length);
+  const slotCaption = freeSlotCaption(chosen.length, slotsLeft);
 
   async function addChosen() {
     const decision = contactAddDecision(chosen.length, slotsLeft);
@@ -118,7 +118,8 @@ export function ContactsReviewLink({
             returnKeyType="search"
           />
         ) : null}
-        {!denied && slotsShown != null ? <Caption>{t('importFlow.freeLeft', { left: slotsShown, limit: getEnv().freeTierMaxPeople })}</Caption> : null}
+        {!denied && slotCaption.kind === 'left' ? <Caption>{t('importFlow.freeLeft', { left: slotCaption.left, limit: getEnv().freeTierMaxPeople })}</Caption> : null}
+        {!denied && slotCaption.kind === 'unlock' ? <Caption>{t('importFlow.unlockMore', { count: slotCaption.count })}</Caption> : null}
         {visible.map(person => {
           const index = drafts.indexOf(person);
           const key = String(index);
