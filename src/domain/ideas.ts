@@ -196,6 +196,7 @@ export function suggestIdeas(input: {
   salt: number;
   limit?: number;
   notes?: string;
+  years?: number | null;
   band?: AgeBand | null;
 }): GiftIdea[] {
   const limit = input.limit ?? 5;
@@ -207,7 +208,7 @@ export function suggestIdeas(input: {
     CATALOG.filter(idea => liked.includes(idea.text)).flatMap(idea => idea.tags),
   );
   const notes = noteTokens(input.notes ?? '');
-  const band = input.band ?? null;
+  const band = input.band ?? (typeof input.years === 'number' ? ageBandFromYears(input.years) : null);
   const followsInterests = (idea: { tags: string[] }) => tags.size === 0 || idea.tags.some(tag => tags.has(tag));
   const ranked = CATALOG.map(idea => ({
     idea,
@@ -268,6 +269,9 @@ function scoreIdea(
     return -100;
   }
   let score = 1;
+  if ((band === 'baby' || band === 'kid') && idea.audience === 'child') {
+    score += 8;
+  }
   idea.tags.forEach(tag => {
     if (tags.has(tag)) {
       score += 3;
@@ -297,9 +301,59 @@ function scoreIdea(
   return score;
 }
 
-export function ideaCacheId(personId: string, occasionKey: string, source: string, tags: readonly string[] = []): string {
+export type IdeaAge = { years?: number | null; band?: AgeBand | null };
+
+/** Cache key includes the age band and years so a child and an adult never share a batch. */
+export function ideaCacheId(
+  personId: string,
+  occasionKey: string,
+  source: string,
+  tags: readonly string[] = [],
+  age: IdeaAge | null = null,
+): string {
   const interests = [...new Set(tags.map(tag => tag.trim().toLowerCase()).filter(Boolean))].sort().join('+');
-  return `${personId}:${occasionKey}:${source}:${interests}:v3`;
+  const band = age?.band ?? '';
+  const years = age?.years == null ? '' : String(age.years);
+  return `${personId}:${occasionKey}:${source}:${interests}:${band}:${years}:v4`;
+}
+
+/**
+ * Ideas that stay inside the seed and the stated interests.
+ * A tag the seed does not have, and that nobody listed, cannot appear. A pet portrait needs a pet.
+ */
+export function moreLikeIdeas(input: {
+  seed: GiftIdea | string;
+  tags: readonly string[];
+  band?: AgeBand | null;
+  limit?: number;
+}): GiftIdea[] {
+  const title = typeof input.seed === 'string' ? input.seed : input.seed.title;
+  const normalized = normalizeIdeaTitle(title);
+  const catalogSeed = CATALOG.find(idea => normalizeIdeaTitle(idea.text) === normalized);
+  const seedTags = new Set((catalogSeed?.tags ?? []).map(tag => tag.toLowerCase()));
+  const stated = new Set(input.tags.map(tag => tag.trim().toLowerCase()).filter(Boolean));
+  const allowed = new Set([...seedTags, ...stated]);
+  if (allowed.size === 0) {
+    return [];
+  }
+  const band = input.band ?? null;
+  return CATALOG.filter(idea => {
+    if (normalizeIdeaTitle(idea.text) === normalized) {
+      return false;
+    }
+    if (!audienceOk(idea, band)) {
+      return false;
+    }
+    if (idea.tags.some(tag => !allowed.has(tag))) {
+      return false;
+    }
+    if (seedTags.size > 0) {
+      return idea.tags.some(tag => seedTags.has(tag));
+    }
+    return idea.tags.some(tag => stated.has(tag));
+  })
+    .slice(0, input.limit ?? 3)
+    .map(idea => toGiftIdea(idea, stated));
 }
 
 /** Debug log of a cloud idea request. The person's name is never included. */

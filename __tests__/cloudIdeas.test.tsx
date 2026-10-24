@@ -89,7 +89,7 @@ test('a rejected cloud ideas callable shows retry and keeps on-device ideas', as
   await ReactTestRenderer.act(async () => {
     renderer = ReactTestRenderer.create(<PersonScreen />);
   });
-  expect(ideaCacheId('ada', 'general', 'on-device', ['books'])).toBe('ada:general:on-device:books:v3');
+  expect(ideaCacheId('ada', 'general', 'on-device', ['books'])).toBe('ada:general:on-device:books:::v4');
   for (const failure of failures) {
     mockCallable.mockRejectedValueOnce(failure);
     const ask = buttonLabeled(renderer!, 'Ask for more ideas') ?? buttonLabeled(renderer!, 'Try again');

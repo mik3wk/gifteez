@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { Appearance, Linking, Platform } from 'react-native';
 import type { AppEnv } from '../config/env';
 import { keyFromString, keyToString, openString, randomId, randomKey, sealJson } from '../crypto/crypto';
-import { cloudIdeaRequestLog, ideaCacheId, mergeIdeaBatches, resolveAge, suggestIdeas } from '../domain/ideas';
+import { cloudIdeaRequestLog, ideaCacheId, mergeIdeaBatches, moreLikeIdeas, resolveAge, suggestIdeas } from '../domain/ideas';
 import { deleteOccasion, deletePrivateGift, deleteSharedGift, updateOccasionDate, updatePrivateGift, updateSharedGift } from '../domain/edits';
 import { planReminders } from '../domain/reminders';
 import { classifyStartupError, startupCause, type StartupFailure } from '../domain/startup';
@@ -107,6 +107,7 @@ type GifteezApi = {
   updateOccasion: (occasionId: string, month: number, day: number, year?: number) => Promise<void>;
   deleteOccasion: (occasionId: string) => Promise<void>;
   vote: (personId: string, idea: string, vote: 'up' | 'down') => Promise<void>;
+  moreLike: (personId: string, seed: string) => Promise<void>;
   focusPerson: (personId: string) => Promise<void>;
   refreshIdeas: (personId: string) => Promise<void>;
   cloudIdeas: (personId: string) => Promise<GiftIdea[]>;
@@ -927,6 +928,30 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         }, () => sync());
       }
     },
+    moreLike: async (personId, seed) => {
+      const current = snapshotRef.current;
+      const person = current.people.find(item => item.id === personId && !item.deleted);
+      if (!person) {
+        return;
+      }
+      const slot = ideaSlot(person, current, 'on-device');
+      const incoming = moreLikeIdeas({ seed, tags: person.tags, band: slot.age.band });
+      if (incoming.length === 0) {
+        return;
+      }
+      const existing = current.ideas.find(item => item.id === slot.cacheId && !item.deleted);
+      const merged = mergeIdeaBatches(existing?.ideas ?? [], incoming);
+      await commit(upsertIdeas(current, {
+        id: slot.cacheId,
+        personId,
+        occasionKey: slot.occasionKey,
+        ideas: merged.ideas,
+        source: 'on-device',
+        salt: existing?.salt ?? 0,
+        generatedAt: existing?.generatedAt ?? Date.now(),
+        updatedAt: Date.now(),
+      }));
+    },
     focusPerson: async personId => {
       const person = snapshotRef.current.people.find(item => item.id === personId && !item.deleted);
       if (!person) {
@@ -939,9 +964,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           next = opened.snapshot;
         }
       }
-      const occasion = upcomingOccasion(personId, next.occasions, new Date());
-      const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
-      const cacheId = ideaCacheId(personId, occasionKey, 'on-device', person.tags);
+      const slot = ideaSlot(person, next, 'on-device');
+      const { occasionKey, cacheId } = slot;
       if (!next.ideas.some(item => item.id === cacheId && !item.deleted)) {
         const ideas = suggestIdeas(ideaRequest(person, next, 0));
         next = upsertIdeas(next, {
@@ -963,9 +987,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       if (!person) {
         return;
       }
-      const occasion = upcomingOccasion(personId, snapshotRef.current.occasions, new Date());
-      const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
-      const cacheId = ideaCacheId(personId, occasionKey, 'on-device', person.tags);
+      const slot = ideaSlot(person, snapshotRef.current, 'on-device');
+      const { occasionKey, cacheId } = slot;
       const previous = snapshotRef.current.ideas.find(item => item.id === cacheId);
       const salt = (previous?.salt ?? 0) + 1;
       const ideas = suggestIdeas(ideaRequest(person, snapshotRef.current, salt));
@@ -985,18 +1008,10 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       if (!person?.opened) {
         return [];
       }
-      const occasion = upcomingOccasion(personId, snapshotRef.current.occasions, new Date());
-      const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
-      const cacheId = ideaCacheId(personId, occasionKey, 'cloud', person.tags);
+      const slot = ideaSlot(person, snapshotRef.current, 'cloud');
+      const { occasionKey, cacheId, age, occasion } = slot;
       const existing = snapshotRef.current.ideas.find(item => item.id === cacheId && !item.deleted);
-      const age = resolveAge({
-        occasions: snapshotRef.current.occasions,
-        personId,
-        birthYear: person.birthYear,
-        notes: person.notes,
-        relationship: person.relationship,
-      });
-      const onDevice = snapshotRef.current.ideas.find(item => item.id === ideaCacheId(personId, occasionKey, 'on-device', person.tags) && !item.deleted);
+      const onDevice = snapshotRef.current.ideas.find(item => item.id === ideaSlot(person, snapshotRef.current, 'on-device').cacheId && !item.deleted);
       const avoid = [...(onDevice?.ideas ?? []), ...(existing?.ideas ?? [])].map(idea => idea.title).slice(0, 24);
       try {
         const request = {
@@ -1322,6 +1337,24 @@ async function scheduleReminders(snapshot: AppSnapshot): Promise<void> {
   await applyReminderPlan(slots);
 }
 
+function ideaSlot(person: Person, snapshot: AppSnapshot, source: 'on-device' | 'cloud') {
+  const occasion = upcomingOccasion(person.id, snapshot.occasions, new Date());
+  const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
+  const age = resolveAge({
+    occasions: snapshot.occasions,
+    personId: person.id,
+    birthYear: person.birthYear,
+    notes: person.notes,
+    relationship: person.relationship,
+  });
+  return {
+    occasion,
+    occasionKey,
+    age,
+    cacheId: ideaCacheId(person.id, occasionKey, source, person.tags, age),
+  };
+}
+
 function ideaRequest(person: Person, snapshot: AppSnapshot, salt: number) {
   const occasion = upcomingOccasion(person.id, snapshot.occasions, new Date());
   const age = resolveAge({
@@ -1339,6 +1372,7 @@ function ideaRequest(person: Person, snapshot: AppSnapshot, salt: number) {
     feedback: snapshot.feedback,
     salt,
     notes: person.notes,
+    years: age.years,
     band: age.band,
   };
 }
@@ -1348,9 +1382,8 @@ function withOnDeviceIdeas(snapshot: AppSnapshot, personId: string): AppSnapshot
   if (!person) {
     return snapshot;
   }
-  const occasion = upcomingOccasion(personId, snapshot.occasions, new Date());
-  const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
-  const cacheId = ideaCacheId(personId, occasionKey, 'on-device', person.tags);
+  const slot = ideaSlot(person, snapshot, 'on-device');
+  const { occasionKey, cacheId } = slot;
   const previous = snapshot.ideas.find(item => item.id === cacheId);
   const ideas = suggestIdeas(ideaRequest(person, snapshot, previous?.salt ?? 0));
   return upsertIdeas(snapshot, {

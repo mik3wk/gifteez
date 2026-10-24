@@ -78,7 +78,7 @@ function clampPrice(value: unknown): number | null {
 
 export function promptHash(personId: string, prompt: IdeaPrompt): string {
   return JSON.stringify({
-    v: 5,
+    v: 6,
     personId,
     relationship: prompt.relationship ?? '',
     age: prompt.age ?? null,
@@ -120,6 +120,7 @@ const SYSTEM_PROMPT = [
   'Read relationship and age next and treat them as the life stage, never as a reason to ignore interests.',
   'An adult sister, brother, parent, or partner is not a child and must not get kids\' toys, picture books, or playground gifts.',
   'A baby or kid age band must not get fragrance, jewelry, live shows, reservations, alcohol, or other adult-only gifts.',
+  'When the age is under 13, or the age band is baby or kid, every idea is an age-appropriate toy, game, book, or craft and nothing adult. A 6-year-old gets age-appropriate toys and nothing adult: no fragrance, jewelry, wine, adult tools, or grown-up experiences.',
   'Suggest toys only for a child relationship, a baby or kid age band, or an age under 13.',
   'Do not repeat any title listed under avoid.',
   'Stay within the occasion budget and do not repeat past gifts.',
@@ -141,7 +142,11 @@ function userContent(prompt: IdeaPrompt): string {
   const interests = tags.length
     ? `Interests: ${tags.join(', ')}. These interests outrank every other field. Every idea must fit at least one interest.`
     : 'Interests: none given.';
-  const lead = `${interests} Relationship: ${relationship}. Age: ${age}. Age band: ${band}. Use this relationship, age, and age band as the life stage, and do not let that life stage override the interests.${avoidLine}`;
+  const child = (shaped.age != null && shaped.age < 13) || shaped.ageBand === 'baby' || shaped.ageBand === 'kid';
+  const childLine = child
+    ? ' This is a child. Give age-appropriate toys, games, books, or crafts and nothing adult: no fragrance, jewelry, wine, adult tools, or grown-up experiences.'
+    : '';
+  const lead = `${interests} Relationship: ${relationship}. Age: ${age}. Age band: ${band}. Use this relationship, age, and age band as the life stage, and do not let that life stage override the interests.${childLine}${avoidLine}`;
   return `${lead}\n${JSON.stringify(shaped)}`;
 }
 

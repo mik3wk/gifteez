@@ -25,7 +25,7 @@ import {
   yearSpentCents,
 } from '../src/domain/logic';
 import { ideaReason } from '../src/domain/catalog';
-import { cloudIdeaRequestLog, ideaCacheId, suggestIdeas } from '../src/domain/ideas';
+import { cloudIdeaRequestLog, ideaCacheId, moreLikeIdeas, suggestIdeas } from '../src/domain/ideas';
 import { autoSkinLabel, colorsFor, parseSkin, skinForDate } from '../src/theme/skins';
 import { buildInviteUrl, openJson, parseLink, randomKey, sealJson, unwrapKey, wrapKey } from '../src/crypto/crypto';
 import { formatDate, formatMoney, t } from '../src/i18n';
@@ -189,7 +189,32 @@ test('on-device ideas stay on device, follow tags, and skip thumbs down', () => 
   expect(tea.every(idea => /tea|teapot/i.test(idea.title))).toBe(true);
   expect(tea.map(idea => idea.title)).not.toContain('A day pass or warm layer for a trail they like');
   expect(tea.map(idea => idea.title)).not.toContain('A small dish for the jewelry they leave on the dresser');
-  expect(ideaCacheId('tea', 'general', 'on-device', ['tea'])).toBe('tea:general:on-device:tea:v3');
+  expect(ideaCacheId('tea', 'general', 'on-device', ['tea'])).toBe('tea:general:on-device:tea:::v4');
+  expect(ideaCacheId('tea', 'general', 'on-device', ['tea'], { years: 6, band: 'kid' })).toBe('tea:general:on-device:tea:kid:6:v4');
+  expect(ideaCacheId('tea', 'general', 'on-device', ['tea'], { years: 34, band: 'adult' })).not.toBe(
+    ideaCacheId('tea', 'general', 'on-device', ['tea'], { years: 6, band: 'kid' }),
+  );
+  const six = suggestIdeas({
+    personId: 'six',
+    name: 'Sam',
+    tags: [],
+    occasion: 'birthday',
+    feedback: [],
+    salt: 2,
+    years: 6,
+  });
+  expect(six.some(idea => /toy|kit|board game|card game|puzzle|book they can grow/i.test(idea.title))).toBe(true);
+  expect(six.some(idea => /fragrance|lotion|jewelry|live show|candle|reservation/i.test(idea.title))).toBe(false);
+  const artSeed = 'Quality paper, pens, or paint for a current project';
+  const likeArt = moreLikeIdeas({ seed: artSeed, tags: ['art'], band: 'adult' });
+  expect(likeArt.length).toBeGreaterThan(0);
+  expect(likeArt.some(idea => /pet/i.test(`${idea.title} ${idea.searchQuery}`))).toBe(false);
+  const likePet = moreLikeIdeas({
+    seed: 'Treats or a cozy bed for the pet',
+    tags: ['pets'],
+    band: 'adult',
+  });
+  expect(likePet.some(idea => /portrait of their pet/i.test(idea.title))).toBe(false);
   const logged = cloudIdeaRequestLog({
     deviceId: 'device',
     personId: 'tea',

@@ -4,13 +4,13 @@ import { CommonActions, useNavigation, usePreventRemove, useRoute } from '@react
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { cancelAddAction, homeTabReset, type RootStack } from '../app/navigation';
-import { amazonSearchUrl } from '../domain/amazon';
+import { amazonSearchUrl, shopSearchQuery } from '../domain/amazon';
 import { budgetOrigin } from '../domain/budget';
 import { describeImport } from '../domain/importNote';
 import { mainAppOpen } from '../domain/onboarding';
 import { importedVisitBanner, type ImportedVisit } from '../domain/importedBanner';
 import { INTEREST_TAGS } from '../domain/catalog';
-import { asGiftIdea, ideaCacheId, ideaKey, ideasTooSimilar, normalizeIdeaTitle, sentenceCaseTitle } from '../domain/ideas';
+import { asGiftIdea, ideaCacheId, ideaKey, ideasTooSimilar, normalizeIdeaTitle, resolveAge, sentenceCaseTitle } from '../domain/ideas';
 import type { GiftIdea } from '../domain/types';
 import { canEditSharedGift } from '../domain/edits';
 import { allTimeSpentCents, daysUntil, isRealMonthDay, listCurrency, occurrenceYear, parseBirthYear, parseBudget, parseLooseDate, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
@@ -273,6 +273,7 @@ export function PersonScreen() {
     toast,
     logGift,
     vote,
+    moreLike,
     refreshIdeas,
     cloudIdeas,
     cloudRemaining,
@@ -389,8 +390,16 @@ export function PersonScreen() {
   const locked = false;
   const next = upcomingOccasion(person.id, snapshot.occasions, today);
   const occasionKey = next ? `${next.occasion.id}:${next.date.getFullYear()}` : 'general';
-  const onDevice = snapshot.ideas.find(item => item.id === ideaCacheId(person.id, occasionKey, 'on-device', person.tags) && !item.deleted);
-  const cloud = snapshot.ideas.find(item => item.id === ideaCacheId(person.id, occasionKey, 'cloud', person.tags) && !item.deleted);
+  const age = resolveAge({
+    occasions: snapshot.occasions,
+    personId: person.id,
+    birthYear: person.birthYear,
+    notes: person.notes,
+    relationship: person.relationship,
+    today,
+  });
+  const onDevice = snapshot.ideas.find(item => item.id === ideaCacheId(person.id, occasionKey, 'on-device', person.tags, age) && !item.deleted);
+  const cloud = snapshot.ideas.find(item => item.id === ideaCacheId(person.id, occasionKey, 'cloud', person.tags, age) && !item.deleted);
   const history = snapshot.gifts.filter(item => item.personId === person.id && !item.deleted);
   const showSpend = person.budgetCents != null || history.length > 0;
   const ideas = onDevice?.ideas ?? [];
@@ -457,7 +466,7 @@ export function PersonScreen() {
     const gift = asGiftIdea(idea);
     try {
       const { associateTag } = await import('../platform/firebase');
-      const returned = await openInApp(amazonSearchUrl(gift.searchQuery || gift.title, await associateTag()));
+      const returned = await openInApp(amazonSearchUrl(shopSearchQuery(idea), await associateTag()));
       if (returned) {
         setBuyAsk(gift);
       }
@@ -915,8 +924,7 @@ export function PersonScreen() {
               label={t('person.moreLike')}
               tone="secondary"
               onPress={() => {
-                vote(person.id, menu.idea, 'up').catch(() => undefined);
-                refreshIdeas(person.id).catch(() => undefined);
+                moreLike(person.id, menu.idea).catch(() => undefined);
                 setMenu(null);
               }}
             />
