@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { getEnv } from '../config/env';
 import { calendarAddLabel, calendarSelection, draftStatus, initiallyChosen, type CalendarDraft } from '../domain/calendarImport';
 import { contactAddDecision, freeSlotsLeft } from '../domain/contactImport';
@@ -36,6 +36,7 @@ export function CalendarReviewLink({
   const [drafts, setDrafts] = useState<CalendarDraft[]>([]);
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
+  const [ask, setAsk] = useState(false);
 
   async function openReview() {
     setDenied(false);
@@ -115,7 +116,13 @@ export function CalendarReviewLink({
     }
   }
 
-  const startReview = () => { openReview().catch(() => undefined); };
+  const startReview = () => {
+    if (Platform.OS === 'ios') {
+      setAsk(true);
+      return;
+    }
+    openReview().catch(() => undefined);
+  };
   return (
     <>
       {row ? row(startReview) : button ? (
@@ -126,6 +133,13 @@ export function CalendarReviewLink({
           <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: colors.pink }]}>{label}</Text>
         </Pressable>
       )}
+      <Sheet visible={ask} compact title={t('people.findBirthdays')} onClose={() => setAsk(false)}>
+        <Body>{t('importFlow.calendarPreprompt')}</Body>
+        <Button label={t('common.continue')} onPress={() => {
+          setAsk(false);
+          openReview().catch(() => undefined);
+        }} />
+      </Sheet>
       <Sheet visible={open} title={t('importFlow.reviewTitle')} onClose={() => setOpen(false)}>
         <Caption>{t('importFlow.readOnly')}</Caption>
         {denied ? <Body>{t('importFlow.denied')}</Body> : null}

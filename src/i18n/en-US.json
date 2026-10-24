@@ -587,6 +587,7 @@
     "denied": "Permission was not granted.",
     "reviewTitle": "From your calendar",
     "readOnly": "Read-only. Gifteez never changes your calendar.",
+    "calendarPreprompt": "iOS asks for full access to read events. Gifteez only reads birthdays and anniversaries and never changes your calendar.",
     "contactsTitle": "From your contacts",
     "contactsReadOnly": "Read-only. Gifteez never changes your contacts.",
     "searchContacts": "Search contacts",
