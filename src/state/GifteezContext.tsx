@@ -38,7 +38,7 @@ import { applyReminderPlan, cancelReminderPlan, requestReminderPermission } from
 import { loadSecret, saveSecret } from '../platform/secure';
 import { occasionLabel, planOccasion, presetFor } from '../domain/occasions';
 import { exportBackup, migrateToLocal, parseBackup, summarizeBackup, type BackupFailure } from '../domain/backup';
-import { CacheStageError, decideCacheLoad, decideCommit, planSnapshotWrite, snapshotContentKey, type CacheLoadFailure } from '../domain/snapshotLoad';
+import { CacheStageError, decideCacheLoad, decideCommit, planSnapshotWrite, purgeDeleted, snapshotContentKey, type CacheLoadFailure } from '../domain/snapshotLoad';
 import { normalizeStoredDate, parseLocalDate } from '../domain/calendarDate';
 import { relationshipCircleName, relationshipLabel, storeRelationship, type RelationshipPresetKey } from '../domain/relationship';
 import { acceptSuggestion, addCircle, assignCircle, cleanCircleName, removeCircle, renameCircle as renameStoredCircle } from '../domain/circles';
@@ -198,16 +198,17 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     }) === 'hold') {
       return;
     }
-    const stored = parkActive(next);
+    const cleaned = purgeDeleted(next);
+    const stored = parkActive(cleaned);
     snapshotRef.current = stored;
     persistedPeople.current = nextPeople;
     setSnapshot(stored);
-    const nextContent = snapshotContentKey(next);
+    const nextContent = snapshotContentKey(cleaned);
     if (lastContent.current != null && lastContent.current === nextContent) {
       return;
     }
     const key = await ensureDeviceKey();
-    const sealed = sealJson(next, key);
+    const sealed = sealJson(cleaned, key);
     const plan = planSnapshotWrite({
       lastContent: lastContent.current,
       nextContent,
@@ -997,7 +998,10 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       setError(null);
       setPaywallOpen(true);
     },
-    dismissPaywall: () => setPaywallOpen(false),
+    dismissPaywall: () => {
+      setError(null);
+      setPaywallOpen(false);
+    },
     cancelPendingAdd: () => {
       pendingAdd.current = null;
       setPaywallOpen(false);
@@ -1075,7 +1079,6 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     },
     buy: async () => {
       setStoreBusy(true);
-      setError(null);
       try {
         let product = storeProduct;
         if (!product) {
@@ -1090,6 +1093,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           setStoreProduct(product);
         }
         await buyUnlock(env.iapProductId);
+        setError(null);
       } catch {
         setError(t('settings.storeUnreachable'));
         haptic('error');

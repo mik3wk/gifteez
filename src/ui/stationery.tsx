@@ -202,10 +202,13 @@ export function CircleFairnessCard({
   const top = section.members.reduce((max, member) => Math.max(max, member.yearSpentCents), 0);
   const members = section.members.slice().sort((a, b) => a.name.localeCompare(b.name));
   const fills = [colors.teal, colors.lilac, colors.sunshine];
+  const behindLead = section.status === 'behind' && behind
+    ? t('fairness.behindLead', { name: behind.name, amount: money(behind.behindCents) })
+    : '';
   const footer = section.status === 'empty'
     ? t('fairness.emptyCircle')
-    : section.status === 'behind' && behind
-      ? t('fairness.behindIdeas', { name: behind.name, amount: money(behind.behindCents) })
+    : behindLead
+      ? `${behindLead} ${t('fairness.wantIdeas')}`
       : spread === 0
         ? t('fairness.matchedNice')
         : t('fairness.withinNice', { amount: money(spread) });
@@ -252,9 +255,16 @@ export function CircleFairnessCard({
         </Pressable>
       ) : body}
       {openIdeas ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={footer} onPress={openIdeas}>
-          <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.pink }]}>{footer}</Text>
-        </Pressable>
+        <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.text }]}>
+          {`${behindLead} `}
+          <Text
+            accessibilityRole="button"
+            accessibilityLabel={t('fairness.wantIdeas')}
+            onPress={openIdeas}
+            style={{ color: colors.pink }}>
+            {t('fairness.wantIdeas')}
+          </Text>
+        </Text>
       ) : (
         <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.text }]}>{footer}</Text>
       )}

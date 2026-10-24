@@ -230,10 +230,8 @@ function Hero({
             <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.muted, fontSize: 15 }]}>
               {`${formatWeekday(item.date)}, ${dateLabel} · ${when}`}
             </Text>
+            <SealPill state={rowSeal(item, snapshot.states, snapshot.gifts, today)} />
           </View>
-        </View>
-        <View style={styles.heroSeal}>
-          <SealPill state={rowSeal(item, snapshot.states, snapshot.gifts, today)} />
         </View>
         <View style={styles.heroFoot}>
           <View style={styles.heroBudget}>
@@ -351,7 +349,6 @@ const styles = StyleSheet.create({
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   heroCopy: { flex: 1, gap: 2 },
   heroTitle: { fontSize: 28, lineHeight: 32 },
-  heroSeal: { alignItems: 'flex-end', minHeight: 32 },
   heroFoot: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   heroBudget: { flex: 1 },
   calendar: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', minHeight: 44 },

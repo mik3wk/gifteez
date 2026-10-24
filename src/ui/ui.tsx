@@ -1337,7 +1337,6 @@ export function UnlockSheet({ visible, onClose }: { visible: boolean; onClose: (
     <Sheet visible={visible} title={t('settings.keepEveryone')} onClose={onClose}>
       <Body>{t('settings.keepEveryoneBody', { count: getEnv().freeTierMaxPeople })}</Body>
       <Body>{priceLabel(storeProduct?.displayPrice)}</Body>
-      {storeBusy ? <ActivityIndicator /> : null}
       {error ? <Caption tone="danger">{error}</Caption> : null}
       <Button label={t('settings.unlockAction')} busy={storeBusy} onPress={buy} />
       <Button label={t('settings.restore')} tone="secondary" onPress={restorePurchases} />

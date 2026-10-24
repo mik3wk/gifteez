@@ -1,5 +1,5 @@
 import { hashToUint } from '../crypto/crypto';
-import { CATALOG, type CatalogIdea } from './catalog';
+import { CATALOG, ideaReason, type CatalogIdea } from './catalog';
 import { relationshipKey } from './relationship';
 import type { FeedbackEntry, GiftIdea, OccasionType } from './types';
 
@@ -215,7 +215,7 @@ export function suggestIdeas(input: {
   }))
     .filter(item => item.score > -50)
     .sort((a, b) => b.score - a.score || a.tie - b.tie);
-  const picked = ranked.slice(0, limit).map(item => toGiftIdea(item.idea));
+  const picked = ranked.slice(0, limit).map(item => toGiftIdea(item.idea, tags));
   if (picked.length >= limit) {
     return picked;
   }
@@ -223,16 +223,17 @@ export function suggestIdeas(input: {
   const filler = CATALOG.filter(idea => !titles.has(idea.text) && !blocked.has(idea.text) && audienceOk(idea, band))
     .sort((a, b) => hashToUint(`${input.salt}|${a.text}`) - hashToUint(`${input.salt}|${b.text}`))
     .slice(0, limit - picked.length)
-    .map(toGiftIdea);
+    .map(idea => toGiftIdea(idea, tags));
   return [...picked, ...filler];
 }
 
-function toGiftIdea(idea: CatalogIdea): GiftIdea {
+function toGiftIdea(idea: CatalogIdea, userTags: Set<string>): GiftIdea {
+  const matched = userTags.size > 0 ? idea.tags.find(tag => userTags.has(tag)) ?? null : null;
   return {
     title: idea.text,
     priceMin: idea.priceMin,
     priceMax: idea.priceMax,
-    reason: idea.reason,
+    reason: ideaReason(idea.text, matched),
     searchQuery: idea.searchQuery,
   };
 }

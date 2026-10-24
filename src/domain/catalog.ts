@@ -109,10 +109,43 @@ const RAW_CATALOG: Array<Pick<CatalogIdea, 'text' | 'tags' | 'occasions'>> = [
 
 const QUERY_STOP = new Set(['a', 'an', 'the', 'and', 'or', 'for', 'to', 'of', 'with', 'from', 'their', 'they', 'them', 'that', 'this', 'you', 'your', 'just', 'plus', 'one', 'into', 'can', 'use']);
 
-function reasonFor(text: string, topic: string): string {
+const TOPIC_NOUN: Record<string, string> = {
+  books: 'book',
+  cooking: 'cooking',
+  coffee: 'coffee',
+  tea: 'tea',
+  games: 'game',
+  outdoors: 'outdoor',
+  music: 'music',
+  sports: 'sports',
+  fitness: 'fitness',
+  tech: 'tech',
+  fashion: 'fashion',
+  beauty: 'beauty',
+  home: 'home',
+  plants: 'plant',
+  art: 'art',
+  travel: 'travel',
+  kids: 'kid',
+  pets: 'pet',
+  movies: 'movie',
+  crafts: 'craft',
+  jewelry: 'jewelry',
+  experiences: 'experience',
+  cozy: 'cozy',
+  foodie: 'food',
+};
+
+/** A reason that names a real interest, or a generic line when the person has none. */
+export function ideaReason(text: string, topic: string | null): string {
   const gift = text.replace(/\.$/, '');
   const lower = gift.charAt(0).toLocaleLowerCase() + gift.slice(1);
-  return `A ${topic} pick they can use: ${lower}.`;
+  if (!topic) {
+    return `Something they can use: ${lower}.`;
+  }
+  const noun = TOPIC_NOUN[topic] ?? topic;
+  const article = /^[aeiou]/i.test(noun) ? 'An' : 'A';
+  return `${article} ${noun} idea they can use: ${lower}.`;
 }
 
 function searchQueryFor(text: string): string {
@@ -163,7 +196,7 @@ export const CATALOG: CatalogIdea[] = RAW_CATALOG.map(item => {
     ...item,
     priceMin,
     priceMax,
-    reason: reasonFor(item.text, topic),
+    reason: ideaReason(item.text, topic),
     searchQuery: searchQueryFor(item.text),
     ...(audience ? { audience } : {}),
   };

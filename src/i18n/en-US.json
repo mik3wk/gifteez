@@ -416,6 +416,8 @@
     "within": "Everyone is within {amount}.",
     "withinNice": "Everyone is within {amount}. Nicely done.",
     "matchedNice": "Everyone matches. Nicely done.",
+    "behindLead": "{name} is {amount} behind.",
+    "wantIdeas": "Want ideas?",
     "behindIdeas": "{name} is {amount} behind. Want ideas?",
     "behindSeal": "{name} {amount} behind",
     "behind": "Behind by {amount}",

@@ -304,6 +304,24 @@ export function peopleShrinkBlocked(storedPeople: number, nextPeople: number, al
   return nextPeople * 2 < storedPeople;
 }
 
+/** Drop tombstones. Circles are already removed outright. A deleted person takes their occasions, purchases, and idea cache with them. A purchase whose occasion was removed stays. */
+export function purgeDeleted(snapshot: AppSnapshot): AppSnapshot {
+  const people = snapshot.people.filter(person => !person.deleted);
+  const personIds = new Set(people.map(person => person.id));
+  const occasions = snapshot.occasions.filter(item => !item.deleted && personIds.has(item.personId));
+  const occasionIds = new Set(occasions.map(item => item.id));
+  return {
+    ...snapshot,
+    people,
+    occasions,
+    states: snapshot.states.filter(item => !item.deleted && personIds.has(item.personId) && occasionIds.has(item.occasionId)),
+    gifts: snapshot.gifts.filter(item => !item.deleted && personIds.has(item.personId)),
+    privateGifts: (snapshot.privateGifts ?? []).filter(item => !item.deleted && personIds.has(item.personId)),
+    ideas: snapshot.ideas.filter(item => !item.deleted && personIds.has(item.personId)),
+    feedback: snapshot.feedback.filter(item => personIds.has(item.personId)),
+  };
+}
+
 /** Stable identity of a snapshot. Key order does not matter, so a re-save of the same list matches. */
 export function snapshotContentKey(value: unknown): string {
   return stableStringify(value);

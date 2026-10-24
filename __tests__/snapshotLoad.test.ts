@@ -1,7 +1,7 @@
 import { keyFromString, keyToString, openJson, randomKey, sealJson } from '../src/crypto/crypto';
 import { emptySnapshot } from '../src/domain/types';
 import { migrateToLocal } from '../src/domain/backup';
-import { CacheStageError, decideCacheLoad, decideCommit, normalizeStoredSnapshot, planSnapshotWrite, snapshotContentKey, type SnapshotSlots } from '../src/domain/snapshotLoad';
+import { CacheStageError, decideCacheLoad, decideCommit, normalizeStoredSnapshot, planSnapshotWrite, purgeDeleted, snapshotContentKey, type SnapshotSlots } from '../src/domain/snapshotLoad';
 
 function round5bList() {
   return {
@@ -284,4 +284,35 @@ test('the content key follows the list, not the people count or the key order', 
   expect(snapshotContentKey({ b: 1, a: { d: 2, c: 3 } })).toBe(snapshotContentKey({ a: { c: 3, d: 2 }, b: 1 }));
   const migrated = migrateToLocal(first);
   expect(snapshotContentKey(migrateToLocal(migrated))).toBe(snapshotContentKey(migrated));
+});
+
+test('a deleted person does not keep their occasions, purchases, or idea cache', () => {
+  const snapshot = emptySnapshot(1);
+  snapshot.people = [
+    { id: 'marie', name: 'Marie', budgetCents: null, tags: [], imported: false, opened: true, createdAt: 1, updatedAt: 1 },
+    { id: 'gone', name: 'Gone', budgetCents: null, tags: [], imported: false, opened: true, createdAt: 1, updatedAt: 1, deleted: true },
+  ];
+  snapshot.circles = [{ id: 'c', name: 'Siblings', createdAt: 1 }];
+  snapshot.occasions = [
+    { id: 'b', personId: 'marie', type: 'birthday', month: 1, day: 2, updatedAt: 1 },
+    { id: 'old', personId: 'marie', type: 'christmas', month: 12, day: 25, updatedAt: 1, deleted: true },
+    { id: 'theirs', personId: 'gone', type: 'birthday', month: 3, day: 4, updatedAt: 1 },
+  ];
+  snapshot.gifts = [
+    { id: 'kept', personId: 'marie', occasionId: 'old', year: 2026, title: 'Mug', priceCents: 1, purchasedOn: '2026-01-02', updatedAt: 1 },
+    { id: 'void', personId: 'marie', occasionId: 'b', year: 2026, title: 'Old', priceCents: 1, purchasedOn: '2026-01-02', updatedAt: 1, deleted: true },
+    { id: 'lost', personId: 'gone', occasionId: 'theirs', year: 2026, title: 'Hat', priceCents: 1, purchasedOn: '2026-01-02', updatedAt: 1 },
+  ];
+  snapshot.ideas = [
+    { id: 'live', personId: 'marie', occasionKey: 'k', ideas: [], source: 'on-device', salt: 0, generatedAt: 1, updatedAt: 1 },
+    { id: 'stale', personId: 'marie', occasionKey: 'k2', ideas: [], source: 'cloud', salt: 0, generatedAt: 1, updatedAt: 1, deleted: true },
+    { id: 'theirs-ideas', personId: 'gone', occasionKey: 'k', ideas: [], source: 'on-device', salt: 0, generatedAt: 1, updatedAt: 1 },
+  ];
+  const purged = purgeDeleted(snapshot);
+  expect(purged.people.map(person => person.id)).toEqual(['marie']);
+  expect(purged.occasions.map(item => item.id)).toEqual(['b']);
+  expect(purged.gifts.map(item => item.id)).toEqual(['kept']);
+  expect(purged.ideas.map(item => item.id)).toEqual(['live']);
+  expect(purged.circles.map(item => item.id)).toEqual(['c']);
+  expect(snapshotContentKey(purgeDeleted(purged))).toBe(snapshotContentKey(purged));
 });

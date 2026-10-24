@@ -154,6 +154,26 @@ test('on-device ideas stay on device, follow tags, and skip thumbs down', () => 
   });
   expect(child.some(idea => /candle/i.test(`${idea.title} ${idea.searchQuery}`))).toBe(false);
   expect(child.every(idea => idea.reason.length > 12 && idea.searchQuery.split(' ').length >= 3)).toBe(true);
+  const plain = suggestIdeas({
+    personId: 'p',
+    name: 'Marie',
+    tags: [],
+    occasion: 'birthday',
+    feedback: [],
+    salt: 1,
+  });
+  expect(plain.every(idea => idea.reason.startsWith('Something they can use:'))).toBe(true);
+  expect(plain.some(idea => /pick they can use/i.test(idea.reason))).toBe(false);
+  const cooking = suggestIdeas({
+    personId: 'p',
+    name: 'Marie',
+    tags: ['cooking'],
+    occasion: 'birthday',
+    feedback: [],
+    salt: 1,
+  });
+  const cookbook = cooking.find(idea => /cookbook/i.test(idea.title));
+  expect(cookbook?.reason.startsWith('A cooking idea they can use:')).toBe(true);
 });
 
 test('free tier stops at five people unless this phone is unlocked', () => {

@@ -217,21 +217,24 @@ export function DateField({
       </Pressable>
       {error ? <Caption tone="danger">{error}</Caption> : null}
       {open ? (
-        <DateTimePicker
-          value={parsed}
-          mode="date"
-          maximumDate={maximumDate}
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={(event, next) => {
-            if (Platform.OS !== 'ios') {
-              setOpen(false);
-            }
-            if (event.type === 'dismissed' || !next) {
-              return;
-            }
-            onChange(todayIso(next));
-          }}
-        />
+        <View style={styles.pickerHost}>
+          <DateTimePicker
+            value={parsed}
+            mode="date"
+            maximumDate={maximumDate}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            style={styles.picker}
+            onValueChange={(_event, next) => {
+              if (Platform.OS !== 'ios') {
+                setOpen(false);
+              }
+              if (next) {
+                onChange(todayIso(next));
+              }
+            }}
+            onDismiss={() => setOpen(false)}
+          />
+        </View>
       ) : null}
     </>
   );
@@ -250,8 +253,10 @@ const styles = StyleSheet.create({
   },
   monthDay: { gap: space.xs },
   wheels: { flexDirection: 'row', gap: space.xs },
-  wheel: { flex: 1, gap: space.xxs },
-  wheelList: { height: WHEEL_HEIGHT, overflow: 'hidden' },
+  wheel: { flex: 1, flexShrink: 0, gap: space.xxs },
+  wheelList: { height: WHEEL_HEIGHT, flexShrink: 0, overflow: 'hidden' },
+  pickerHost: { height: 216, flexShrink: 0, justifyContent: 'center' },
+  picker: { height: 216 },
   wheelContent: { paddingVertical: WHEEL_PAD },
   wheelItem: {
     height: WHEEL_ROW,
