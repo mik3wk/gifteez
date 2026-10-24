@@ -81,11 +81,15 @@ export function nextReminderWhen(input: {
   leadDays?: number;
   hour?: number;
   minute?: number;
+  /** Limit the toast to one person. The schedule itself still covers everyone. */
+  personId?: string;
 }): Date | null {
+  const people = input.personId ? input.people.filter(person => person.id === input.personId) : input.people;
+  const occasions = input.personId ? input.occasions.filter(occasion => occasion.personId === input.personId) : input.occasions;
   const now = input.now ?? new Date();
   const slots = planReminders({
-    people: input.people,
-    occasions: input.occasions,
+    people,
+    occasions,
     now,
     enabled: true,
     leadDays: input.leadDays,
@@ -96,8 +100,8 @@ export function nextReminderWhen(input: {
     return new Date(slots[0].at);
   }
   let soonest: Date | null = null;
-  input.occasions.filter(occasion => !occasion.deleted).forEach(occasion => {
-    const person = input.people.find(item => item.id === occasion.personId && !item.deleted);
+  occasions.filter(occasion => !occasion.deleted).forEach(occasion => {
+    const person = people.find(item => item.id === occasion.personId && !item.deleted);
     if (!person) {
       return;
     }

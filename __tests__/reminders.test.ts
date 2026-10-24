@@ -35,6 +35,23 @@ test('the next reminder is the lead time before the occasion', () => {
   expect(t('person.remindSet', { date: formatDate(when!) })).toBe("You're set. We'll remind you Oct 24.");
 });
 
+test('the person page toast uses that persons next reminder', () => {
+  const shared = {
+    people: [person('ada', 'Ada'), person('maya', 'Maya')],
+    occasions: [birthday('ada', 10, 20), birthday('maya', 11, 1)],
+    now: new Date(2026, 9, 1, 8, 0),
+    leadDays: 7,
+    hour: 9,
+    minute: 0,
+  };
+  const earliest = nextReminderWhen(shared);
+  const maya = nextReminderWhen({ ...shared, personId: 'maya' });
+  expect(earliest?.getDate()).toBe(13);
+  expect(maya?.getMonth()).toBe(9);
+  expect(maya?.getDate()).toBe(25);
+  expect(t('person.remindSet', { date: formatDate(maya!) })).toBe("You're set. We'll remind you Oct 25.");
+});
+
 test('an enabled bell names the real lead and time', () => {
   expect(formatClock(9, 0)).toBe('9:00 AM');
   expect(t('people.remindersOnDetail', { count: 7, time: formatClock(9, 0) })).toBe(

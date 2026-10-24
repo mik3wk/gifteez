@@ -113,7 +113,7 @@ type GifteezApi = {
   refreshIdeas: (personId: string) => Promise<void>;
   cloudIdeas: (personId: string) => Promise<GiftIdea[]>;
   cloudRemaining: Record<string, number>;
-  setReminders: (enabled: boolean, announce?: boolean) => Promise<void>;
+  setReminders: (enabled: boolean, announce?: boolean, personId?: string) => Promise<void>;
   exportBackup: () => string;
   shareBackup: () => Promise<void>;
   pickBackup: () => Promise<void>;
@@ -1084,7 +1084,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         throw caught;
       }
     },
-    setReminders: async (enabled, announce = false) => {
+    setReminders: async (enabled, announce = false, personId?: string) => {
       if (enabled) {
         const permission = await requestReminderPermission();
         const granted = permission === 'granted';
@@ -1102,6 +1102,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
             leadDays: current.profile.reminderLeadDays,
             hour: current.profile.reminderHour,
             minute: current.profile.reminderMinute,
+            personId,
           });
           if (when) {
             showNotice(t('person.remindSet', { date: formatDate(when) }));

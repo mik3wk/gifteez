@@ -795,7 +795,7 @@ export function PersonScreen() {
             />
           ))}
           {!locked && occasions.length > 0 ? <GhostRow label={t('person.addOccasion')} onPress={() => setAddingOccasion(true)} /> : null}
-          <ReminderOffer />
+          <ReminderOffer personId={person.id} />
         </>
       ) : null}
       {section === 'history' && !hidden ? (
@@ -1312,7 +1312,7 @@ function SpendBreakdown({
   );
 }
 
-function ReminderOffer() {
+function ReminderOffer({ personId }: { personId: string }) {
   const { snapshot, setReminders } = useGifteez();
   const waiting = (snapshot.profile.reminders ?? 'unset') === 'unset';
   const hasDate = snapshot.occasions.some(item => !item.deleted);
@@ -1323,7 +1323,7 @@ function ReminderOffer() {
     <Card>
       <Heading>{t('people.remindersA11y')}</Heading>
       <Body>{t('person.remindBody')}</Body>
-      <Button label={t('person.remindYes')} tone="secondary" onPress={() => { setReminders(true, true).catch(() => undefined); }} />
+      <Button label={t('person.remindYes')} tone="secondary" onPress={() => { setReminders(true, true, personId).catch(() => undefined); }} />
       <Button label={t('person.remindNo')} tone="ghost" onPress={() => setReminders(false)} />
     </Card>
   );
