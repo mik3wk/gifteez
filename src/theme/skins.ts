@@ -69,21 +69,21 @@ const PAPER: Pick<ThemeColors, 'background' | 'surface' | 'text' | 'muted' | 'bo
   surface: sticker.light.surface,
   text: sticker.light.text,
   muted: sticker.light.muted,
-  border: sticker.light.ink,
+  border: sticker.light.hairline,
   danger: sticker.light.danger,
   success: sticker.light.success,
 };
 
 export const BUNDLED_SKINS: Record<'base' | 'fall' | 'winter', ThemeColors> = {
-  base: { ...PAPER, accent: sticker.light.pink, accentText: sticker.light.ink, banner: '#FFE4EF' },
+  base: { ...PAPER, accent: sticker.light.pink, accentText: '#FFFFFF', banner: '#F6E7E8' },
   fall: { ...PAPER, accent: '#FF7A1A', accentText: sticker.light.ink, banner: '#FFE8D2' },
-  winter: { ...PAPER, accent: sticker.light.teal, accentText: sticker.light.ink, banner: '#E5F5EC' },
+  winter: { ...PAPER, accent: '#5D7290', accentText: '#FFFFFF', banner: '#E4EAF2' },
 };
 
 /** Dots beside list names. Text stays colors.text. */
 export const groupHues = {
-  light: [sticker.light.pink, sticker.light.teal, sticker.light.lilac, sticker.light.sunshine, '#FF7A1A', '#F9A8D4', '#86EFAC', '#FDBA74'],
-  dark: [sticker.dark.pink, sticker.dark.teal, sticker.dark.lilac, sticker.dark.sunshine, '#FDBA74', '#F9A8D4', '#86EFAC', '#FDE68A'],
+  light: [sticker.light.pink, sticker.light.teal, sticker.light.lilac, sticker.light.sunshine, sticker.light.plum, '#FF7A1A'],
+  dark: [sticker.dark.pink, sticker.dark.teal, sticker.dark.lilac, sticker.dark.sunshine, sticker.dark.plum, '#FDBA74'],
 };
 
 export function groupHue(index: number, scheme: 'light' | 'dark' | null | undefined): string {
@@ -159,7 +159,7 @@ const DARK: Pick<ThemeColors, 'background' | 'surface' | 'text' | 'muted' | 'bor
   surface: sticker.dark.surface,
   text: sticker.dark.text,
   muted: sticker.dark.muted,
-  border: '#DED7D3',
+  border: sticker.dark.hairline,
 };
 
 const DARK_ROLE = {
@@ -170,11 +170,12 @@ const DARK_ROLE = {
 
 /** Bright fills for dark mode, keyed by the light accent. Banners stay distinct and readable. */
 const DARK_FILLS: Record<string, Pick<ThemeColors, 'accent' | 'accentText' | 'danger' | 'success' | 'banner'>> = {
-  '#FF4F8B': { ...DARK_ROLE, accent: sticker.dark.pink, banner: '#6A3A4E' },
+  '#A93F55': { ...DARK_ROLE, accent: sticker.dark.pink, banner: '#6B3E4C' },
   '#FF7A1A': { ...DARK_ROLE, accent: '#FDBA74', banner: '#6B442C' },
-  '#00B8A9': { ...DARK_ROLE, accent: sticker.dark.teal, banner: '#245C4A' },
-  '#B8A4FF': { ...DARK_ROLE, accent: sticker.dark.lilac, banner: '#5A4480' },
-  '#FFD23F': { ...DARK_ROLE, accent: sticker.dark.sunshine, banner: '#6A5420' },
+  '#5D7290': { ...DARK_ROLE, accent: '#A9B9CE', banner: '#3A4A60' },
+  '#4F6F57': { ...DARK_ROLE, accent: sticker.dark.teal, banner: '#2C4034' },
+  '#B8A4FF': { ...DARK_ROLE, accent: '#C4B5FD', banner: '#5A4480' },
+  '#FFD23F': { ...DARK_ROLE, accent: '#D9B866', banner: '#6A5420' },
 };
 
 function mixChannel(parts: Array<[string, number]>, index: number): string {
@@ -264,7 +265,7 @@ export function resolveColors(colors: ThemeColors): ResolvedColors {
   const secondaryFill = brand.teal;
   const highlightFill = brand.sunshine;
   const onAccent = onFill(colors.accent, [colors.accentText, text, '#FFFFFF']);
-  const button = night ? sticker.dark.text : sticker.light.ink;
+  const button = night ? sticker.dark.pink : sticker.light.pink;
   const onButton = night ? sticker.dark.onFill : '#FFFFFF';
   const ink = night ? mixHex(sticker.dark.surface, sticker.dark.text, 0.85) : sticker.light.ink;
   const pink = brand.pink;

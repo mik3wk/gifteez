@@ -2,15 +2,15 @@
   "id": "summer",
   "version": 2,
   "colors": {
-    "background": "#FFF6E9",
+    "background": "#FBF8F3",
     "surface": "#FFFFFF",
-    "text": "#1A1420",
-    "muted": "#5C5266",
+    "text": "#2B2522",
+    "muted": "#6F6660",
     "accent": "#FFD23F",
-    "accentText": "#1A1420",
-    "border": "#1A1420",
+    "accentText": "#2B2522",
+    "border": "#E7DFD6",
     "danger": "#C62828",
-    "success": "#15803D",
+    "success": "#4F6F57",
     "banner": "#FFF4CC"
   }
 }

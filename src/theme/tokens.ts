@@ -6,46 +6,57 @@ import { Platform, type TextStyle, type ViewStyle } from 'react-native';
  * drop skin-<name>.png at @1x/@2x/@3x, and point the preset at it in OCCASION_LOOK.
  */
 
+/**
+ * Gift-wrap stationery. Rose is the primary fill. Sage and gold text colors
+ * clear 4.5:1; the brighter sage and gold fills are decorative only.
+ * Chip tint names stay pink, teal, sunshine, and lilac so existing art maps
+ * keep working. They now resolve to rose, sage, gold, and dusty blue.
+ */
 export const sticker = {
   light: {
-    background: '#FFF6E9',
+    background: '#FBF8F3',
     surface: '#FFFFFF',
-    surfaceAlt: '#FFF6E9',
-    ink: '#1A1420',
-    text: '#1A1420',
-    muted: '#5C5266',
-    pink: '#FF4F8B',
-    teal: '#00B8A9',
-    sunshine: '#FFD23F',
-    lilac: '#B8A4FF',
+    surfaceAlt: '#F6E7E8',
+    ink: '#2B2522',
+    text: '#2B2522',
+    muted: '#6F6660',
+    hairline: '#E7DFD6',
+    pink: '#A93F55',
+    teal: '#4F6F57',
+    sunshine: '#8A6A22',
+    lilac: '#5D7290',
+    plum: '#6E4A6B',
     danger: '#C62828',
-    success: '#15803D',
-    warning: '#B45309',
-    info: '#1D4ED8',
+    success: '#4F6F57',
+    warning: '#8A6A22',
+    info: '#5D7290',
   },
   dark: {
-    background: '#17121C',
-    surface: '#221A29',
-    surfaceAlt: '#2C2234',
-    ink: '#FFF8F1',
-    text: '#FFF8F1',
-    muted: '#B9AEC4',
-    pink: '#FF6FA3',
-    teal: '#5EEAD4',
-    sunshine: '#FFC24D',
-    lilac: '#C4B5FD',
+    background: '#1C1816',
+    surface: '#26201D',
+    surfaceAlt: '#322824',
+    ink: '#F2EBE3',
+    text: '#F2EBE3',
+    muted: '#B3A79E',
+    hairline: '#3A332E',
+    pink: '#E58A9C',
+    teal: '#8FB497',
+    sunshine: '#D9B866',
+    lilac: '#A9B9CE',
+    plum: '#C9A3C4',
     danger: '#FF8A80',
-    success: '#4ADE80',
-    warning: '#FBBF24',
-    info: '#93C5FD',
-    /** Text on bright fills stays ink, including in dark mode. */
-    onFill: '#1A1420',
+    success: '#8FB497',
+    warning: '#D9B866',
+    info: '#A9B9CE',
+    /** Dark text on the bright rose, sage, and gold fills. */
+    onFill: '#1C1816',
   },
 } as const;
 
 export const space = { xxs: 4, xs: 8, sm: 12, md: 16, lg: 24, xl: 32 } as const;
-export const radius = { chip: 12, card: 16, button: 999, pill: 999 } as const;
-export const stroke = { card: 2.5, control: 2.5, inner: 2 } as const;
+export const radius = { chip: 999, card: 14, button: 10, pill: 999 } as const;
+export const stroke = { card: 1, control: 1, inner: 1 } as const;
+/** Press travel. Motion still reads this. The painted shadow is soft and separate. */
 export const shadowOffset = 4;
 export const touch = { minTarget: 48 } as const;
 export const layout = { maxContent: 640, tabBar: 76, toastGap: 200 } as const;
@@ -58,22 +69,21 @@ export const scrim = 'rgba(0,0,0,0.6)';
  * colors; these are only for the glyph, so light mode can clear 3:1.
  */
 export const iconOnSurface = {
-  light: { teal: '#00897D', lilac: '#7B61D9' },
+  light: { teal: sticker.light.teal, lilac: sticker.light.lilac },
   dark: { teal: sticker.dark.teal, lilac: sticker.dark.lilac },
 } as const;
 
-/** Archivo Black is already heavy, so display stays at weight 400. Android picks the file name. */
+/**
+ * System serif for titles, names, card titles, and big numbers.
+ * System sans for everything else, including every button label.
+ * Bundled font files wait so the Xcode project stays untouched.
+ */
 export const fonts = {
-  display: Platform.select({ ios: 'Archivo Black', android: 'ArchivoBlack-Regular', default: undefined }),
-  body: Platform.select({ ios: 'Space Grotesk', android: 'SpaceGrotesk-Regular', default: undefined }),
-  medium: Platform.select({ ios: 'Space Grotesk', android: 'SpaceGrotesk-Medium', default: undefined }),
-  bold: Platform.select({ ios: 'Space Grotesk', android: 'SpaceGrotesk-Bold', default: undefined }),
+  display: Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }),
+  body: Platform.select({ ios: undefined, android: 'sans-serif', default: undefined }),
 };
 
 function weight(role: 'body' | 'medium' | 'bold'): TextStyle['fontWeight'] {
-  if (Platform.OS === 'android') {
-    return '400';
-  }
   if (role === 'bold') {
     return '700';
   }
@@ -87,19 +97,13 @@ function family(role: 'body' | 'medium' | 'bold' | 'display'): TextStyle['fontFa
   if (role === 'display') {
     return fonts.display;
   }
-  if (role === 'bold') {
-    return fonts.bold;
-  }
-  if (role === 'medium') {
-    return fonts.medium;
-  }
   return fonts.body;
 }
 
 export const type = {
-  display: { fontFamily: family('display'), fontSize: 40, fontWeight: '400' as const },
-  title: { fontFamily: family('bold'), fontSize: 28, fontWeight: weight('bold') },
-  heading: { fontFamily: family('bold'), fontSize: 20, fontWeight: weight('bold') },
+  display: { fontFamily: family('display'), fontSize: 34, fontWeight: '400' as const },
+  title: { fontFamily: family('display'), fontSize: 24, fontWeight: '400' as const },
+  heading: { fontFamily: family('display'), fontSize: 18, fontWeight: '400' as const },
   body: { fontFamily: family('body'), fontSize: 16, fontWeight: weight('body') },
   caption: { fontFamily: family('medium'), fontSize: 13, fontWeight: weight('medium') },
   button: { fontFamily: family('bold'), fontSize: 16, fontWeight: weight('bold') },
@@ -120,14 +124,14 @@ export const motion = {
   duration: { fast: 120, base: 220, celebrate: 900 },
 } as const;
 
-/** Hard sticker shadow. Blur stays 0. The view offset lives in the sticker primitive. */
+/** Soft stationery shadow. Press travel still uses shadowOffset and is unchanged. */
 export const elevation = {
   card: {
-    shadowColor: sticker.light.ink,
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    shadowOffset: { width: shadowOffset, height: shadowOffset },
-    elevation: 0,
+    shadowColor: '#2B2522',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
 } satisfies Record<string, ViewStyle>;
 

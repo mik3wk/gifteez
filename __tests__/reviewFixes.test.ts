@@ -73,14 +73,15 @@ test('every skin and scheme keeps text and boundaries readable', () => {
 test('light icon ink clears 3:1 on white and the scrim stays black', () => {
   expect(contrastRatio(iconOnSurface.light.teal, '#FFFFFF')).toBeGreaterThanOrEqual(3);
   expect(contrastRatio(iconOnSurface.light.lilac, '#FFFFFF')).toBeGreaterThanOrEqual(3);
-  expect(contrastRatio(iconOnSurface.dark.teal, '#221A29')).toBeGreaterThanOrEqual(3);
-  expect(contrastRatio(iconOnSurface.dark.lilac, '#221A29')).toBeGreaterThanOrEqual(3);
+  expect(contrastRatio(iconOnSurface.dark.teal, '#26201D')).toBeGreaterThanOrEqual(3);
+  expect(contrastRatio(iconOnSurface.dark.lilac, '#26201D')).toBeGreaterThanOrEqual(3);
   expect(scrim).toBe('rgba(0,0,0,0.6)');
-  expect(contrastRatio('#FFF6E9', '#3A3142')).toBeGreaterThanOrEqual(3);
+  expect(contrastRatio('#FBF8F3', '#3A3142')).toBeGreaterThanOrEqual(3);
   expect(contrastRatio('#FFFFFF', '#5C5266')).toBeGreaterThanOrEqual(3);
-  expect(contrastRatio('#1A1420', '#FF4F8B')).toBeGreaterThanOrEqual(4.5);
-  expect(contrastRatio('#1A1420', '#00B8A9')).toBeGreaterThanOrEqual(4.5);
-  expect(contrastRatio('#1A1420', '#B8A4FF')).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio('#FFFFFF', '#A93F55')).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio('#FFFFFF', '#4F6F57')).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio('#FFFFFF', '#5D7290')).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio('#1C1816', '#E58A9C')).toBeGreaterThanOrEqual(4.5);
 });
 
 test('every occasion preset has a sticker skin', () => {
