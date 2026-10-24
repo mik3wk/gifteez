@@ -1,25 +1,17 @@
 import React, { useState } from 'react';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { describeIncomingLink } from '../app/incomingLink';
 import { cleanRelationship } from '../domain/relationship';
 import { t } from '../i18n';
 import { haptic } from '../platform/haptics';
 import { useGifteez } from '../state/GifteezContext';
 import { RelationshipField } from '../ui/RelationshipField';
 import { Body, Button, Field, Screen, Title } from '../ui/ui';
-import type { RootStack } from '../app/navigation';
 
 export function FirstOpenScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { startGroup, addPerson, openPerson } = useGifteez();
+  const { addPerson, openPerson, finishWelcome } = useGifteez();
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
   const [relationship, setRelationship] = useState('');
   const [relationshipError, setRelationshipError] = useState('');
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [invite, setInvite] = useState('');
-  const [inviteError, setInviteError] = useState('');
 
   return (
     <Screen>
@@ -55,46 +47,15 @@ export function FirstOpenScreen() {
             setRelationshipError(t('relationship.invalid'));
             return;
           }
-          const started = await startGroup('', '');
-          if (!started) {
+          const id = await addPerson({ name: trimmed, budget: '', tags: [], relationship: cleaned });
+          if (!id) {
             return;
           }
-          const id = await addPerson({ name: trimmed, budget: '', tags: [], relationship: cleaned });
-          if (id) {
-            openPerson(id);
-            haptic('success');
-          }
+          await finishWelcome();
+          openPerson(id);
+          haptic('success');
         }}
       />
-      <Button label={t('firstOpen.haveInvite')} tone="ghost" onPress={() => setInviteOpen(true)} />
-      {inviteOpen ? (
-        <>
-          <Body>{t('firstOpen.pasteHint')}</Body>
-          <Field
-            label={t('firstOpen.pasteInvite')}
-            value={invite}
-            error={inviteError}
-            onChangeText={value => {
-              setInvite(value);
-              setInviteError('');
-            }}
-          />
-          <Button
-            label={t('firstOpen.pasteContinue')}
-            accessibilityLabel={t('firstOpen.pasteContinueLabel')}
-            tone="secondary"
-            onPress={() => {
-              const url = invite.trim();
-              if (describeIncomingLink(url) !== 'confirm-invite') {
-                setInviteError(t('join.invalid'));
-                return;
-              }
-              navigation.navigate('JoinConfirm', { url });
-            }}
-          />
-          <Button label={t('firstOpen.join')} tone="secondary" onPress={() => navigation.navigate('Join')} />
-        </>
-      ) : null}
     </Screen>
   );
 }

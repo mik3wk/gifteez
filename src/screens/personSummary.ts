@@ -1,11 +1,10 @@
 import { t } from '../i18n';
 
-export type SummaryAction = 'add' | 'find' | 'claim' | 'log' | 'logged';
+export type SummaryAction = 'add' | 'find' | 'log' | 'logged';
 
 const SUMMARY_LABEL: Record<SummaryAction, string> = {
   add: 'person.addOccasion',
   find: 'people.findGift',
-  claim: 'person.claim',
   log: 'person.purchase',
   logged: 'person.logged',
 };
@@ -28,14 +27,8 @@ export function summaryPrimary(input: {
   if (input.purchased) {
     return 'logged';
   }
-  if (input.claimedByMe) {
-    return 'log';
-  }
-  if (input.claimedByOther) {
-    return null;
-  }
   if (input.savedIdea) {
-    return 'claim';
+    return 'log';
   }
   return 'find';
 }

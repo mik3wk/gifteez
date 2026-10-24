@@ -154,6 +154,8 @@ export type Profile = {
   inviteId: string | null;
   /** Per member, on this phone. Unset until the first occasion asks. */
   reminders?: 'unset' | 'on' | 'off';
+  /** ISO currency for amounts on this phone. Missing means USD. */
+  currency?: string;
 };
 
 export type DirtyMap = Record<string, true>;

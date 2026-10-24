@@ -1,8 +1,8 @@
-import React, { useLayoutEffect, useState } from 'react';
+import React, { useLayoutEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { openTab, type RootStack } from '../app/navigation';
-import { daysUntil, groupCurrency, occurrenceYear, sortPeople, statusFor, upcomingOccasion, yearSpentCents, fairnessRows } from '../domain/logic';
+import { daysUntil, listCurrency, occurrenceYear, sortPeople, statusFor, upcomingOccasion, yearSpentCents, fairnessRows } from '../domain/logic';
 import { personSeal } from '../domain/seal';
 import type { Occasion, OccasionState } from '../domain/types';
 import { isOneTimeOccasion, occasionLabel } from '../domain/occasions';
@@ -12,15 +12,13 @@ import { useGifteez } from '../state/GifteezContext';
 import { useGroupLabel } from '../ui/heading';
 import { SessionEntrance } from '../ui/motion';
 import { FairnessCard, GiftTagCard, RibbonDivider } from '../ui/stationery';
-import { AccountSheet, AppHeader, Banner, Button, EmptyState, PersonRow, Screen, SectionHeader, StatRow, StatTile } from '../ui/ui';
-import { DuplicateOffers } from './mergeUi';
+import { AppHeader, Button, EmptyState, PersonRow, Screen, SectionHeader, StatRow, StatTile } from '../ui/ui';
 import { summaryPrimaryLabel } from './personSummary';
 
 export function PeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, showBanner, dismissBanner, duplicateOffers, dismissDuplicateOffer, resumePersonId, clearResumePerson } = useGifteez();
+  const { snapshot, resumePersonId, clearResumePerson } = useGifteez();
   const heading = useGroupLabel();
-  const [upgrade, setUpgrade] = useState(false);
   const today = new Date();
   const people = sortPeople(snapshot.people, snapshot.occasions, today);
   const year = today.getFullYear();
@@ -65,23 +63,6 @@ export function PeopleScreen() {
     <Screen tab="people">
       <AppHeader title={heading.label} greeting={greeting} />
       <SessionEntrance id="people">
-      <DuplicateOffers
-        offers={duplicateOffers}
-        onReview={offer => navigation.navigate('SamePerson', {
-          personId: offer.targetPersonId,
-          sourcePersonId: offer.sourcePersonId,
-          sourceGroupId: offer.sourceGroupId,
-        })}
-        onDismiss={offer => dismissDuplicateOffer(offer.sourcePersonId, offer.sourceGroupId, offer.targetPersonId)}
-      />
-      {showBanner ? (
-        <Banner
-          text={t('people.banner')}
-          action={t('people.bannerAction')}
-          onAction={() => setUpgrade(true)}
-          onDismiss={dismissBanner}
-        />
-      ) : null}
       {next && nextPerson ? (
         <GiftTagCard
           personId={nextPerson.id}
@@ -91,7 +72,7 @@ export function PeopleScreen() {
           countdown={daysUntil(next.date, today) === 0 ? t('people.today') : t('people.inDays', { count: daysUntil(next.date, today) })}
           budgetLabel={isHiddenFromViewer(nextPerson, snapshot.profile.uid)
             ? undefined
-            : heroDetail(nextPerson.id, nextPerson.budgetCents, snapshot.gifts, year, snapshot.group)}
+            : heroDetail(nextPerson.id, nextPerson.budgetCents, snapshot.gifts, year, listCurrency(snapshot))}
           progress={isHiddenFromViewer(nextPerson, snapshot.profile.uid) || !nextPerson.budgetCents
             ? null
             : yearSpentCents(nextPerson.id, snapshot.gifts, year) / nextPerson.budgetCents}
@@ -110,7 +91,7 @@ export function PeopleScreen() {
           const person = snapshot.people.find(item => item.id === row.personId);
           return !isHiddenFromViewer(person, snapshot.profile.uid);
         })}
-        money={cents => formatMoney(cents, deviceLocale(), groupCurrency(snapshot.group), true)}
+        money={cents => formatMoney(cents, deviceLocale(), listCurrency(snapshot), true)}
       />
       <RibbonDivider />
       <StatRow>
@@ -136,7 +117,7 @@ export function PeopleScreen() {
       {people.map(person => {
         const item = upcomingOccasion(person.id, snapshot.occasions, today);
         const hidden = isHiddenFromViewer(person, snapshot.profile.uid);
-        const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(snapshot.group), true);
+        const money = (cents: number) => formatMoney(cents, deviceLocale(), listCurrency(snapshot), true);
         const spent = yearSpentCents(person.id, snapshot.gifts, year);
         const budget = hidden
           ? ''
@@ -180,7 +161,6 @@ export function PeopleScreen() {
       })}
       </SessionEntrance>
       )}
-      <AccountSheet visible={upgrade} allowName={false} showCreate={false} onClose={() => setUpgrade(false)} />
     </Screen>
   );
 }
@@ -190,9 +170,9 @@ function heroDetail(
   budgetCents: number | null,
   gifts: Parameters<typeof yearSpentCents>[1],
   year: number,
-  group: Parameters<typeof groupCurrency>[0],
+  currency: string,
 ): string {
-  const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(group), true);
+  const money = (cents: number) => formatMoney(cents, deviceLocale(), currency, true);
   const spent = yearSpentCents(personId, gifts, year);
   if (budgetCents == null) {
     return t('people.heroOpen', { used: money(spent) });

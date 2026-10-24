@@ -153,7 +153,7 @@ test('on-device ideas stay on device, follow tags, and skip thumbs down', () => 
   expect(blocked).not.toContain(first[0]);
 });
 
-test('free tier stops at five people unless the list owner is unlocked', () => {
+test('free tier stops at five people unless this phone is unlocked', () => {
   const snapshot = createGroup({
     snapshot: emptySnapshot(1),
     groupId: 'g',
@@ -171,13 +171,13 @@ test('free tier stops at five people unless the list owner is unlocked', () => {
     profile: { ...snapshot.profile, uid: 'joiner' },
     group: snapshot.group && { ...snapshot.group, ownerId: 'owner', entitled: false },
   };
-  expect(canAddPerson(paidJoiner, 5)).toBe(false);
+  expect(canAddPerson(paidJoiner, 5)).toBe(true);
   expect(canAddPerson({ ...snapshot, entitlementPaid: true }, 5)).toBe(true);
   expect(canAddPerson({
     ...snapshot,
     entitlementPaid: false,
     group: snapshot.group && { ...snapshot.group, entitled: true },
-  }, 5)).toBe(true);
+  }, 5)).toBe(false);
 });
 
 test('imports Santa-style CSV and Christmas Gift List JSON', () => {
@@ -306,7 +306,7 @@ test('a group has room for 9 members, not 10 or 11', () => {
     ...withPeople,
     entitlementPaid: true,
     profile: { ...withPeople.profile, uid: 'joiner' },
-  }, 5)).toBe(false);
+  }, 5)).toBe(true);
 });
 
 test('a free account starts one list, paying starts another, and joining does not count', () => {
@@ -364,7 +364,7 @@ test('a free account starts one list, paying starts another, and joining does no
   const stamped = withAccountUnlock(second, true);
   expect(stamped.group?.entitled).toBe(false);
   expect(stamped.archives.g1.group.entitled).toBe(true);
-  expect(t('errors.oneList')).toBe('A free account can start one list. Unlock to start another.');
+  expect(t('errors.oneList')).toBe('Unlock to add more people.');
 });
 
 test('a failed join does not save the key or add the group', async () => {

@@ -10,10 +10,13 @@ function fail<T>(error: string): Mutation<T> {
 }
 
 export function canEditSharedGift(snapshot: AppSnapshot, gift: Pick<GiftRecord, 'boughtBy'>, uid: string | null): boolean {
+  if (!snapshot.group) {
+    return true;
+  }
   if (!uid) {
     return false;
   }
-  if (snapshot.group?.ownerId === uid) {
+  if (snapshot.group.ownerId === uid) {
     return true;
   }
   return gift.boughtBy === uid;

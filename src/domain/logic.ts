@@ -212,30 +212,13 @@ export function activePeopleCount(snapshot: AppSnapshot): number {
   return snapshot.people.filter(person => !person.deleted).length;
 }
 
-/** True when the active list's owner is unlocked. A joiner's own purchase does not count. */
+/** The unlock on this phone removes the person cap. There is no separate list owner. */
 export function listOwnerEntitled(snapshot: AppSnapshot): boolean {
-  const group = snapshot.group;
-  if (!group) {
-    return false;
-  }
-  if (group.entitled) {
-    return true;
-  }
-  return Boolean(snapshot.entitlementPaid && snapshot.profile.uid && group.ownerId === snapshot.profile.uid);
+  return snapshot.entitlementPaid;
 }
 
 export function accountUnlocked(snapshot: AppSnapshot): boolean {
-  if (snapshot.entitlementPaid) {
-    return true;
-  }
-  const uid = snapshot.profile.uid;
-  if (!uid) {
-    return false;
-  }
-  if (snapshot.group?.ownerId === uid && snapshot.group.entitled) {
-    return true;
-  }
-  return Object.values(snapshot.archives ?? {}).some(archive => archive.group.ownerId === uid && archive.group.entitled);
+  return snapshot.entitlementPaid;
 }
 
 export function canAddPerson(snapshot: AppSnapshot, freeLimit: number): boolean {
@@ -281,6 +264,12 @@ export const DEFAULT_LIST_CURRENCY = 'USD';
 export function groupCurrency(group: { currency?: string } | null | undefined): string {
   const code = group?.currency?.trim();
   return code || DEFAULT_LIST_CURRENCY;
+}
+
+/** Amounts on this phone. A backup can set the currency; older caches may still have it on the group. */
+export function listCurrency(snapshot: { profile: { currency?: string }; group?: { currency?: string } | null }): string {
+  const code = snapshot.profile.currency?.trim();
+  return code || groupCurrency(snapshot.group);
 }
 
 export function withAccountUnlock(snapshot: AppSnapshot, paid: boolean): AppSnapshot {

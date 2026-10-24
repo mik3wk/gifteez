@@ -35,16 +35,14 @@ jest.mock('../src/state/GifteezContext', () => {
     updatedAt: 1,
   }];
   const setReminders = jest.fn();
-  const deleteAccount = jest.fn();
   return {
     setReminders,
-    deleteAccount,
     useGifteez: () => ({
       snapshot,
       colors: BUNDLED_SKINS.base,
-      exportText: () => 'exported',
+      exportBackup: () => '{"version":1}',
+      restoreBackup: jest.fn(async () => 'ok'),
       setReminders,
-      deleteAccount,
       buy: jest.fn(),
       restorePurchases: jest.fn(),
       storeProduct: null,
@@ -63,16 +61,14 @@ jest.mock('../src/state/GifteezContext', () => {
   };
 });
 
-import { MergeScreen } from '../src/screens/MergeScreen';
 import { SettingsScreen } from '../src/screens/MoreScreens';
 import { ConfirmHost } from '../src/ui/ui';
 
-const { setReminders, deleteAccount } = jest.requireMock('../src/state/GifteezContext') as {
+const { setReminders } = jest.requireMock('../src/state/GifteezContext') as {
   setReminders: jest.Mock;
-  deleteAccount: jest.Mock;
 };
 
-test('settings keeps export until an account exists, and labels reminders and deletion', async () => {
+test('settings shares a backup and labels reminders', async () => {
   const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: Share.sharedAction, activityType: undefined });
   let renderer: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(() => {
@@ -84,37 +80,18 @@ test('settings keeps export until an account exists, and labels reminders and de
     );
   });
   const exportButton = renderer!.root.findAllByProps({ accessibilityRole: 'button' }).find(node =>
-    node.findAllByType(Text).some(item => item.props.children === 'Export list'),
+    node.findAllByType(Text).some(item => item.props.children === 'Export backup'),
   );
   expect(exportButton).toBeDefined();
   await ReactTestRenderer.act(() => {
     exportButton?.props.onPress();
   });
-  expect(share).not.toHaveBeenCalled();
+  expect(share).toHaveBeenCalledWith({ title: 'gifteez-backup.json', message: '{"version":1}' });
   expect(renderer!.root.findAllByProps({ accessibilityLabel: 'Turn occasion reminders on or off' }).length).toBeGreaterThan(0);
   const reminders = renderer!.root.findByProps({ accessibilityLabel: 'Turn occasion reminders on or off' });
   await ReactTestRenderer.act(() => {
     reminders.props.onPress();
   });
   expect(setReminders).toHaveBeenCalledWith(true);
-  const remove = renderer!.root.findByProps({ accessibilityLabel: 'Delete this account' });
-  await ReactTestRenderer.act(() => {
-    remove.props.onPress();
-  });
-  const confirm = renderer!.root.findByProps({ accessibilityLabel: 'Confirm account deletion' });
-  await ReactTestRenderer.act(() => {
-    confirm.props.onPress();
-  });
-  expect(deleteAccount).toHaveBeenCalled();
   share.mockRestore();
-});
-
-test('merge states that the other copy stays until the save, and that undo exists', async () => {
-  let renderer: ReactTestRenderer.ReactTestRenderer;
-  await ReactTestRenderer.act(() => {
-    renderer = ReactTestRenderer.create(<MergeScreen />);
-  });
-  const tree = JSON.stringify(renderer!.toJSON());
-  expect(tree).toContain('removes the other copy after it saves');
-  expect(tree).toContain('You can undo it from the person');
 });

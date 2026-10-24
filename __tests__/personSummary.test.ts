@@ -16,10 +16,10 @@ test('the person summary primary follows the occasion, and a soon date opens Occ
   };
   expect(summaryPrimary({ ...base, hasOccasion: false })).toBe('add');
   expect(summaryPrimary(base)).toBe('find');
-  expect(summaryPrimary({ ...base, savedIdea: true })).toBe('claim');
-  expect(summaryPrimary({ ...base, claimedByMe: true })).toBe('log');
+  expect(summaryPrimary({ ...base, savedIdea: true })).toBe('log');
+  expect(summaryPrimary({ ...base, claimedByMe: true })).toBe('find');
   expect(summaryPrimary({ ...base, purchased: true })).toBe('logged');
-  expect(summaryPrimary({ ...base, claimedByOther: true })).toBeNull();
+  expect(summaryPrimary({ ...base, claimedByOther: true, savedIdea: false })).toBe('find');
   expect(summaryPrimary({ ...base, hidden: true })).toBeNull();
 });
 
@@ -36,7 +36,6 @@ test('the People hero and the person summary use one label for the same state', 
   const words: Record<string, string> = {
     add: 'Add occasion',
     find: 'Find a gift',
-    claim: "I'll get this",
     log: 'Log purchase',
     logged: 'Logged ✓',
   };
@@ -54,6 +53,6 @@ test('the People hero and the person summary use one label for the same state', 
     const action = summaryPrimary(input);
     expect(summaryPrimaryLabel(input)).toBe(action ? words[action] : null);
   });
-  expect(summaryPrimaryLabel({ ...base, savedIdea: true })).toBe("I'll get this");
+  expect(summaryPrimaryLabel({ ...base, savedIdea: true })).toBe('Log purchase');
   expect(summaryPrimaryLabel(base)).toBe('Find a gift');
 });

@@ -5,13 +5,10 @@ import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
 import { INTEREST_TAGS } from '../domain/catalog';
-import { buyerLabel, claimerName, claimWarningUid, isMyPurchase, spendByMember, visibleGifts } from '../domain/claims';
 import { ideaCacheId } from '../domain/ideas';
 import { canEditSharedGift } from '../domain/edits';
-import { allTimeSpentCents, daysUntil, groupCurrency, isRealMonthDay, occurrenceYear, parseBudget, parseLooseDate, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
+import { allTimeSpentCents, daysUntil, isRealMonthDay, listCurrency, occurrenceYear, parseBudget, parseLooseDate, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
 import { dateIsEstimated, isOneTimeOccasion, nextOccasionDate, occasionLabel, occasionNeedsDate, presetFor } from '../domain/occasions';
-import { isHiddenFromViewer, isPersonLocked } from '../domain/visibility';
-import { peopleOnOtherLists } from '../domain/merge';
 import type { Occasion, OccasionState } from '../domain/types';
 import { cleanRelationship } from '../domain/relationship';
 import { initialPersonSection, summaryPrimary, summaryPrimaryLabel } from './personSummary';
@@ -123,9 +120,6 @@ export function PersonScreen() {
     cloudRemaining,
     updateGift,
     deleteGift,
-    linkRecipient,
-    undoMerge,
-    claimOccasion,
   } = useGifteez();
   const { colors } = useTheme();
   const person = snapshot.people.find(item => item.id === route.params.personId && !item.deleted);
@@ -139,7 +133,6 @@ export function PersonScreen() {
   const [price, setPrice] = useState('');
   const [date, setDate] = useState(todayIso());
   const [buying, setBuying] = useState<string | null>(null);
-  const [mineOnly, setMineOnly] = useState(false);
   const [editingGift, setEditingGift] = useState<{ id: string; privateGift: boolean } | null>(null);
   const [findingIdeas, setFindingIdeas] = useState(true);
   const [showAllIdeas, setShowAllIdeas] = useState(false);
@@ -156,7 +149,7 @@ export function PersonScreen() {
   const [addingOccasion, setAddingOccasion] = useState(false);
   const [tuning, setTuning] = useState(false);
   const [menu, setMenu] = useState<Menu | null>(null);
-  const [moment, setMoment] = useState<'claim' | 'wrap' | null>(null);
+  const [moment, setMoment] = useState<'wrap' | null>(null);
   const queued = useRef<Queue | null>(null);
   const queuedMenu = useRef<Menu | null>(null);
 
@@ -194,23 +187,15 @@ export function PersonScreen() {
     );
   }
 
-  const money = (cents: number) => formatMoney(cents, deviceLocale(), groupCurrency(snapshot.group), true);
-  const hidden = isHiddenFromViewer(person, snapshot.profile.uid);
-  const locked = isPersonLocked(snapshot.group?.lockedPersonIds, person.id);
+  const money = (cents: number) => formatMoney(cents, deviceLocale(), listCurrency(snapshot), true);
+  const hidden = false;
+  const locked = false;
   const next = upcomingOccasion(person.id, snapshot.occasions, today);
   const occasionKey = next ? `${next.occasion.id}:${next.date.getFullYear()}` : 'general';
   const onDevice = snapshot.ideas.find(item => item.id === ideaCacheId(person.id, occasionKey, 'on-device') && !item.deleted);
   const cloud = snapshot.ideas.find(item => item.id === ideaCacheId(person.id, occasionKey, 'cloud') && !item.deleted);
-  const visible = visibleGifts({
-    personId: person.id,
-    gifts: snapshot.gifts,
-    privateGifts: snapshot.privateGifts ?? [],
-    groupId: snapshot.group?.id ?? null,
-  });
-  const history = visible.filter(item => !mineOnly || isMyPurchase(item, snapshot.profile.uid));
-  const showSpend = person.budgetCents != null
-    || snapshot.gifts.some(item => item.personId === person.id && !item.deleted)
-    || (snapshot.privateGifts ?? []).some(item => item.personId === person.id && !item.deleted);
+  const history = snapshot.gifts.filter(item => item.personId === person.id && !item.deleted);
+  const showSpend = person.budgetCents != null || history.length > 0;
   const ideas = onDevice?.ideas ?? [];
   const cloudList = cloud?.ideas ?? [];
   const shownIdeas = showAllIdeas ? ideas : ideas.slice(0, 3);
@@ -220,14 +205,13 @@ export function PersonScreen() {
   const nextState = next
     ? snapshot.states.find(item => item.occasionId === next.occasion.id && item.year === occurrenceYear(next.occasion, today) && !item.deleted)
     : undefined;
-  const uid = snapshot.profile.uid;
   const summaryInput = {
     hidden,
     locked,
     hasOccasion: Boolean(next),
     purchased: nextState?.status === 'purchased',
-    claimedByMe: Boolean(nextState?.claimedBy && nextState.claimedBy === uid),
-    claimedByOther: Boolean(nextState?.claimedBy && nextState.claimedBy !== uid),
+    claimedByMe: false,
+    claimedByOther: false,
     savedIdea: Boolean(nextState?.savedIdea),
   };
   const action = summaryPrimary(summaryInput);
@@ -302,14 +286,6 @@ export function PersonScreen() {
       setSection('ideas');
       return;
     }
-    if (action === 'claim' && next) {
-      claimOccasion(next.occasion.id).then(ok => {
-        if (ok) {
-          setMoment('claim');
-        }
-      }).catch(() => undefined);
-      return;
-    }
     if (action === 'log' && next) {
       openPurchase(next.occasion.id, nextState?.savedIdea ?? '');
     }
@@ -342,12 +318,9 @@ export function PersonScreen() {
             ) : (
               <Caption>{t('people.noOccasion')}</Caption>
             )}
-            {nextState?.claimedBy ? (
-              <Caption tone="text">{t('person.claimedBy', { name: claimerName(nextState.claimedBy, snapshot.members) })}</Caption>
-            ) : null}
             {budgetLabel ? <Caption tone="text">{budgetLabel}</Caption> : null}
             {hidden ? null : <ProgressBar value={progress} />}
-            {(action === 'claim' || action === 'log') && nextState?.savedIdea ? (
+            {action === 'log' && nextState?.savedIdea ? (
               <Body>{t('person.savedIdeaLine', { idea: nextState.savedIdea })}</Body>
             ) : null}
             {action === 'logged' ? (
@@ -360,8 +333,8 @@ export function PersonScreen() {
             ) : null}
             {moment ? (
               <Moment
-                kind={moment}
-                name={moment === 'wrap' ? 'purchase' : 'claim'}
+                kind="wrap"
+                name="purchase"
                 onDone={() => setMoment(null)}
               />
             ) : null}
@@ -411,9 +384,7 @@ export function PersonScreen() {
               key={occasion.id}
               occasion={occasion}
               today={today}
-              members={snapshot.members}
               state={snapshot.states.find(item => item.occasionId === occasion.id && item.year === occurrenceYear(occasion, today) && !item.deleted)}
-              hidden={hidden}
               onMenu={() => setMenu({ kind: 'occasion', id: occasion.id })}
             />
           ))}
@@ -424,26 +395,22 @@ export function PersonScreen() {
       {section === 'history' && !hidden ? (
         <>
           {showSpend ? <SpendBreakdown personId={person.id} budgetCents={person.budgetCents} money={money} /> : null}
-          <Chip label={t('person.mineChip')} selected={mineOnly} onPress={() => setMineOnly(value => !value)} />
-          {history.length === 0 ? <EmptyState kind="ideas" text={mineOnly ? t('person.historyMineEmpty') : t('person.historyEmpty')} /> : null}
+          {history.length === 0 ? <EmptyState kind="ideas" text={t('person.historyEmpty')} /> : null}
           {history.map(item => {
-            const buyerText = buyerLine(item.boughtBy, snapshot.profile.uid, snapshot.members);
-            const editable = item.privateGift || canEditSharedGift(snapshot, item, snapshot.profile.uid);
+            const editable = canEditSharedGift(snapshot, item, snapshot.profile.uid);
             return (
               <Card key={item.id}>
                 <View style={styles.ideaRow}>
                   <View style={styles.ideaCopy}>
                     <Body>{item.title}</Body>
                     <Caption tone="text">{`${money(item.priceCents)} · ${formatLongDate(new Date(item.purchasedOn))}`}</Caption>
-                    {buyerText ? <Caption>{buyerText}</Caption> : null}
-                    {item.privateGift ? <Caption>{t('person.privateGift')}</Caption> : null}
                   </View>
                   {editable && !locked ? (
                     <IconButton
                       label={t('person.giftMenu')}
                       name="more"
                       filled
-                      onPress={() => setMenu({ kind: 'gift', id: item.id, privateGift: item.privateGift, title: item.title })}
+                      onPress={() => setMenu({ kind: 'gift', id: item.id, privateGift: false, title: item.title })}
                     />
                   ) : null}
                 </View>
@@ -547,39 +514,6 @@ export function PersonScreen() {
             });
           }}
         />
-        {snapshot.mergeJournal?.targetPersonId === person.id ? (
-          <Button label={t('merge.undo')} accessibilityLabel={t('merge.undoLabel')} tone="secondary" onPress={() => undoMerge()} />
-        ) : null}
-        {peopleOnOtherLists(snapshot).length > 0 ? (
-          <Button
-            label={t('person.samePerson')}
-            accessibilityLabel={t('person.samePersonLabel')}
-            tone="secondary"
-            onPress={() => {
-              setEditingDetails(false);
-              navigation.navigate('SamePerson', { personId: person.id });
-            }}
-          />
-        ) : null}
-        {snapshot.profile.uid === snapshot.group?.ownerId
-          && (snapshot.members.some(member => !member.deleted && member.uid !== snapshot.profile.uid) || person.linkedUid) ? (
-          <Card>
-            <Heading>{t('person.linkTitle')}</Heading>
-            <Body>{t('person.linkHint')}</Body>
-            {snapshot.members.filter(member => !member.deleted && member.uid !== snapshot.profile.uid).map(member => (
-              <Button
-                key={member.uid}
-                label={t('person.linkTo', { name: member.displayName })}
-                accessibilityLabel={t('person.linkToLabel', { name: member.displayName })}
-                tone="secondary"
-                onPress={() => linkRecipient(person.id, member.uid)}
-              />
-            ))}
-            {person.linkedUid ? (
-              <Button label={t('person.unlink')} accessibilityLabel={t('person.unlinkLabel')} tone="secondary" onPress={() => linkRecipient(person.id, '')} />
-            ) : null}
-          </Card>
-        ) : null}
         <Button
           label={t('person.delete')}
           tone="danger-quiet"
@@ -626,7 +560,6 @@ export function PersonScreen() {
               queued.current = { kind: 'purchase', id: menuOccasion.id, idea };
               setMenu(null);
             }}
-            onClaimed={() => setMoment('claim')}
           />
         ) : null}
       </Sheet>
@@ -672,7 +605,6 @@ export function PersonScreen() {
           giftError={giftError}
           priceError={priceError}
           dateError={dateError}
-          occasionId={buying}
           saveLabel={t('purchase.save')}
           onGift={value => {
             setGift(value);
@@ -749,16 +681,12 @@ export function PersonScreen() {
 function OccasionRow({
   occasion,
   today,
-  members,
   state,
-  hidden,
   onMenu,
 }: {
   occasion: Occasion;
   today: Date;
-  members: Parameters<typeof claimerName>[1];
   state: OccasionState | undefined;
-  hidden: boolean;
   onMenu: () => void;
 }) {
   const label = occasionLabel(occasion);
@@ -768,11 +696,7 @@ function OccasionRow({
     : `${occasion.month}/${occasion.day}`;
   const days = next ? daysUntil(next, today) : null;
   const trailing = days == null ? '' : days === 0 ? t('people.today') : t('people.inDays', { count: days });
-  const status = hidden
-    ? ''
-    : state?.claimedBy
-      ? t('person.claimedBy', { name: claimerName(state.claimedBy, members) })
-      : t(state?.status === 'purchased' ? 'person.statusPurchased' : state?.status === 'idea-saved' ? 'person.statusIdea' : 'person.statusNotStarted');
+  const status = t(state?.status === 'purchased' ? 'person.statusPurchased' : state?.status === 'idea-saved' ? 'person.statusIdea' : 'person.statusNotStarted');
   const row = (
     <Card>
       <View style={styles.occasionRow}>
@@ -782,13 +706,10 @@ function OccasionRow({
           <Caption tone="text">{trailing ? `${when} · ${trailing}` : when}</Caption>
           {status ? <Caption>{status}</Caption> : null}
         </View>
-        {hidden ? null : <IconButton label={t('person.occasionMenu')} name="more" filled onPress={onMenu} />}
+        <IconButton label={t('person.occasionMenu')} name="more" filled onPress={onMenu} />
       </View>
     </Card>
   );
-  if (hidden) {
-    return row;
-  }
   return (
     <Pressable
       accessibilityRole="button"
@@ -812,16 +733,14 @@ function OccasionMenu({
   locked,
   onClose,
   onPurchase,
-  onClaimed,
 }: {
   occasion: Occasion;
   hidden: boolean;
   locked: boolean;
   onClose: () => void;
   onPurchase: (idea: string) => void;
-  onClaimed: () => void;
 }) {
-  const { snapshot, updateOccasion, deleteOccasion, claimOccasion, unclaimOccasion } = useGifteez();
+  const { snapshot, updateOccasion, deleteOccasion } = useGifteez();
   const [editing, setEditing] = useState(false);
   const [month, setMonth] = useState(occasion.month ? String(occasion.month) : '');
   const [day, setDay] = useState(occasion.day ? String(occasion.day) : '');
@@ -836,8 +755,6 @@ function OccasionMenu({
   const estimated = dateIsEstimated(occasion, (next ?? today).getFullYear());
   const canEdit = !hidden && !locked && (occasionNeedsDate(occasion.type) || estimated);
   const note = presetFor(occasion.type)?.note;
-  const mine = Boolean(state?.claimedBy && state.claimedBy === snapshot.profile.uid);
-  const canUnclaim = Boolean(state?.claimedBy && snapshot.profile.uid && (mine || snapshot.group?.ownerId === snapshot.profile.uid));
   if (editing) {
     return (
       <>
@@ -900,32 +817,6 @@ function OccasionMenu({
           onPress={() => setEditing(true)}
         />
       ) : null}
-      {!hidden && !locked && !state?.claimedBy && status !== 'purchased' ? (
-        <Button
-          label={t('person.claim')}
-          accessibilityLabel={t('person.claimLabel', { occasion: label })}
-          tone="secondary"
-          onPress={() => {
-            claimOccasion(occasion.id).then(ok => {
-              if (ok) {
-                onClaimed();
-              }
-            }).catch(() => undefined);
-            onClose();
-          }}
-        />
-      ) : null}
-      {canUnclaim ? (
-        <Button
-          label={t('person.unclaim')}
-          accessibilityLabel={t('person.unclaimLabel', { occasion: label })}
-          tone="secondary"
-          onPress={() => {
-            unclaimOccasion(occasion.id).catch(() => undefined);
-            onClose();
-          }}
-        />
-      ) : null}
       {hidden || locked ? null : (
         <Button label={t('person.purchase')} tone="secondary" onPress={() => onPurchase(state?.savedIdea ?? '')} />
       )}
@@ -951,82 +842,19 @@ function OccasionMenu({
   );
 }
 
-function buyerLine(boughtBy: string | undefined, uid: string | null, members: Parameters<typeof buyerLabel>[2]): string {
-  const buyer = buyerLabel(boughtBy, uid, members);
-  if (buyer.kind === 'you') {
-    return t('person.boughtByYou');
-  }
-  if (buyer.kind === 'name') {
-    return t('person.boughtBy', { name: buyer.name });
-  }
-  return '';
-}
-
 function SpendBreakdown({ personId, budgetCents, money }: { personId: string; budgetCents: number | null; money: (cents: number) => string }) {
   const { snapshot } = useGifteez();
   const year = new Date().getFullYear();
-  const sharedYear = yearSpentCents(personId, snapshot.gifts, year);
-  const sharedAll = allTimeSpentCents(personId, snapshot.gifts);
-  const privateYear = yearSpentCents(
-    personId,
-    (snapshot.privateGifts ?? []).filter(gift => gift.groupId === snapshot.group?.id).map(gift => ({
-      ...gift,
-      occasionId: gift.occasionId,
-    })),
-    year,
-  );
-  const privateAll = allTimeSpentCents(
-    personId,
-    (snapshot.privateGifts ?? []).filter(gift => gift.groupId === snapshot.group?.id).map(gift => ({ ...gift })),
-  );
-  const spend = spendByMember({
-    personId,
-    gifts: snapshot.gifts,
-    privateGifts: snapshot.privateGifts ?? [],
-    members: snapshot.members,
-    selfUid: snapshot.profile.uid,
-    year,
-    groupId: snapshot.group?.id ?? null,
-  });
+  const yearTotal = yearSpentCents(personId, snapshot.gifts, year);
+  const allTotal = allTimeSpentCents(personId, snapshot.gifts);
   return (
     <Card>
       <Heading>{t('person.spendTitle')}</Heading>
-      <Body>{t('person.yearTotal', { amount: money(sharedYear) })}</Body>
-      <Body>{t('person.allTotal', { amount: money(sharedAll) })}</Body>
-      {privateYear > 0 || privateAll > 0 ? <Caption>{t('person.privateSpend', { amount: money(privateYear) })}</Caption> : null}
+      <Body>{t('person.yearTotal', { amount: money(yearTotal) })}</Body>
+      <Body>{t('person.allTotal', { amount: money(allTotal) })}</Body>
       <Body>{budgetCents == null ? t('person.noBudget') : t('person.budgetLine', { amount: money(budgetCents) })}</Body>
-      {spend.rows.map(row => (
-        <Caption key={row.uid}>
-          {`${row.self ? t('person.spendYou') : row.name} · ${t('person.spendYear', { amount: money(row.yearCents) })} · ${t('person.spendAll', { amount: money(row.allCents) })}`}
-        </Caption>
-      ))}
-      {spend.unknownAllCents > 0 ? (
-        <Caption>
-          {`${t('person.spendUnknown')} · ${t('person.spendYear', { amount: money(spend.unknownYearCents) })} · ${t('person.spendAll', { amount: money(spend.unknownAllCents) })}`}
-        </Caption>
-      ) : null}
     </Card>
   );
-}
-
-function PurchaseWarning({ occasionId, date }: { occasionId: string; date: string }) {
-  const { snapshot } = useGifteez();
-  const occasion = snapshot.occasions.find(item => item.id === occasionId);
-  if (!occasion) {
-    return null;
-  }
-  const year = Number(date.slice(0, 4)) || occurrenceYear(occasion, new Date());
-  const other = claimWarningUid({
-    states: snapshot.states,
-    occasion,
-    purchaseYear: year,
-    today: new Date(),
-    uid: snapshot.profile.uid,
-  });
-  if (!other) {
-    return null;
-  }
-  return <Caption>{t('purchase.claimedWarning', { name: claimerName(other, snapshot.members) })}</Caption>;
 }
 
 function ReminderOffer() {
@@ -1118,7 +946,6 @@ function GiftSheet({
   giftError,
   priceError,
   dateError,
-  occasionId,
   saveLabel,
   saveAccessibilityLabel,
   onGift,
@@ -1134,7 +961,6 @@ function GiftSheet({
   giftError: string;
   priceError: string;
   dateError: string;
-  occasionId?: string;
   saveLabel: string;
   saveAccessibilityLabel?: string;
   onGift: (value: string) => void;
@@ -1146,7 +972,6 @@ function GiftSheet({
   return (
     <Sheet visible onClose={onClose}>
       <Heading>{title}</Heading>
-      {occasionId ? <PurchaseWarning occasionId={occasionId} date={date} /> : null}
       <Field label={t('purchase.gift')} value={gift} error={giftError} onChangeText={onGift} />
       <Field label={t('purchase.price')} value={price} error={priceError} onChangeText={onPrice} keyboardType="decimal-pad" />
       <DateField label={t('purchase.date')} value={date} error={dateError} maximumDate={new Date()} onChange={onDate} />

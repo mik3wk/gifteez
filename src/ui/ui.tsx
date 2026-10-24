@@ -98,7 +98,7 @@ function StickerBox({
   );
 }
 
-export type TabId = 'people' | 'fairness' | 'group' | 'settings';
+export type TabId = 'people' | 'fairness' | 'settings';
 
 export function Screen({
   children,
@@ -1057,10 +1057,9 @@ export function AppHeader({ title, greeting }: { title: string; greeting?: strin
   );
 }
 
-const TABS: Array<{ id: TabId; icon: IconName; label: string; route: 'People' | 'Fairness' | 'Group' | 'Settings' }> = [
+const TABS: Array<{ id: TabId; icon: IconName; label: string; route: 'People' | 'Fairness' | 'Settings' }> = [
   { id: 'people', icon: 'people', label: t('people.home'), route: 'People' },
   { id: 'fairness', icon: 'scale', label: t('people.fairness'), route: 'Fairness' },
-  { id: 'group', icon: 'gift', label: t('people.group'), route: 'Group' },
   { id: 'settings', icon: 'gear', label: t('people.settings'), route: 'Settings' },
 ];
 
@@ -1260,104 +1259,11 @@ export function UnlockSheet({ visible, onClose }: { visible: boolean; onClose: (
   return (
     <Sheet visible={visible} onClose={onClose}>
       <Title>{t('settings.unlock')}</Title>
-      <Body>{t('groupScreen.oneList')}</Body>
+      <Body>{t('errors.oneList')}</Body>
       <Body>{t('settings.unlockPrice', { price })}</Body>
       {storeReady ? null : <Body>{t('settings.storeMissing')}</Body>}
       <Button label={t('settings.unlock')} onPress={buy} />
       <Button label={t('settings.restore')} tone="secondary" onPress={restorePurchases} />
-    </Sheet>
-  );
-}
-
-export function AccountSheet({
-  visible,
-  allowName,
-  showCreate,
-  onCreate,
-  onClose,
-}: {
-  visible: boolean;
-  allowName: boolean;
-  showCreate: boolean;
-  onCreate?: (name: string, groupName: string) => void;
-  onClose: () => void;
-}) {
-  const { snapshot, sendEmail, finishEmail, sendPhone, confirmPhone } = useGifteez();
-  const [name, setName] = useState(snapshot.profile.displayName);
-  const [groupName, setGroupName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
-  const [link, setLink] = useState('');
-  const [sms, setSms] = useState(false);
-  const [emailError, setEmailError] = useState('');
-  const [linkSent, setLinkSent] = useState(false);
-  return (
-    <Sheet visible={visible} onClose={onClose}>
-      <Title>{showCreate ? t('groupCreate.title') : t('settings.account')}</Title>
-      <Body>{showCreate ? t('groupCreate.body') : t('settings.anonymous')}</Body>
-      {allowName ? (
-        <Field label={t('groupCreate.name')} value={name} onChangeText={setName} textContentType="name" autoComplete="name" />
-      ) : null}
-      {showCreate ? (
-        <>
-          <Field label={t('groupCreate.listName')} value={groupName} onChangeText={setGroupName} />
-          <Body>{t('groupCreate.listNameHint')}</Body>
-        </>
-      ) : null}
-      {showCreate && onCreate ? <Button label={t('groupCreate.create')} onPress={() => onCreate(name, groupName)} /> : null}
-      <Heading>{t('groupCreate.secureTitle')}</Heading>
-      <Body>{t('groupCreate.secureBody')}</Body>
-      <Body>{t('groupCreate.emailWhy')}</Body>
-      <Field
-        label={t('groupCreate.email')}
-        value={email}
-        error={emailError}
-        onChangeText={value => {
-          setEmail(value);
-          setEmailError('');
-        }}
-        keyboardType="email-address"
-        textContentType="emailAddress"
-        autoComplete="email"
-      />
-      <Button
-        label={t('groupCreate.sendLink')}
-        tone={showCreate || linkSent ? 'secondary' : 'primary'}
-        onPress={() => {
-          if (!email.includes('@')) {
-            setEmailError(t('errors.email'));
-            return;
-          }
-          setLinkSent(true);
-          return sendEmail(email);
-        }}
-        disabled={!email.trim()}
-        hint={t('groupCreate.emailFirst')}
-      />
-      {linkSent ? (
-        <>
-          <Field label={t('groupCreate.pasteLink')} value={link} onChangeText={setLink} />
-          <Button
-            label={t('groupCreate.finishLink')}
-            tone={showCreate ? 'secondary' : 'primary'}
-            onPress={() => finishEmail(link)}
-            disabled={!link.trim()}
-            hint={t('groupCreate.linkFirst')}
-          />
-        </>
-      ) : null}
-      <Button label={t('groupCreate.useSms')} onPress={() => setSms(true)} tone="secondary" />
-      {sms ? (
-        <>
-          <Body>{t('groupCreate.smsRegion')}</Body>
-          <Field label={t('groupCreate.phone')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" textContentType="telephoneNumber" autoComplete="tel" />
-          <Button label={t('groupCreate.sendCode')} tone="secondary" onPress={() => sendPhone(phone)} disabled={!phone.trim()} hint={t('groupCreate.phoneFirst')} />
-          <Field label={t('groupCreate.code')} value={code} onChangeText={setCode} keyboardType="number-pad" textContentType="oneTimeCode" autoComplete="sms-otp" />
-          <Button label={t('groupCreate.confirmCode')} tone="secondary" onPress={() => confirmPhone(code)} disabled={!code.trim()} hint={t('groupCreate.codeFirst')} />
-        </>
-      ) : null}
-      {showCreate ? <Button label={t('groupCreate.skip')} onPress={onClose} tone="ghost" /> : null}
     </Sheet>
   );
 }
