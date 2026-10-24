@@ -288,3 +288,35 @@ export function decideCacheLoad(input: {
     return { ok: false, reason, blob: input.blob };
   }
 }
+
+/**
+ * A save that empties the list, or drops it below half, is refused.
+ * One person removed from a longer list is small enough to keep.
+ * An explicit delete or restore sets allowShrink.
+ */
+export function peopleShrinkBlocked(storedPeople: number, nextPeople: number, allowShrink: boolean): boolean {
+  if (allowShrink || storedPeople <= 0 || nextPeople >= storedPeople) {
+    return false;
+  }
+  if (nextPeople === 0) {
+    return true;
+  }
+  return nextPeople * 2 < storedPeople;
+}
+
+/** No disk write until hydration has finished, and no empty overwrite of a real list. */
+export function decideCommit(input: {
+  hydrated: boolean;
+  sealed: boolean;
+  storedPeople: number;
+  nextPeople: number;
+  allowShrink?: boolean;
+}): 'write' | 'hold' {
+  if (input.sealed || !input.hydrated) {
+    return 'hold';
+  }
+  if (peopleShrinkBlocked(input.storedPeople, input.nextPeople, input.allowShrink === true)) {
+    return 'hold';
+  }
+  return 'write';
+}

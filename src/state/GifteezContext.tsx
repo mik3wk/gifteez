@@ -29,7 +29,7 @@ import { emptySnapshot, type AppSnapshot, type GiftIdea, type Occasion, type Occ
 import { formatDate, t } from '../i18n';
 import { applyAppearance, loadAppearance, saveAppearance, type AppearanceChoice } from '../platform/appearance';
 import { isIncomingBackup, pickBackupText, readBackupUri, shareBackupFile } from '../platform/backupFile';
-import { readCacheBlob, writeCacheBlob } from '../platform/cache';
+import { keepPreviousBlob, readCacheBlob, writeCacheBlob } from '../platform/cache';
 import { deviceId } from '../platform/device';
 import { activeSkinParam, callFunction, downloadSkin, ensureAnonymousUser, initFirebase } from '../platform/firebase';
 import { importContacts, sweepBirthdays } from '../platform/importers';
@@ -38,7 +38,7 @@ import { applyReminderPlan, cancelReminderPlan, requestReminderPermission } from
 import { loadSecret, saveSecret } from '../platform/secure';
 import { occasionLabel, planOccasion, presetFor } from '../domain/occasions';
 import { exportBackup, migrateToLocal, parseBackup, summarizeBackup, type BackupFailure } from '../domain/backup';
-import { CacheStageError, decideCacheLoad, type CacheLoadFailure } from '../domain/snapshotLoad';
+import { CacheStageError, decideCacheLoad, decideCommit, type CacheLoadFailure } from '../domain/snapshotLoad';
 import { normalizeStoredDate, parseLocalDate } from '../domain/calendarDate';
 import { relationshipCircleName, relationshipLabel, storeRelationship, type RelationshipPresetKey } from '../domain/relationship';
 import { acceptSuggestion, addCircle, assignCircle, cleanCircleName, removeCircle, renameCircle as renameStoredCircle } from '../domain/circles';
@@ -159,6 +159,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const [recoveryStage, setRecoveryStage] = useState<CacheLoadFailure | null>(null);
   const sealedHold = useRef<string | null>(null);
   const cacheReady = useRef(false);
+  const persistedPeople = useRef(0);
   const [startupDetail, setStartupDetail] = useState<string | null>(null);
   const [resumePersonId, setResumePersonId] = useState<string | null>(null);
   const clearResumePerson = useCallback(() => setResumePersonId(null), []);
@@ -185,15 +186,26 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const downloadedRef = useRef(downloaded);
   downloadedRef.current = downloaded;
 
-  const commit = useCallback(async (next: AppSnapshot) => {
-    if (sealedHold.current || !cacheReady.current) {
+  const commit = useCallback(async (next: AppSnapshot, allowShrink = false) => {
+    const nextPeople = next.people.filter(person => !person.deleted).length;
+    if (decideCommit({
+      hydrated: cacheReady.current,
+      sealed: sealedHold.current != null,
+      storedPeople: persistedPeople.current,
+      nextPeople,
+      allowShrink,
+    }) === 'hold') {
       return;
     }
     const stored = parkActive(next);
     snapshotRef.current = stored;
+    persistedPeople.current = nextPeople;
     setSnapshot(stored);
     const key = await ensureDeviceKey();
-    await writeCacheBlob(sealJson(next, key));
+    const sealed = sealJson(next, key);
+    const current = await readCacheBlob();
+    await keepPreviousBlob(current, sealed);
+    await writeCacheBlob(sealed);
   }, []);
 
   const undoRestore = useRef<(() => Promise<void>) | null>(null);
@@ -300,6 +312,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
 
   useEffect(() => {
     let cancelled = false;
+    cacheReady.current = false;
     (async () => {
       try {
         const result = await loadSnapshot();
@@ -312,12 +325,13 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           setDataRecovery(true);
           return;
         }
-        cacheReady.current = true;
-        sealedHold.current = null;
-        setRecoveryStage(null);
-        setDataRecovery(false);
         const loaded = migrateToLocal(result.snapshot);
         snapshotRef.current = loaded;
+        persistedPeople.current = loaded.people.filter(person => !person.deleted).length;
+        sealedHold.current = null;
+        cacheReady.current = true;
+        setRecoveryStage(null);
+        setDataRecovery(false);
         setSnapshot(loaded);
         await commit(loaded);
         let next = loaded;
@@ -480,14 +494,16 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     }
     const current = snapshotRef.current;
     const held = sealedHold.current;
+    const restored = restoredSnapshot(current, parsed.snapshot);
+    persistedPeople.current = current.people.filter(person => !person.deleted).length;
     cacheReady.current = true;
     sealedHold.current = null;
     setRecoveryStage(null);
     setDataRecovery(false);
-    await commit(restoredSnapshot(current, parsed.snapshot));
+    await commit(restored, true);
     if (!held) {
       offerUndo(t('settings.restoreDone'), async () => {
-        await commit(current);
+        await commit(current, true);
         sync().catch(() => undefined);
       }, () => sync());
     }
@@ -686,7 +702,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       if (!result.ok) {
         return;
       }
-      await commit(result.snapshot);
+      await commit(result.snapshot, true);
       haptic('warning');
       offerUndo(t('person.removed', { name }), async () => {
         await commit(before);

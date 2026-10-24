@@ -1,5 +1,5 @@
 import { keyFromString, keyToString, openJson, randomKey, sealJson } from '../src/crypto/crypto';
-import { CacheStageError, decideCacheLoad, normalizeStoredSnapshot } from '../src/domain/snapshotLoad';
+import { CacheStageError, decideCacheLoad, decideCommit, normalizeStoredSnapshot } from '../src/domain/snapshotLoad';
 
 function round5bList() {
   return {
@@ -187,4 +187,50 @@ test('a blob that cannot be decrypted or has no key stays the raw blob', () => {
     open: () => ({ version: 1, note: 'not a list' }),
   });
   expect(validated).toEqual({ ok: false, reason: 'validate', blob });
+});
+
+test('a save before hydration, or an empty list over a real one, does not write', () => {
+  const beforeHydration = decideCommit({
+    hydrated: false,
+    sealed: false,
+    storedPeople: 0,
+    nextPeople: 0,
+  });
+  expect(beforeHydration).toBe('hold');
+  const lateEmpty = decideCommit({
+    hydrated: true,
+    sealed: false,
+    storedPeople: 1,
+    nextPeople: 0,
+  });
+  expect(lateEmpty).toBe('hold');
+  const wiped = decideCommit({
+    hydrated: true,
+    sealed: false,
+    storedPeople: 5,
+    nextPeople: 2,
+  });
+  expect(wiped).toBe('hold');
+  const oneRemoved = decideCommit({
+    hydrated: true,
+    sealed: false,
+    storedPeople: 5,
+    nextPeople: 4,
+  });
+  expect(oneRemoved).toBe('write');
+  const explicitDelete = decideCommit({
+    hydrated: true,
+    sealed: false,
+    storedPeople: 1,
+    nextPeople: 0,
+    allowShrink: true,
+  });
+  expect(explicitDelete).toBe('write');
+  const sealed = decideCommit({
+    hydrated: true,
+    sealed: true,
+    storedPeople: 1,
+    nextPeople: 1,
+  });
+  expect(sealed).toBe('hold');
 });
