@@ -1,4 +1,4 @@
-import { draftStatus, draftsFromEvents, eventDraft, initiallyChosen } from '../src/domain/calendarImport';
+import { calendarAddLabel, calendarSelection, draftStatus, draftsFromEvents, eventDraft, initiallyChosen } from '../src/domain/calendarImport';
 import { t } from '../src/i18n';
 
 test('calendar titles become occasions and other events are ignored', () => {
@@ -79,7 +79,8 @@ test('drafts match a living person and collapse the same date', () => {
   const birthday = eventDraft('Birthday', '2026-05-01');
   const named = eventDraft("Ada's birthday", '2026-05-02');
   expect(initiallyChosen(birthday!)).toBe(false);
-  expect(initiallyChosen(named!)).toBe(true);
+  expect(initiallyChosen(named!)).toBe(false);
+  expect(initiallyChosen({ ...named!, personId: 'ada' })).toBe(true);
 });
 
 test('an occasion that already exists is unticked and not offered again', () => {
@@ -109,4 +110,18 @@ test('an occasion that already exists is unticked and not offered again', () => 
   expect(removed[0].alreadyAdded).toBeFalsy();
   expect(initiallyChosen(removed[0])).toBe(true);
   expect(draftStatus({ name: 'Sam', personId: null })).toBe('newPerson');
+  expect(initiallyChosen({ name: 'Sam', personId: null })).toBe(false);
+});
+
+test('the calendar button counts new people and occasions', () => {
+  const picked = [
+    { name: 'Leo', personId: null },
+    { name: 'Maya', personId: null },
+    { name: 'Maya', personId: null },
+    { name: 'Ada', personId: 'ada' },
+  ];
+  expect(calendarSelection(picked)).toEqual({ people: 2, occasions: 4 });
+  expect(calendarAddLabel(2, 3)).toBe('Add 2 people · 3 occasions');
+  expect(calendarAddLabel(1, 1)).toBe('Add 1 person · 1 occasion');
+  expect(calendarAddLabel(0, 3)).toBe('Add 3 occasions');
 });

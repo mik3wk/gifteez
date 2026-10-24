@@ -1,4 +1,5 @@
 import { monthDayFromStored } from './calendarDate';
+import { t } from '../i18n';
 
 export type CalendarOccasion = 'birthday' | 'anniversary' | 'wedding';
 
@@ -43,10 +44,54 @@ export function eventDraft(title: string, start: string): Omit<CalendarDraft, 'k
   };
 }
 
-/** Clear names start selected. Unclear titles, including a bare "Birthday", start off.
- *  An occasion that is already on the person starts off and stays off. */
-export function initiallyChosen(draft: { name: string; nameEditable?: boolean; alreadyAdded?: boolean }): boolean {
-  return !draft.alreadyAdded && !draft.nameEditable && Boolean(draft.name.trim());
+/** Someone already on the list starts selected when the occasion is new.
+ *  People who are not on the list start off, as do unclear titles and occasions already stored. */
+export function initiallyChosen(draft: {
+  name: string;
+  nameEditable?: boolean;
+  alreadyAdded?: boolean;
+  personId?: string | null;
+}): boolean {
+  return !draft.alreadyAdded && !draft.nameEditable && Boolean(draft.personId) && Boolean(draft.name.trim());
+}
+
+/** New names count once. Every selected row is an occasion. */
+export function calendarSelection(drafts: Array<{ name: string; personId: string | null; alreadyAdded?: boolean }>): {
+  people: number;
+  occasions: number;
+} {
+  const names = new Set<string>();
+  let occasions = 0;
+  drafts.forEach(draft => {
+    if (draft.alreadyAdded) {
+      return;
+    }
+    const name = draft.name.trim().toLowerCase();
+    if (!name) {
+      return;
+    }
+    occasions += 1;
+    if (!draft.personId) {
+      names.add(name);
+    }
+  });
+  return { people: names.size, occasions };
+}
+
+export function calendarAddLabel(people: number, occasions: number): string {
+  if (people > 0 && occasions > 0) {
+    const peopleText = people === 1
+      ? t('importFlow.onePerson', { count: people })
+      : t('importFlow.manyPeople', { count: people });
+    const occasionsText = occasions === 1
+      ? t('importFlow.oneOccasion', { count: occasions })
+      : t('importFlow.manyOccasions', { count: occasions });
+    return t('importFlow.addBoth', { people: peopleText, occasions: occasionsText });
+  }
+  if (people > 0) {
+    return people === 1 ? t('importFlow.addPersonOne') : t('importFlow.addPersonMany', { count: people });
+  }
+  return occasions === 1 ? t('importFlow.addOne') : t('importFlow.addMany', { count: occasions });
 }
 
 export function draftStatus(draft: {

@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { draftStatus, initiallyChosen, type CalendarDraft } from '../domain/calendarImport';
+import { getEnv } from '../config/env';
+import { calendarAddLabel, calendarSelection, draftStatus, initiallyChosen, type CalendarDraft } from '../domain/calendarImport';
+import { contactAddDecision, freeSlotsLeft } from '../domain/contactImport';
+import { accountUnlocked, activePeopleCount } from '../domain/logic';
 import { scanCalendar } from '../platform/importers';
 import { deviceLocale, formatDate, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
@@ -49,8 +52,19 @@ export function CalendarReviewLink({
   }
 
   const chosen = drafts.filter(item => !item.alreadyAdded && picked[item.key]);
+  const summary = calendarSelection(chosen);
+  const slotsLeft = freeSlotsLeft(
+    activePeopleCount(gifteez.snapshot),
+    getEnv().freeTierMaxPeople,
+    accountUnlocked(gifteez.snapshot),
+  );
+  const slotsShown = slotsLeft == null ? null : Math.max(0, slotsLeft - summary.people);
 
   async function addChosen() {
+    if (summary.people > 0 && contactAddDecision(summary.people, slotsLeft) === 'paywall') {
+      gifteez.openPaywall();
+      return;
+    }
     setBusy(true);
     const created = new Map<string, string>();
     const added = new Set<string>();
@@ -116,6 +130,7 @@ export function CalendarReviewLink({
         <Caption>{t('importFlow.readOnly')}</Caption>
         {denied ? <Body>{t('importFlow.denied')}</Body> : null}
         {!denied && drafts.length === 0 ? <Body>{t('importFlow.none')}</Body> : null}
+        {!denied && slotsShown != null ? <Caption>{t('importFlow.freeLeft', { left: slotsShown, limit: getEnv().freeTierMaxPeople })}</Caption> : null}
         {drafts.map(draft => {
           const when = formatDate(new Date(2026, draft.month - 1, draft.day), deviceLocale());
           const status = draftStatus(draft);
@@ -168,9 +183,9 @@ export function CalendarReviewLink({
             </View>
           );
         })}
-        {chosen.length > 0 ? (
+        {summary.people > 0 || summary.occasions > 0 ? (
           <Button
-            label={chosen.length === 1 ? t('importFlow.addOne') : t('importFlow.addMany', { count: chosen.length })}
+            label={calendarAddLabel(summary.people, summary.occasions)}
             busy={busy}
             onPress={() => { addChosen().catch(() => undefined); }}
           />

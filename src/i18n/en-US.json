@@ -595,7 +595,12 @@
     "alreadyAdded": "Already added",
     "newPerson": "Adds {name}",
     "addOne": "Add 1 occasion",
-    "addMany": "Add {count} occasions"
+    "addMany": "Add {count} occasions",
+    "onePerson": "{count} person",
+    "manyPeople": "{count} people",
+    "oneOccasion": "{count} occasion",
+    "manyOccasions": "{count} occasions",
+    "addBoth": "Add {people} · {occasions}"
   },
   "sync": {
     "otherDevice": "Updated on another device",
