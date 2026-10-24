@@ -23,3 +23,25 @@ export function StartupScreen({
     </Screen>
   );
 }
+
+export function DataRecoveryScreen({
+  onRetry,
+  onRestore,
+  onExport,
+}: {
+  onRetry: () => void;
+  onRestore: () => void;
+  onExport: () => void;
+}) {
+  const title = t('recovery.title');
+  return (
+    <Screen centered>
+      <ArtSlot name="error" size={160} />
+      <Title accessibilityLabel={title}>{title}</Title>
+      <Body>{t('recovery.body')}</Body>
+      <Button label={t('recovery.retry')} onPress={onRetry} />
+      <Button label={t('recovery.restore')} tone="secondary" onPress={onRestore} />
+      <Button label={t('recovery.export')} tone="secondary" onPress={onExport} />
+    </Screen>
+  );
+}

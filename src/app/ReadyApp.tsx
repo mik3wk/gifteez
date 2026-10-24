@@ -9,7 +9,7 @@ import { FirstOpenScreen } from '../screens/FirstOpen';
 import { FairnessScreen, SettingsScreen } from '../screens/MoreScreens';
 import { HomeScreen } from '../screens/HomeScreen';
 import { PeopleScreen } from '../screens/PeopleScreen';
-import { StartupScreen } from '../screens/StartupScreen';
+import { DataRecoveryScreen, StartupScreen } from '../screens/StartupScreen';
 import { GifteezProvider, useGifteez } from '../state/GifteezContext';
 import { listenForReminderOpens } from '../platform/reminders';
 import { sticker, type as appType } from '../theme/tokens';
@@ -60,8 +60,9 @@ function Navigator() {
     }
   }), []);
   const coverBoot = !gifteez.ready || holdBrand;
-  const showFailure = !coverBoot && Boolean(gifteez.startupFailure);
-  const showNav = !coverBoot && !gifteez.startupFailure;
+  const showRecovery = !coverBoot && gifteez.dataRecovery;
+  const showFailure = !coverBoot && !showRecovery && Boolean(gifteez.startupFailure);
+  const showNav = !coverBoot && !showRecovery && !gifteez.startupFailure;
   useEffect(() => {
     if (coverBoot) {
       return undefined;
@@ -76,6 +77,13 @@ function Navigator() {
   }, [coverBoot, logoOpacity, reduceMotion, showNav]);
   return (
     <View style={[styles.fill, { backgroundColor: logoMounted ? launchBackground : gifteez.colors.background }]}>
+      {showRecovery ? (
+        <DataRecoveryScreen
+          onRetry={gifteez.retryStartup}
+          onRestore={() => { gifteez.pickBackup().catch(() => undefined); }}
+          onExport={() => { gifteez.exportRawCache().catch(() => undefined); }}
+        />
+      ) : null}
       {showFailure ? (
         <StartupScreen
           kind={gifteez.startupFailure ?? 'unknown'}
@@ -125,7 +133,7 @@ function Navigator() {
         </Animated.View>
       ) : null}
       {showNav && gifteez.offline ? <OfflineBanner text={t('sync.offlineBanner')} /> : null}
-      {showNav && gifteez.error ? (
+      {(showNav || showRecovery) && gifteez.error ? (
         <Notice text={gifteez.error} tone="danger" onClose={gifteez.clearError} />
       ) : showNav && gifteez.notice ? (
         <Notice
@@ -141,9 +149,9 @@ function Navigator() {
           <ConfettiBurst key={gifteez.confetti} />
         </View>
       ) : null}
-      {showNav ? <ConfirmHost /> : null}
+      {showNav || showRecovery ? <ConfirmHost /> : null}
       {showNav ? <UnlockSheet visible={gifteez.paywallOpen} onClose={gifteez.dismissPaywall} /> : null}
-      {showNav ? <IncomingRestore /> : null}
+      {showNav || showRecovery ? <IncomingRestore /> : null}
     </View>
   );
 }

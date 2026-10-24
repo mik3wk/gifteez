@@ -15,6 +15,13 @@
     "retry": "Retry",
     "retryLabel": "Retry starting Gifteez"
   },
+  "recovery": {
+    "title": "We couldn't open your saved data",
+    "body": "The copy on this phone is still here. Nothing was replaced.",
+    "retry": "Try again",
+    "restore": "Restore from backup",
+    "export": "Export the raw file"
+  },
   "firstOpen": {
     "title": "Who are you shopping for?",
     "lead": "Type their name. Gift ideas are on the next screen.",

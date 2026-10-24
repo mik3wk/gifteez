@@ -38,6 +38,7 @@ import { applyReminderPlan, cancelReminderPlan, requestReminderPermission } from
 import { loadSecret, saveSecret } from '../platform/secure';
 import { occasionLabel, planOccasion, presetFor } from '../domain/occasions';
 import { exportBackup, migrateToLocal, parseBackup, summarizeBackup, type BackupFailure } from '../domain/backup';
+import { decideCacheLoad } from '../domain/snapshotLoad';
 import { normalizeStoredDate, parseLocalDate } from '../domain/calendarDate';
 import { relationshipCircleName, relationshipLabel, storeRelationship, type RelationshipPresetKey } from '../domain/relationship';
 import { acceptSuggestion, addCircle, assignCircle, cleanCircleName, removeCircle, renameCircle as renameStoredCircle } from '../domain/circles';
@@ -63,6 +64,9 @@ type GifteezApi = {
   startupFailure: StartupFailure | null;
   startupDetail: string | null;
   retryStartup: () => void;
+  /** A saved blob exists and could not be opened. The raw bytes are still in storage. */
+  dataRecovery: boolean;
+  exportRawCache: () => Promise<void>;
   resumePersonId: string | null;
   openPerson: (personId: string) => void;
   clearResumePerson: () => void;
@@ -149,6 +153,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   }, []);
   const [error, setError] = useState<string | null>(null);
   const [startupFailure, setStartupFailure] = useState<StartupFailure | null>(null);
+  const [dataRecovery, setDataRecovery] = useState(false);
+  const sealedHold = useRef<string | null>(null);
+  const cacheReady = useRef(false);
   const [startupDetail, setStartupDetail] = useState<string | null>(null);
   const [resumePersonId, setResumePersonId] = useState<string | null>(null);
   const clearResumePerson = useCallback(() => setResumePersonId(null), []);
@@ -176,6 +183,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   downloadedRef.current = downloaded;
 
   const commit = useCallback(async (next: AppSnapshot) => {
+    if (sealedHold.current || !cacheReady.current) {
+      return;
+    }
     const stored = parkActive(next);
     snapshotRef.current = stored;
     setSnapshot(stored);
@@ -289,10 +299,19 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     let cancelled = false;
     (async () => {
       try {
-        const loaded = migrateToLocal(await loadSnapshot());
+        const result = await loadSnapshot();
         if (cancelled) {
           return;
         }
+        if (!result.ok) {
+          sealedHold.current = result.blob;
+          setDataRecovery(true);
+          return;
+        }
+        cacheReady.current = true;
+        sealedHold.current = null;
+        setDataRecovery(false);
+        const loaded = migrateToLocal(result.snapshot);
         snapshotRef.current = loaded;
         setSnapshot(loaded);
         await commit(loaded);
@@ -455,11 +474,17 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       return parsed.reason;
     }
     const current = snapshotRef.current;
+    const held = sealedHold.current;
+    cacheReady.current = true;
+    sealedHold.current = null;
+    setDataRecovery(false);
     await commit(restoredSnapshot(current, parsed.snapshot));
-    offerUndo(t('settings.restoreDone'), async () => {
-      await commit(current);
-      sync().catch(() => undefined);
-    }, () => sync());
+    if (!held) {
+      offerUndo(t('settings.restoreDone'), async () => {
+        await commit(current);
+        sync().catch(() => undefined);
+      }, () => sync());
+    }
     return 'ok';
   }, [commit, offerUndo, sync]);
 
@@ -509,6 +534,14 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     retryStartup: () => {
       setReady(false);
       setBootId(value => value + 1);
+    },
+    dataRecovery,
+    exportRawCache: async () => {
+      const blob = sealedHold.current ?? await readCacheBlob();
+      if (!blob) {
+        return;
+      }
+      await shareBackupFile(blob, 'Gifteez saved data.txt');
     },
     resumePersonId,
     openPerson: setResumePersonId,
@@ -1079,7 +1112,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       return addImported(rows);
     },
-  }), [addImported, appearance, applyRestore, canUndo, clearResumePerson, cloudRemaining, colors, commit, completedPersonId, confetti, env, error, fail, incomingBackup, notice, noticeArt, offerUndo, offline, onNavigate, paywallOpen, ready, resumePersonId, runUndo, setNotice, showNotice, skinId, snapshot, stageRestore, startupDetail, startupFailure, storeBusy, storeProduct, storeReady, sync]);
+  }), [addImported, appearance, applyRestore, canUndo, clearResumePerson, cloudRemaining, colors, commit, completedPersonId, confetti, dataRecovery, env, error, fail, incomingBackup, notice, noticeArt, offerUndo, offline, onNavigate, paywallOpen, ready, resumePersonId, runUndo, setNotice, showNotice, skinId, snapshot, stageRestore, startupDetail, startupFailure, storeBusy, storeProduct, storeReady, sync]);
 
   return <GifteezContext.Provider value={api}>{children}</GifteezContext.Provider>;
 }
@@ -1095,30 +1128,15 @@ async function ensureDeviceKey(): Promise<Uint8Array> {
   return key;
 }
 
-async function loadSnapshot(): Promise<AppSnapshot> {
-  const key = await ensureDeviceKey();
+async function loadSnapshot() {
   const blob = await readCacheBlob();
-  if (!blob) {
-    return emptySnapshot(Date.now());
-  }
-  try {
-    const parsed = openJson<AppSnapshot>(blob, key);
-    if (parsed?.version !== 1 || !parsed.profile) {
-      return emptySnapshot(Date.now());
-    }
-    const base = emptySnapshot(Date.now());
-    return {
-      ...base,
-      ...parsed,
-      releasedGroupIds: Array.isArray(parsed.releasedGroupIds) ? parsed.releasedGroupIds : [],
-      privateGifts: Array.isArray(parsed.privateGifts) ? parsed.privateGifts : [],
-      mergeJournal: parsed.mergeJournal ?? null,
-      pendingMembership: Array.isArray(parsed.pendingMembership) ? parsed.pendingMembership : [],
-      profile: { ...base.profile, ...parsed.profile, reminders: parsed.profile.reminders ?? 'unset' },
-    };
-  } catch {
-    return emptySnapshot(Date.now());
-  }
+  const key = blob ? await loadSecret('device-key') : null;
+  return decideCacheLoad({
+    blob,
+    key,
+    now: Date.now(),
+    open: (payload, stored) => openJson(payload, keyFromString(stored)),
+  });
 }
 
 
