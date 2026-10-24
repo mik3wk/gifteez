@@ -15,8 +15,16 @@ export type Person = {
   deleted?: boolean;
   /** Member who must not read this person's gifts, claims, or ideas. Plaintext on the server doc. */
   linkedUid?: string;
-  /** Optional label such as Mom or Neighbor. Stays on this phone and is omitted from group ciphertext. */
+  /** Optional label such as Mom or Neighbor. A preset is stored as its stable key. Older lists stored the English label. */
   relationship?: string;
+  /** At most one fairness circle. Missing means this person is not compared with anyone. */
+  circleId?: string;
+};
+
+export type Circle = {
+  id: string;
+  name: string;
+  createdAt: number;
 };
 
 export type Occasion = {
@@ -204,6 +212,7 @@ export type AppSnapshot = {
   group: GroupMeta | null;
   members: Member[];
   people: Person[];
+  circles: Circle[];
   occasions: Occasion[];
   states: OccasionState[];
   gifts: GiftRecord[];
@@ -250,6 +259,7 @@ export function emptySnapshot(now: number): AppSnapshot {
     group: null,
     members: [],
     people: [],
+    circles: [],
     occasions: [],
     states: [],
     gifts: [],

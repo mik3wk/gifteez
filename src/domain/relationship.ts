@@ -1,8 +1,9 @@
+import { t } from '../i18n';
 import type { Person } from './types';
 
 export const RELATIONSHIP_MAX = 40;
 
-/** Stored as the label. Keys match en-US `relationshipPresets`. */
+/** Preset keys match en-US `relationshipPresets`. Older lists stored the English label. */
 export const RELATIONSHIP_PRESET_KEYS = [
   'mom',
   'dad',
@@ -33,6 +34,51 @@ export const RELATIONSHIP_PRESET_KEYS = [
 ] as const;
 
 export type RelationshipPresetKey = (typeof RELATIONSHIP_PRESET_KEYS)[number];
+
+/** Chips shown before More. Order is the default row. */
+export const DEFAULT_RELATIONSHIP_KEYS = [
+  'mom',
+  'dad',
+  'sister',
+  'brother',
+  'partner',
+  'child',
+  'cousin',
+  'friend',
+] as const satisfies readonly RelationshipPresetKey[];
+
+export function relationshipKey(value: string | undefined | null): RelationshipPresetKey | null {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed) {
+    return null;
+  }
+  if ((RELATIONSHIP_PRESET_KEYS as readonly string[]).includes(trimmed)) {
+    return trimmed as RelationshipPresetKey;
+  }
+  return RELATIONSHIP_PRESET_KEYS.find(key => t(`relationshipPresets.${key}`) === trimmed) ?? null;
+}
+
+export function relationshipLabel(value: string | undefined | null): string {
+  const key = relationshipKey(value);
+  return key ? t(`relationshipPresets.${key}`) : (value?.trim() ?? '');
+}
+
+/** Plural circle name for a preset, such as cousin → Cousins. Matched by key, not by label text. */
+export function relationshipCircleName(key: RelationshipPresetKey): string {
+  return t(`relationshipCircles.${key}`);
+}
+
+/** Store a preset as its key. Free text and older label values stay readable. */
+export function storeRelationship(value: string): string | null {
+  const cleaned = cleanRelationship(value);
+  if (cleaned == null) {
+    return null;
+  }
+  if (!cleaned) {
+    return '';
+  }
+  return relationshipKey(cleaned) ?? cleaned;
+}
 
 /** Empty clears the label. Invalid text returns null. */
 export function cleanRelationship(value: string): string | null {

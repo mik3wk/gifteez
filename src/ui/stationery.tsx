@@ -86,12 +86,12 @@ export function MonogramAvatar({
   );
 }
 
-export function WaxSeal({ state, size = 28 }: { state: SealState; size?: number }) {
+export function WaxSeal({ state, size = 28, label }: { state: SealState; size?: number; label?: string }) {
   const { colors, scheme, type, typeScale } = useTheme();
   const paint = SEAL_PAINT[scheme][state];
-  const label = t(`seal.${state}`);
+  const text = label ?? t(`seal.${state}`);
   return (
-    <View style={styles.seal} accessibilityLabel={label}>
+    <View style={styles.seal} accessibilityLabel={text}>
       <View
         style={[
           styles.sealFace,
@@ -105,7 +105,7 @@ export function WaxSeal({ state, size = 28 }: { state: SealState; size?: number 
         ]}>
         <Icon name={SEAL_ICON[state]} color={paint.ink} size={Math.max(14, size * 0.5)} />
       </View>
-      <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: colors.text }]}>{label}</Text>
+      <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: colors.text }]}>{text}</Text>
     </View>
   );
 }

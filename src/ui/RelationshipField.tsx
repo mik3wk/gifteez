@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import { RELATIONSHIP_PRESET_KEYS, type RelationshipPresetKey } from '../domain/relationship';
+import {
+  DEFAULT_RELATIONSHIP_KEYS,
+  RELATIONSHIP_PRESET_KEYS,
+  relationshipKey,
+  type RelationshipPresetKey,
+} from '../domain/relationship';
 import { t } from '../i18n';
 import { Caption, Chip, Cluster, Field } from './ui';
 
@@ -12,31 +17,40 @@ export function RelationshipField({
   onChange: (value: string) => void;
   error?: string;
 }) {
-  const presets = RELATIONSHIP_PRESET_KEYS.map(key => ({ key, label: t(`relationshipPresets.${key}`) }));
-  const matched = presets.some(preset => preset.label === value);
-  const [custom, setCustom] = useState(Boolean(value) && !matched);
+  const selectedKey = relationshipKey(value);
+  const [custom, setCustom] = useState(Boolean(value.trim()) && selectedKey == null);
+  const [expanded, setExpanded] = useState(false);
+  const extra = selectedKey && !(DEFAULT_RELATIONSHIP_KEYS as readonly string[]).includes(selectedKey) ? selectedKey : null;
+  const shown: RelationshipPresetKey[] = expanded
+    ? [...RELATIONSHIP_PRESET_KEYS]
+    : extra
+      ? [...DEFAULT_RELATIONSHIP_KEYS, extra]
+      : [...DEFAULT_RELATIONSHIP_KEYS];
   return (
     <>
       <Caption>{t('relationship.label')}</Caption>
       <Caption>{t('relationship.hint')}</Caption>
       <Cluster>
-        {presets.map(preset => (
+        {shown.map(key => (
           <Chip
-            key={preset.key}
-            label={preset.label}
-            selected={!custom && value === preset.label}
+            key={key}
+            label={t(`relationshipPresets.${key}`)}
+            selected={!custom && selectedKey === key}
             onPress={() => {
               setCustom(false);
-              onChange(value === preset.label ? '' : preset.label);
+              onChange(selectedKey === key ? '' : key);
             }}
           />
         ))}
+        {expanded ? null : (
+          <Chip label={t('relationship.more')} selected={false} onPress={() => setExpanded(true)} />
+        )}
         <Chip
           label={t('relationship.custom')}
           selected={custom}
           onPress={() => {
             setCustom(true);
-            if (matched) {
+            if (selectedKey) {
               onChange('');
             }
           }}
@@ -45,15 +59,11 @@ export function RelationshipField({
       {custom ? (
         <Field
           label={t('relationship.custom')}
-          value={matched ? '' : value}
+          value={selectedKey ? '' : value}
           error={error}
           onChangeText={onChange}
         />
       ) : error ? <Caption tone="danger">{error}</Caption> : null}
     </>
   );
-}
-
-export function presetKey(label: string): RelationshipPresetKey | null {
-  return RELATIONSHIP_PRESET_KEYS.find(key => t(`relationshipPresets.${key}`) === label) ?? null;
 }

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { cleanRelationship } from '../domain/relationship';
+import { storeRelationship } from '../domain/relationship';
 import { t } from '../i18n';
 import { haptic } from '../platform/haptics';
 import { useGifteez } from '../state/GifteezContext';
+import { CircleField } from '../ui/CircleField';
 import { RelationshipField } from '../ui/RelationshipField';
 import { Body, Button, Field, Screen, Title } from '../ui/ui';
 
@@ -21,6 +22,7 @@ export function FirstOpenScreen() {
   const [nameError, setNameError] = useState('');
   const [relationship, setRelationship] = useState('');
   const [relationshipError, setRelationshipError] = useState('');
+  const [circleId, setCircleId] = useState('');
 
   return (
     <Screen>
@@ -43,6 +45,7 @@ export function FirstOpenScreen() {
           setRelationshipError('');
         }}
       />
+      <CircleField value={circleId} onChange={setCircleId} />
       <Button
         label={t('firstOpen.start')}
         onPress={async () => {
@@ -51,12 +54,18 @@ export function FirstOpenScreen() {
             setNameError(t('errors.name'));
             return;
           }
-          const cleaned = cleanRelationship(relationship);
+          const cleaned = storeRelationship(relationship);
           if (cleaned == null) {
             setRelationshipError(t('relationship.invalid'));
             return;
           }
-          const id = await addPerson({ name: trimmed, budget: '', tags: [], relationship: cleaned });
+          const id = await addPerson({
+            name: trimmed,
+            budget: '',
+            tags: [],
+            relationship: cleaned,
+            ...(circleId ? { circleId } : {}),
+          });
           if (!id) {
             return;
           }

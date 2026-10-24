@@ -1,4 +1,5 @@
-import { emptySnapshot, type AppSnapshot, type GiftRecord, type IdeaCacheEntry, type Occasion, type OccasionState, type Person } from './types';
+import { cleanCircleName } from './circles';
+import { emptySnapshot, type AppSnapshot, type Circle, type GiftRecord, type IdeaCacheEntry, type Occasion, type OccasionState, type Person } from './types';
 import { cleanRelationship } from './relationship';
 
 export const BACKUP_VERSION = 1;
@@ -13,6 +14,8 @@ export type BackupFile = {
   gifts: GiftRecord[];
   ideas: IdeaCacheEntry[];
   feedback: AppSnapshot['feedback'];
+  /** Omitted on backups exported before circles existed. */
+  circles?: Circle[];
 };
 
 export type BackupFailure = 'json' | 'version' | 'shape';
@@ -36,8 +39,24 @@ function peopleOk(value: unknown): value is Person[] {
     if (item.relationship != null && (typeof item.relationship !== 'string' || cleanRelationship(item.relationship) == null)) {
       return false;
     }
+    if (item.circleId != null && !stringId(item.circleId)) {
+      return false;
+    }
     return true;
   });
+}
+
+function circlesOk(value: unknown): value is Circle[] {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+  return value.every(item => (
+    isRecord(item)
+    && stringId(item.id)
+    && typeof item.name === 'string'
+    && cleanCircleName(item.name) != null
+    && typeof item.createdAt === 'number'
+  ));
 }
 
 function rowsOk(value: unknown, extra?: (item: Record<string, unknown>) => boolean): boolean {
@@ -73,6 +92,7 @@ export function exportBackup(snapshot: AppSnapshot, now = new Date()): string {
       return next;
     }),
     feedback: snapshot.feedback,
+    circles: snapshot.circles ?? [],
   };
   return JSON.stringify(file);
 }
@@ -108,6 +128,9 @@ export function parseBackup(text: string, now: number): { ok: true; snapshot: Ap
   if (!Array.isArray(parsed.feedback)) {
     return { ok: false, reason: 'shape' };
   }
+  if ('circles' in parsed && !circlesOk(parsed.circles)) {
+    return { ok: false, reason: 'shape' };
+  }
   const currency = typeof parsed.currency === 'string' && /^[A-Z]{3}$/.test(parsed.currency) ? parsed.currency : 'USD';
   const base = emptySnapshot(now);
   return {
@@ -126,6 +149,7 @@ export function parseBackup(text: string, now: number): { ok: true; snapshot: Ap
       gifts: (parsed.gifts as GiftRecord[]).map(stripGift),
       ideas: parsed.ideas as IdeaCacheEntry[],
       feedback: parsed.feedback as AppSnapshot['feedback'],
+      circles: 'circles' in parsed && circlesOk(parsed.circles) ? parsed.circles : [],
     },
   };
 }
@@ -190,6 +214,7 @@ export function migrateToLocal(snapshot: AppSnapshot): AppSnapshot {
     }),
     feedback: snapshot.feedback,
     entitlementPaid: snapshot.entitlementPaid,
+    circles: snapshot.circles ?? [],
   };
 }
 

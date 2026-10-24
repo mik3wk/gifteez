@@ -6,6 +6,7 @@ import { daysUntil, listCurrency, occurrenceYear, sortPeople, upcomingOccasion, 
 import { personSeal } from '../domain/seal';
 import type { Occasion, OccasionState } from '../domain/types';
 import { isOneTimeOccasion, occasionLabel } from '../domain/occasions';
+import { relationshipLabel } from '../domain/relationship';
 import { isHiddenFromViewer, isPersonLocked } from '../domain/visibility';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, t, timeGreeting } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
@@ -110,14 +111,14 @@ export function PeopleScreen() {
             key={person.id}
             name={person.name}
             personId={person.id}
-            relationship={person.relationship}
+            relationship={relationshipLabel(person.relationship)}
             occasionId={item?.occasion.type}
             occasionLabel={item ? occasionLabel(item.occasion) : undefined}
             trailing={trailing}
             budget={budgetLine}
             progress={progress}
             note={person.imported && !person.opened ? t('people.imported') : t('people.noOccasion')}
-            accessibilityLabel={[person.name, person.relationship, when, budgetLine].filter(Boolean).join(', ')}
+            accessibilityLabel={[person.name, relationshipLabel(person.relationship), when, budgetLine].filter(Boolean).join(', ')}
             onPress={() => navigation.navigate('Person', { personId: person.id })}
           />
         );

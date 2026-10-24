@@ -1,13 +1,9 @@
 import React, { useState } from 'react';
 import DeviceInfo from 'react-native-device-info';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStack } from '../app/navigation';
-import { accountUnlocked, fairnessRows, listCurrency } from '../domain/logic';
-import { deviceLocale, formatMoney, t } from '../i18n';
+import { accountUnlocked } from '../domain/logic';
+import { t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { SessionEntrance } from '../ui/motion';
-import { FairnessCard } from '../ui/stationery';
 import {
   AppHeader,
   Body,
@@ -16,7 +12,6 @@ import {
   Card,
   Chip,
   Cluster,
-  EmptyState,
   Field,
   Heading,
   priceLabel,
@@ -24,30 +19,7 @@ import {
   Toggle,
 } from '../ui/ui';
 
-export function FairnessScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot } = useGifteez();
-  const money = (cents: number) => formatMoney(cents, deviceLocale(), listCurrency(snapshot), true);
-  const rows = fairnessRows(snapshot, new Date());
-  return (
-    <Screen tab="fairness">
-      <AppHeader title={t('fairness.title')} />
-      <SessionEntrance id="fairness">
-      <Body>{t('fairness.intro')}</Body>
-      {rows.length === 0 ? (
-        <EmptyState
-          kind="fairness"
-          text={t('fairness.empty')}
-          action={t('fairness.emptyAction')}
-          onAction={() => navigation.navigate('AddPerson')}
-        />
-      ) : (
-        <FairnessCard rows={rows} money={money} />
-      )}
-      </SessionEntrance>
-    </Screen>
-  );
-}
+export { FairnessScreen } from './FairnessScreen';
 
 export function SettingsScreen() {
   const {

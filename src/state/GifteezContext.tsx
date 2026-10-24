@@ -38,7 +38,8 @@ import { loadSecret, saveSecret } from '../platform/secure';
 import { occasionLabel, planOccasion, presetFor } from '../domain/occasions';
 import { exportBackup, migrateToLocal, parseBackup, summarizeBackup, type BackupFailure } from '../domain/backup';
 import { normalizeStoredDate, parseLocalDate } from '../domain/calendarDate';
-import { cleanRelationship } from '../domain/relationship';
+import { relationshipCircleName, storeRelationship, type RelationshipPresetKey } from '../domain/relationship';
+import { acceptSuggestion, addCircle, assignCircle, cleanCircleName, removeCircle, renameCircle as renameStoredCircle } from '../domain/circles';
 import { haptic } from '../platform/haptics';
 import type { CelebrateName } from '../theme/tokens';
 import { colorsFor, parseSkin, resolveSkin, withColorScheme, type ResolvedColors, type SkinId, type ThemeColors } from '../theme/skins';
@@ -68,8 +69,13 @@ type GifteezApi = {
   storeReady: boolean;
   clearNotice: () => void;
   clearError: () => void;
-  addPerson: (input: { name: string; budget: string; tags: string[]; imported?: boolean; relationship?: string }) => Promise<string | null>;
+  addPerson: (input: { name: string; budget: string; tags: string[]; imported?: boolean; relationship?: string; circleId?: string }) => Promise<string | null>;
   savePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'relationship'>>) => Promise<void>;
+  createCircle: (name: string) => Promise<string | null>;
+  renameCircle: (circleId: string, name: string) => Promise<void>;
+  deleteCircle: (circleId: string) => Promise<void>;
+  setPersonCircle: (personId: string, circleId: string | null) => Promise<void>;
+  acceptCircleSuggestion: (key: RelationshipPresetKey, personIds: string[]) => Promise<void>;
   removePerson: (id: string) => Promise<void>;
   addOccasion: (
     personId: string,
@@ -515,8 +521,12 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       const hadPeople = snapshotRef.current.people.some(person => !person.deleted);
       const now = Date.now();
-      const relationship = cleanRelationship(input.relationship ?? '');
+      const relationship = storeRelationship(input.relationship ?? '');
       if (relationship == null) {
+        fail('invalid');
+        return null;
+      }
+      if (input.circleId && !(snapshotRef.current.circles ?? []).some(circle => circle.id === input.circleId)) {
         fail('invalid');
         return null;
       }
@@ -530,6 +540,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         createdAt: now,
         updatedAt: now,
         ...(relationship ? { relationship } : {}),
+        ...(input.circleId ? { circleId: input.circleId } : {}),
       };
       const result = addPerson({ snapshot: snapshotRef.current, person, freeLimit: env.freeTierMaxPeople });
       if (!result.ok) {
@@ -557,6 +568,63 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return;
       }
       await commit(result.snapshot);
+      sync().catch(() => undefined);
+    },
+    createCircle: async name => {
+      const cleaned = cleanCircleName(name);
+      if (!cleaned) {
+        fail('invalid');
+        return null;
+      }
+      const circle = { id: randomId(), name: cleaned, createdAt: Date.now() };
+      await commit(addCircle(snapshotRef.current, circle));
+      sync().catch(() => undefined);
+      return circle.id;
+    },
+    renameCircle: async (circleId, name) => {
+      const cleaned = cleanCircleName(name);
+      if (!cleaned) {
+        fail('invalid');
+        return;
+      }
+      const next = renameStoredCircle(snapshotRef.current, circleId, cleaned);
+      if (!next) {
+        return;
+      }
+      await commit(next);
+      sync().catch(() => undefined);
+    },
+    deleteCircle: async circleId => {
+      await commit(removeCircle(snapshotRef.current, circleId));
+      sync().catch(() => undefined);
+    },
+    setPersonCircle: async (personId, circleId) => {
+      const next = assignCircle(snapshotRef.current, personId, circleId, Date.now());
+      if (!next) {
+        fail('invalid');
+        return;
+      }
+      await commit(next);
+      sync().catch(() => undefined);
+    },
+    acceptCircleSuggestion: async (key, personIds) => {
+      const name = relationshipCircleName(key);
+      const now = Date.now();
+      const existing = (snapshotRef.current.circles ?? []).find(circle => circle.name === name);
+      if (existing) {
+        let next = snapshotRef.current;
+        personIds.forEach(personId => {
+          const assigned = assignCircle(next, personId, existing.id, now);
+          if (assigned) {
+            next = assigned;
+          }
+        });
+        await commit(next);
+        sync().catch(() => undefined);
+        return;
+      }
+      const circle = { id: randomId(), name, createdAt: now };
+      await commit(acceptSuggestion(snapshotRef.current, circle, personIds, now));
       sync().catch(() => undefined);
     },
     removePerson: async id => {

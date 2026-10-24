@@ -10,7 +10,7 @@ import { canEditSharedGift } from '../domain/edits';
 import { allTimeSpentCents, daysUntil, isRealMonthDay, listCurrency, occurrenceYear, parseBudget, parseLooseDate, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
 import { dateIsEstimated, isOneTimeOccasion, nextOccasionDate, occasionLabel, occasionNeedsDate, presetFor } from '../domain/occasions';
 import type { Occasion, OccasionState } from '../domain/types';
-import { cleanRelationship } from '../domain/relationship';
+import { relationshipLabel, storeRelationship } from '../domain/relationship';
 import { initialPersonSection, summaryPrimary, summaryPrimaryLabel } from './personSummary';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, formatStoredDate, t, todayIso } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
@@ -19,6 +19,7 @@ import { useTheme } from '../theme/useTheme';
 import { DateField, MonthDayField } from '../ui/DateField';
 import { HeartPop, Moment, Shimmer } from '../ui/motion';
 import { OccasionPicker } from '../ui/OccasionPicker';
+import { CircleField } from '../ui/CircleField';
 import { RelationshipField } from '../ui/RelationshipField';
 import { MonogramAvatar } from '../ui/stationery';
 import {
@@ -73,6 +74,7 @@ export function AddPersonScreen() {
   const [nameError, setNameError] = useState('');
   const [relationship, setRelationship] = useState('');
   const [relationshipError, setRelationshipError] = useState('');
+  const [circleId, setCircleId] = useState('');
   return (
     <Screen>
       <Title>{t('firstOpen.title')}</Title>
@@ -94,6 +96,7 @@ export function AddPersonScreen() {
           setRelationshipError('');
         }}
       />
+      <CircleField value={circleId} onChange={setCircleId} />
       <Button
         label={t('firstOpen.start')}
         onPress={async () => {
@@ -101,12 +104,18 @@ export function AddPersonScreen() {
             setNameError(t('errors.name'));
             return;
           }
-          const cleaned = cleanRelationship(relationship);
+          const cleaned = storeRelationship(relationship);
           if (cleaned == null) {
             setRelationshipError(t('relationship.invalid'));
             return;
           }
-          const id = await addPerson({ name, budget: '', tags: [], relationship: cleaned });
+          const id = await addPerson({
+            name,
+            budget: '',
+            tags: [],
+            relationship: cleaned,
+            ...(circleId ? { circleId } : {}),
+          });
           if (id) {
             navigation.replace('Person', { personId: id });
           }
@@ -134,6 +143,7 @@ export function PersonScreen() {
     cloudRemaining,
     updateGift,
     deleteGift,
+    setPersonCircle,
   } = useGifteez();
   const { colors } = useTheme();
   const person = snapshot.people.find(item => item.id === route.params.personId && !item.deleted);
@@ -156,6 +166,7 @@ export function PersonScreen() {
   const [giftError, setGiftError] = useState('');
   const [priceError, setPriceError] = useState('');
   const [dateError, setDateError] = useState('');
+  const [pickingCircle, setPickingCircle] = useState(false);
   const [section, setSection] = useState<'ideas' | 'occasions' | 'history'>(() =>
     initialPersonSection(firstUpcoming ? daysUntil(firstUpcoming.date, today) : null),
   );
@@ -320,7 +331,12 @@ export function PersonScreen() {
                 <MonogramAvatar name={person.name} personId={person.id} />
                 <View style={styles.personCopy}>
                   <Display lines={2}>{person.name}</Display>
-                  {person.relationship ? <Caption tone="text">{person.relationship}</Caption> : null}
+                  {person.relationship ? <Caption tone="text">{relationshipLabel(person.relationship)}</Caption> : null}
+                  <Chip
+                    label={snapshot.circles.find(circle => circle.id === person.circleId)?.name ?? t('fairness.noCircle')}
+                    selected={Boolean(person.circleId && snapshot.circles.some(circle => circle.id === person.circleId))}
+                    onPress={() => setPickingCircle(true)}
+                  />
                 </View>
               </View>
               <IconButton label={t('person.editDetails')} name="more" filled onPress={() => setEditingDetails(true)} />
@@ -506,6 +522,30 @@ export function PersonScreen() {
       <Sheet visible={addingOccasion} onClose={() => setAddingOccasion(false)}>
         <OccasionPicker personId={person.id} onAdded={() => setAddingOccasion(false)} />
       </Sheet>
+      <Sheet visible={pickingCircle} onClose={() => setPickingCircle(false)}>
+        <Heading>{t('fairness.pickCircle')}</Heading>
+        <Cluster>
+          <Chip
+            label={t('fairness.noCircle')}
+            selected={!person.circleId}
+            onPress={() => {
+              setPickingCircle(false);
+              setPersonCircle(person.id, null).catch(() => undefined);
+            }}
+          />
+          {snapshot.circles.map(circle => (
+            <Chip
+              key={circle.id}
+              label={circle.name}
+              selected={person.circleId === circle.id}
+              onPress={() => {
+                setPickingCircle(false);
+                setPersonCircle(person.id, circle.id).catch(() => undefined);
+              }}
+            />
+          ))}
+        </Cluster>
+      </Sheet>
       <Sheet visible={editingDetails} onClose={() => setEditingDetails(false)}>
         <Heading>{t('person.details')}</Heading>
         <Field
@@ -541,7 +581,7 @@ export function PersonScreen() {
             const trimmed = name.trim();
             const nextNameError = trimmed ? '' : t('errors.name');
             const nextBudgetError = budget.trim() && parseBudget(budget) == null ? t('errors.price') : '';
-            const cleaned = cleanRelationship(relationship);
+            const cleaned = storeRelationship(relationship);
             const nextRelationshipError = cleaned == null ? t('relationship.invalid') : '';
             setNameError(nextNameError);
             setBudgetError(nextBudgetError);

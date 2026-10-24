@@ -1,7 +1,7 @@
 import { hashToUint } from '../crypto/crypto';
 import { groupHues } from '../theme/skins';
 import { isOneTimeOccasion, nextOccasionDate, occasionLabel, planOccasion } from './occasions';
-import { absorbPerson, cleanRelationship } from './relationship';
+import { absorbPerson, storeRelationship } from './relationship';
 import { DEFAULT_FREE_PEOPLE, lockedPersonIds } from '../../functions/src/peopleCap';
 import {
   dirtyKey,
@@ -549,7 +549,7 @@ export function updatePerson(
   }
   const next: Person = { ...current, ...patch, updatedAt: now };
   if (patch.relationship !== undefined) {
-    const cleaned = cleanRelationship(patch.relationship);
+    const cleaned = storeRelationship(patch.relationship);
     if (cleaned == null) {
       return fail('invalid');
     }
