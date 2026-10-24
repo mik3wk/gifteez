@@ -97,6 +97,13 @@ test('settings shares a backup and labels reminders', async () => {
     exportButton?.props.onPress();
   });
   expect(shareBackup).toHaveBeenCalled();
+  const copy = renderer!.root.findAllByType(Text).map(item => item.props.children);
+  expect(copy).toEqual(expect.arrayContaining([
+    'Export a copy before you replace this list.',
+    'Read-only. Nothing is added until you pick people.',
+    'Nothing is added until you choose.',
+    'As an Amazon Associate, Gifteez earns from qualifying purchases.',
+  ]));
   expect(renderer!.root.findAllByProps({ accessibilityLabel: 'Turn occasion reminders on or off' }).length).toBeGreaterThan(0);
   const reminders = renderer!.root.findByProps({ accessibilityLabel: 'Turn occasion reminders on or off' });
   await ReactTestRenderer.act(() => {

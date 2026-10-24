@@ -172,13 +172,17 @@ export function SettingsScreen() {
           <SettingsRow icon="gift" label={t('settings.restore')} onPress={() => { restorePurchases().catch(() => undefined); }} />
         </SettingsGroup>
         {error ? <Caption tone="danger">{error}</Caption> : null}
-        <SettingsGroup title={t('settings.yourData')}>
+        <SettingsGroup title={t('settings.yourData')} footer={t('settings.backupHint')}>
           <SettingsRow icon="gear" label={t('settings.export')} onPress={() => { shareBackup().catch(() => undefined); }} />
           <SettingsRow icon="gear" label={t('settings.restoreRow')} onPress={() => { pickBackup().catch(() => undefined); }} />
+        </SettingsGroup>
+        <SettingsGroup footer={t('settings.calendarHint')}>
           <CalendarReviewLink
             label={t('people.findBirthdays')}
             row={open => <SettingsRow icon="calendar" label={t('people.findBirthdays')} onPress={open} />}
           />
+        </SettingsGroup>
+        <SettingsGroup footer={t('settings.contactsHint')}>
           <SettingsRow
             icon="people"
             label={t('settings.contacts')}
@@ -188,7 +192,7 @@ export function SettingsScreen() {
           />
         </SettingsGroup>
         {importNote ? <Caption>{importNote}</Caption> : null}
-        <SettingsGroup title={t('settings.about')}>
+        <SettingsGroup title={t('settings.about')} footer={t('shop.disclosure')}>
           <SettingsRow icon="heart" label={t('settings.privacyTitle')} onPress={() => setSheet('privacy')} />
           <SettingsRow icon="heart" label={t('settings.contact')} onPress={() => setSheet('contact')} />
           <SettingsRow
@@ -340,16 +344,18 @@ function ReminderRow() {
   );
 }
 
-function SettingsGroup({ title, children }: { title: string; children: React.ReactNode }) {
+function SettingsGroup({ title, footer, children }: { title?: string; footer?: string; children: React.ReactNode }) {
   const { colors, type, typeScale, radius } = useTheme();
   const rows = React.Children.toArray(children);
   return (
     <View style={styles.group}>
-      <Text
-        maxFontSizeMultiplier={typeScale.caption}
-        style={[type.caption, styles.groupLabel, { color: colors.muted }]}>
-        {title}
-      </Text>
+      {title ? (
+        <Text
+          maxFontSizeMultiplier={typeScale.caption}
+          style={[type.caption, styles.groupLabel, { color: colors.muted }]}>
+          {title}
+        </Text>
+      ) : null}
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.card }]}>
         {rows.map((child, index) => (
           <View key={index}>
@@ -358,6 +364,11 @@ function SettingsGroup({ title, children }: { title: string; children: React.Rea
           </View>
         ))}
       </View>
+      {footer ? (
+        <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, styles.groupFooter, { color: colors.muted }]}>
+          {footer}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -424,6 +435,7 @@ function formatClock(hour: number, minute: number): string {
 const styles = StyleSheet.create({
   group: { gap: 6 },
   groupLabel: { textTransform: 'uppercase', letterSpacing: 0.6, marginLeft: space.md },
+  groupFooter: { marginHorizontal: space.md },
   card: { borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
   row: { minHeight: 52, flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.md, gap: space.sm },
   timeWheel: { height: 180 },
