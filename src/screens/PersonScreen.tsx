@@ -3,9 +3,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CommonActions, useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { peopleThenPerson, type RootStack } from '../app/navigation';
+import type { RootStack } from '../app/navigation';
 import { amazonSearchUrl } from '../domain/amazon';
 import { describeImport } from '../domain/importNote';
+import { mainAppOpen } from '../domain/onboarding';
 import { importedVisitBanner, type ImportedVisit } from '../domain/importedBanner';
 import { INTEREST_TAGS } from '../domain/catalog';
 import { asGiftIdea, ideaCacheId, ideaKey, ideasTooSimilar, normalizeIdeaTitle, sentenceCaseTitle } from '../domain/ideas';
@@ -101,7 +102,7 @@ export function AddPersonScreen() {
     setBudget(current => (current === preset ? nextPreset : current));
     setPreset(nextPreset);
   }
-  const firstRun = !snapshot.profile.onboarded;
+  const firstRun = !mainAppOpen(snapshot);
   const openedBeforePeople = useRef(firstRun);
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -132,7 +133,6 @@ export function AddPersonScreen() {
     const personId = nextId.current;
     nextId.current = null;
     if (openedBeforePeople.current) {
-      navigation.dispatch(CommonActions.reset(peopleThenPerson(personId)));
       return;
     }
     if (navigation.getState()?.routeNames?.includes('Person')) {
@@ -174,9 +174,10 @@ export function AddPersonScreen() {
                 setBirthError(t('person.birthYearInvalid'));
                 return;
               }
-              // The first save also marks the profile onboarded, which swaps the
-              // stack and removes this screen. Allow that removal before the
-              // await, or the dirty form asks to discard a person who was saved.
+              // The first save marks the profile onboarded, which swaps the
+              // stack to Home and removes this screen. Allow that removal
+              // before the await, or the dirty form asks to discard a person
+              // who was saved.
               setAllowLeave(true);
               const id = await addPerson({
                 name,

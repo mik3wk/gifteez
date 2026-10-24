@@ -233,6 +233,14 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     lastContent.current = nextContent;
   }, []);
 
+  const hasLivingPeople = snapshot.people.some(person => !person.deleted);
+  useEffect(() => {
+    if (!ready || snapshot.profile.onboarded || !hasLivingPeople) {
+      return;
+    }
+    commit(withProfile(snapshotRef.current, { onboarded: true })).catch(() => undefined);
+  }, [commit, hasLivingPeople, ready, snapshot.profile.onboarded]);
+
   const undoRestore = useRef<(() => Promise<void>) | null>(null);
   const remoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noticeStickyUntil = useRef(0);
@@ -313,11 +321,16 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     }
     pendingAdd.current = null;
     setPaywallOpen(false);
-    await commit(result.snapshot);
+    const finished = !pending.hadPeople && !result.snapshot.profile.onboarded
+      ? withProfile(result.snapshot, { onboarded: true })
+      : result.snapshot;
+    await commit(finished);
     if (!pending.hadPeople && !pending.person.imported) {
       setConfetti(count => count + 1);
     }
-    setCompletedPersonId(pending.person.id);
+    if (pending.hadPeople) {
+      setCompletedPersonId(pending.person.id);
+    }
     sync().catch(() => undefined);
   };
 
@@ -523,7 +536,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         break;
       }
       created.set(`new:${step.name.trim().toLowerCase()}`, person.id);
-      let next = result.snapshot;
+      let next = result.snapshot.profile.onboarded
+        ? result.snapshot
+        : withProfile(result.snapshot, { onboarded: true });
       if (step.month != null && step.day != null && isRealMonthDay(step.month, step.day)) {
         next = addOccasion(next, {
           id: randomId(),
@@ -694,11 +709,12 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       pendingAdd.current = null;
       setPaywallOpen(false);
-      await commit(result.snapshot);
+      const finished = !hadPeople && !result.snapshot.profile.onboarded
+        ? withProfile(result.snapshot, { onboarded: true })
+        : result.snapshot;
+      await commit(finished);
       if (!hadPeople && !person.imported) {
         setConfetti(count => count + 1);
-        setResumePersonId(person.id);
-        await commit(withProfile(snapshotRef.current, { onboarded: true }));
       }
       sync().catch(() => undefined);
       return person.id;

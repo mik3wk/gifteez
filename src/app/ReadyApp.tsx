@@ -17,6 +17,7 @@ import { sticker, type as appType } from '../theme/tokens';
 import { ConfettiBurst, useReduceMotion } from '../ui/motion';
 import { BrandedLoading, ConfirmHost, Notice, OfflineBanner, UnlockSheet, confirmDestructive } from '../ui/ui';
 import type { AppEnv } from '../config/env';
+import { mainAppOpen } from '../domain/onboarding';
 import { peopleThenPerson, type RootStack } from './navigation';
 
 const Stack = createNativeStackNavigator<RootStack>();
@@ -65,7 +66,7 @@ function Navigator() {
   const showRecovery = !coverBoot && gifteez.dataRecovery;
   const showFailure = !coverBoot && !showRecovery && Boolean(gifteez.startupFailure);
   const showNav = !coverBoot && !showRecovery && !gifteez.startupFailure;
-  const onboarded = gifteez.snapshot.profile.onboarded;
+  const onboarded = mainAppOpen(gifteez.snapshot);
   const resumeId = gifteez.resumePersonId;
   const clearResume = gifteez.clearResumePerson;
   useEffect(() => {
@@ -123,7 +124,7 @@ function Navigator() {
           headerBackButtonDisplayMode: 'minimal',
           contentStyle: { backgroundColor: gifteez.colors.background },
         }}>
-          {gifteez.snapshot.profile.onboarded ? (
+          {onboarded ? (
             <>
               <Stack.Screen name="Home" component={HomeScreen} options={tabOptions} />
               <Stack.Screen name="People" component={PeopleScreen} options={tabOptions} />
