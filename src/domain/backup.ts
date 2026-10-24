@@ -1,4 +1,4 @@
-import { cleanCircleName } from './circles';
+import { cleanCircleName, foldKeptEven, stripKeptEven } from './circles';
 import { emptySnapshot, type AppSnapshot, type Circle, type GiftRecord, type IdeaCacheEntry, type Occasion, type OccasionState, type Person } from './types';
 import { cleanRelationship } from './relationship';
 
@@ -73,7 +73,7 @@ export function exportBackup(snapshot: AppSnapshot, now = new Date()): string {
     exportedAt: now.toISOString(),
     currency: snapshot.profile.currency || 'USD',
     people: snapshot.people.filter(person => !person.deleted).map(person => {
-      const next = { ...person };
+      const next = stripKeptEven({ ...person });
       delete next.linkedUid;
       return next;
     }),
@@ -133,25 +133,23 @@ export function parseBackup(text: string, now: number): { ok: true; snapshot: Ap
   }
   const currency = typeof parsed.currency === 'string' && /^[A-Z]{3}$/.test(parsed.currency) ? parsed.currency : 'USD';
   const base = emptySnapshot(now);
-  return {
-    ok: true,
-    snapshot: {
-      ...base,
-      profile: { ...base.profile, onboarded: true, currency, createdAt: now },
-      people: parsed.people as Person[],
-      occasions: parsed.occasions as Occasion[],
-      states: (parsed.states as OccasionState[]).map(state => {
-        const next = { ...state };
-        delete next.claimedBy;
-        delete next.claimedAt;
-        return next;
-      }),
-      gifts: (parsed.gifts as GiftRecord[]).map(stripGift),
-      ideas: parsed.ideas as IdeaCacheEntry[],
-      feedback: parsed.feedback as AppSnapshot['feedback'],
-      circles: 'circles' in parsed && circlesOk(parsed.circles) ? parsed.circles : [],
-    },
+  const built: AppSnapshot = {
+    ...base,
+    profile: { ...base.profile, onboarded: true, currency, createdAt: now },
+    people: parsed.people as Person[],
+    occasions: parsed.occasions as Occasion[],
+    states: (parsed.states as OccasionState[]).map(state => {
+      const next = { ...state };
+      delete next.claimedBy;
+      delete next.claimedAt;
+      return next;
+    }),
+    gifts: (parsed.gifts as GiftRecord[]).map(stripGift),
+    ideas: parsed.ideas as IdeaCacheEntry[],
+    feedback: parsed.feedback as AppSnapshot['feedback'],
+    circles: 'circles' in parsed && circlesOk(parsed.circles) ? parsed.circles : [],
   };
+  return { ok: true, snapshot: foldKeptEven(built, now) };
 }
 
 function stripGift(gift: GiftRecord): GiftRecord {
@@ -182,7 +180,7 @@ export function migrateToLocal(snapshot: AppSnapshot): AppSnapshot {
   });
   const currency = snapshot.profile.currency || snapshot.group?.currency;
   const base = emptySnapshot(snapshot.profile.createdAt || Date.now());
-  return {
+  const local: AppSnapshot = {
     ...base,
     profile: {
       ...base.profile,
@@ -216,6 +214,7 @@ export function migrateToLocal(snapshot: AppSnapshot): AppSnapshot {
     entitlementPaid: snapshot.entitlementPaid,
     circles: snapshot.circles ?? [],
   };
+  return foldKeptEven(local, Date.now());
 }
 
 export type BackupSummary = {

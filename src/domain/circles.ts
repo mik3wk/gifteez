@@ -1,6 +1,10 @@
+import { randomId } from '../crypto/crypto';
 import type { AppSnapshot, Circle, Person } from './types';
 import { relationshipKey, type RelationshipPresetKey } from './relationship';
 import { yearSpentCents } from './logic';
+
+/** Circle created when a backup still has the removed keepEven flag. */
+export const KEPT_EVEN_CIRCLE_NAME = 'Kept even';
 
 /** A gap no larger than this still counts as even when 5% of the top spend is smaller. */
 export const FAIRNESS_EVEN_FLOOR_CENTS = 1000;
@@ -191,6 +195,44 @@ export function assignCircle(snapshot: AppSnapshot, personId: string, circleId: 
       }
       return next;
     }),
+  };
+}
+
+function keptEvenFlag(person: Person): boolean {
+  if (!Object.prototype.hasOwnProperty.call(person, 'keepEven')) {
+    return false;
+  }
+  return (person as Person & { keepEven?: unknown }).keepEven === true;
+}
+
+export function stripKeptEven(person: Person): Person {
+  if (!Object.prototype.hasOwnProperty.call(person, 'keepEven')) {
+    return person;
+  }
+  const next = { ...person } as Person & { keepEven?: unknown };
+  delete next.keepEven;
+  return next;
+}
+
+/**
+ * The short-lived keepEven flag becomes one circle named "Kept even".
+ * People already in a circle move into that one. The flag is not kept.
+ */
+export function foldKeptEven(snapshot: AppSnapshot, now: number): AppSnapshot {
+  const marked = new Set(
+    snapshot.people.filter(person => keptEvenFlag(person) && !person.deleted).map(person => person.id),
+  );
+  const people = snapshot.people.map(stripKeptEven);
+  const circles = [...(snapshot.circles ?? [])];
+  if (marked.size === 0) {
+    return { ...snapshot, people, circles };
+  }
+  const existing = circles.find(item => item.name === KEPT_EVEN_CIRCLE_NAME);
+  const circle = existing ?? { id: randomId(), name: KEPT_EVEN_CIRCLE_NAME, createdAt: now };
+  return {
+    ...snapshot,
+    circles: existing ? circles : [...circles, circle],
+    people: people.map(person => (marked.has(person.id) ? { ...person, circleId: circle.id, updatedAt: now } : person)),
   };
 }
 

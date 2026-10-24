@@ -130,3 +130,52 @@ test('backups keep circles and older files without them still open', () => {
   const missing = migrateToLocal({ ...emptySnapshot(1), circles: undefined as never });
   expect(missing.circles).toEqual([]);
 });
+
+test('a saved keepEven flag becomes one circle named Kept even', () => {
+  const snapshot = emptySnapshot(1);
+  snapshot.circles = [{ id: 'sib', name: 'Siblings', createdAt: 1 }];
+  const cam = person('cam', 'Cam');
+  (cam as Person & { keepEven?: boolean }).keepEven = false;
+  snapshot.people = [
+    person('ada', 'Ada', { circleId: 'sib' }),
+    person('ben', 'Ben'),
+    cam,
+  ];
+  (snapshot.people[0] as Person & { keepEven?: boolean }).keepEven = true;
+  (snapshot.people[1] as Person & { keepEven?: boolean }).keepEven = true;
+  const text = JSON.stringify({
+    version: 1,
+    exportedAt: '2026-10-24T00:00:00.000Z',
+    currency: 'USD',
+    people: snapshot.people,
+    occasions: [],
+    states: [],
+    gifts: [],
+    ideas: [],
+    feedback: [],
+  });
+  const parsed = parseBackup(text, 9);
+  expect(parsed.ok).toBe(true);
+  if (!parsed.ok) {
+    return;
+  }
+  const kept = parsed.snapshot.circles.filter(circle => circle.name === 'Kept even');
+  expect(kept).toHaveLength(1);
+  expect(parsed.snapshot.people.find(item => item.id === 'ada')?.circleId).toBe(kept[0].id);
+  expect(parsed.snapshot.people.find(item => item.id === 'ben')?.circleId).toBe(kept[0].id);
+  expect(parsed.snapshot.people.find(item => item.id === 'cam')?.circleId).toBeUndefined();
+  expect(JSON.stringify(parsed.snapshot.people)).not.toContain('keepEven');
+  const again = exportBackup(parsed.snapshot, new Date('2026-10-24T00:00:00Z'));
+  expect(again).not.toContain('keepEven');
+  const reparsed = parseBackup(again, 9);
+  expect(reparsed.ok).toBe(true);
+  if (!reparsed.ok) {
+    return;
+  }
+  expect(reparsed.snapshot.circles.filter(circle => circle.name === 'Kept even')).toHaveLength(1);
+
+  const migrated = migrateToLocal(snapshot);
+  expect(migrated.circles.filter(circle => circle.name === 'Kept even')).toHaveLength(1);
+  expect(JSON.stringify(migrated.people)).not.toContain('keepEven');
+  expect(migrated.people.find(item => item.id === 'cam')?.circleId).toBeUndefined();
+});
