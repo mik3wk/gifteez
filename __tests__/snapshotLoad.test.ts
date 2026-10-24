@@ -1,5 +1,5 @@
 import { keyFromString, keyToString, openJson, randomKey, sealJson } from '../src/crypto/crypto';
-import { decideCacheLoad, normalizeStoredSnapshot } from '../src/domain/snapshotLoad';
+import { CacheStageError, decideCacheLoad, normalizeStoredSnapshot } from '../src/domain/snapshotLoad';
 
 function round5bList() {
   return {
@@ -171,4 +171,20 @@ test('a blob that cannot be decrypted or has no key stays the raw blob', () => {
   expect(missing).toEqual({ ok: false, reason: 'key', blob });
   expect(normalizeStoredSnapshot({ version: 1, note: 'not a list' }, 9)).toBeNull();
   expect(decideCacheLoad({ blob: null, key: null, now: 9, open: () => null }).ok).toBe(true);
+  const parsed = decideCacheLoad({
+    blob,
+    key: keyToString(key),
+    now: 9,
+    open: () => {
+      throw new CacheStageError('parse');
+    },
+  });
+  expect(parsed).toEqual({ ok: false, reason: 'parse', blob });
+  const validated = decideCacheLoad({
+    blob,
+    key: keyToString(key),
+    now: 9,
+    open: () => ({ version: 1, note: 'not a list' }),
+  });
+  expect(validated).toEqual({ ok: false, reason: 'validate', blob });
 });

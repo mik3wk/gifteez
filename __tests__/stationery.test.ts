@@ -1,4 +1,4 @@
-import { budgetFraction, budgetTone } from '../src/domain/budgetBar';
+import { budgetFraction, budgetTone, formatSpentOfBudget } from '../src/domain/budgetBar';
 import { contrastRatio } from '../src/theme/skins';
 import { fairnessView } from '../src/domain/fairnessView';
 import type { FairnessRow } from '../src/domain/logic';
@@ -96,4 +96,8 @@ test('a budget bar stays sage, turns gold near the budget, and rose once it is p
   expect(budgetTone(5000, null)).toBe('under');
   expect(budgetFraction(25000, 20000)).toBe(1);
   expect(budgetFraction(5000, null)).toBe(0);
+  const money = (cents: number) => `$${cents / 100}`;
+  expect(formatSpentOfBudget(0, 15000, money)).toBe('$0 of $150');
+  expect(formatSpentOfBudget(18000, 20000, money)).toBe('$180 of $200');
+  expect(formatSpentOfBudget(0, null, money)).toBe('$0');
 });

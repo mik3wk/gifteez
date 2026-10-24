@@ -15,6 +15,18 @@ export function budgetTone(spentCents: number, budgetCents: number | null): Budg
   return 'under';
 }
 
+/** "$0 of $150" when a budget is set, including a spent amount of zero. Otherwise just the spent amount. */
+export function formatSpentOfBudget(
+  spentCents: number,
+  budgetCents: number | null,
+  money: (cents: number) => string,
+): string {
+  if (budgetCents == null) {
+    return money(spentCents);
+  }
+  return `${money(spentCents)} of ${money(budgetCents)}`;
+}
+
 export function budgetFraction(spentCents: number, budgetCents: number | null): number {
   if (budgetCents == null || budgetCents <= 0) {
     return 0;

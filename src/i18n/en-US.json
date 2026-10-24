@@ -20,7 +20,13 @@
     "body": "The copy on this phone is still here. Nothing was replaced.",
     "retry": "Try again",
     "restore": "Restore from backup",
-    "export": "Export the raw file"
+    "export": "Export the raw file",
+    "stage": {
+      "key": "Debug: the device key is missing.",
+      "decrypt": "Debug: the saved list could not be decrypted.",
+      "parse": "Debug: the saved list decrypted, but it was not valid JSON.",
+      "validate": "Debug: the saved list parsed, but it did not look like a Gifteez list."
+    }
   },
   "firstOpen": {
     "title": "Who are you shopping for?",
@@ -410,6 +416,7 @@
     "suggestYes": "Make this circle",
     "suggestNotNow": "Not now",
     "everyoneElse": "Everyone else",
+    "notInCircle": "Not in a circle",
     "ownBudget": "{used} of {budget} · {left} left",
     "noCircle": "No circle",
     "emptyCircle": "No one is in this circle.",

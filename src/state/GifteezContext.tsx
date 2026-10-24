@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Appearance, Linking, Platform } from 'react-native';
 import type { AppEnv } from '../config/env';
-import { keyFromString, keyToString, openJson, randomId, randomKey, sealJson } from '../crypto/crypto';
+import { keyFromString, keyToString, openString, randomId, randomKey, sealJson } from '../crypto/crypto';
 import { ideaCacheId, mergeIdeaBatches, resolveAge, suggestIdeas } from '../domain/ideas';
 import { deleteOccasion, deletePrivateGift, deleteSharedGift, updateOccasionDate, updatePrivateGift, updateSharedGift } from '../domain/edits';
 import { planReminders } from '../domain/reminders';
@@ -38,7 +38,7 @@ import { applyReminderPlan, cancelReminderPlan, requestReminderPermission } from
 import { loadSecret, saveSecret } from '../platform/secure';
 import { occasionLabel, planOccasion, presetFor } from '../domain/occasions';
 import { exportBackup, migrateToLocal, parseBackup, summarizeBackup, type BackupFailure } from '../domain/backup';
-import { decideCacheLoad } from '../domain/snapshotLoad';
+import { CacheStageError, decideCacheLoad, type CacheLoadFailure } from '../domain/snapshotLoad';
 import { normalizeStoredDate, parseLocalDate } from '../domain/calendarDate';
 import { relationshipCircleName, relationshipLabel, storeRelationship, type RelationshipPresetKey } from '../domain/relationship';
 import { acceptSuggestion, addCircle, assignCircle, cleanCircleName, removeCircle, renameCircle as renameStoredCircle } from '../domain/circles';
@@ -66,6 +66,8 @@ type GifteezApi = {
   retryStartup: () => void;
   /** A saved blob exists and could not be opened. The raw bytes are still in storage. */
   dataRecovery: boolean;
+  /** Which open stage failed. Debug builds may show the name. Never the key or the blob. */
+  recoveryStage: CacheLoadFailure | null;
   exportRawCache: () => Promise<void>;
   resumePersonId: string | null;
   openPerson: (personId: string) => void;
@@ -154,6 +156,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
   const [error, setError] = useState<string | null>(null);
   const [startupFailure, setStartupFailure] = useState<StartupFailure | null>(null);
   const [dataRecovery, setDataRecovery] = useState(false);
+  const [recoveryStage, setRecoveryStage] = useState<CacheLoadFailure | null>(null);
   const sealedHold = useRef<string | null>(null);
   const cacheReady = useRef(false);
   const [startupDetail, setStartupDetail] = useState<string | null>(null);
@@ -305,11 +308,13 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         }
         if (!result.ok) {
           sealedHold.current = result.blob;
+          setRecoveryStage(result.reason);
           setDataRecovery(true);
           return;
         }
         cacheReady.current = true;
         sealedHold.current = null;
+        setRecoveryStage(null);
         setDataRecovery(false);
         const loaded = migrateToLocal(result.snapshot);
         snapshotRef.current = loaded;
@@ -477,6 +482,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     const held = sealedHold.current;
     cacheReady.current = true;
     sealedHold.current = null;
+    setRecoveryStage(null);
     setDataRecovery(false);
     await commit(restoredSnapshot(current, parsed.snapshot));
     if (!held) {
@@ -536,6 +542,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       setBootId(value => value + 1);
     },
     dataRecovery,
+    recoveryStage,
     exportRawCache: async () => {
       const blob = sealedHold.current ?? await readCacheBlob();
       if (!blob) {
@@ -1112,7 +1119,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       return addImported(rows);
     },
-  }), [addImported, appearance, applyRestore, canUndo, clearResumePerson, cloudRemaining, colors, commit, completedPersonId, confetti, dataRecovery, env, error, fail, incomingBackup, notice, noticeArt, offerUndo, offline, onNavigate, paywallOpen, ready, resumePersonId, runUndo, setNotice, showNotice, skinId, snapshot, stageRestore, startupDetail, startupFailure, storeBusy, storeProduct, storeReady, sync]);
+  }), [addImported, appearance, applyRestore, canUndo, clearResumePerson, cloudRemaining, colors, commit, completedPersonId, confetti, dataRecovery, env, error, fail, incomingBackup, notice, noticeArt, offerUndo, offline, onNavigate, paywallOpen, ready, recoveryStage, resumePersonId, runUndo, setNotice, showNotice, skinId, snapshot, stageRestore, startupDetail, startupFailure, storeBusy, storeProduct, storeReady, sync]);
 
   return <GifteezContext.Provider value={api}>{children}</GifteezContext.Provider>;
 }
@@ -1135,7 +1142,19 @@ async function loadSnapshot() {
     blob,
     key,
     now: Date.now(),
-    open: (payload, stored) => openJson(payload, keyFromString(stored)),
+    open: (payload, stored) => {
+      let text: string;
+      try {
+        text = openString(payload, keyFromString(stored));
+      } catch {
+        throw new CacheStageError('decrypt');
+      }
+      try {
+        return JSON.parse(text) as unknown;
+      } catch {
+        throw new CacheStageError('parse');
+      }
+    },
   });
 }
 

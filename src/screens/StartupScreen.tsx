@@ -1,7 +1,8 @@
 import React from 'react';
+import type { CacheLoadFailure } from '../domain/snapshotLoad';
 import type { StartupFailure } from '../domain/startup';
 import { t } from '../i18n';
-import { ArtSlot, Body, Button, Screen, Title } from '../ui/ui';
+import { ArtSlot, Body, Button, Caption, Screen, Title } from '../ui/ui';
 
 export function StartupScreen({
   kind,
@@ -25,10 +26,12 @@ export function StartupScreen({
 }
 
 export function DataRecoveryScreen({
+  stage,
   onRetry,
   onRestore,
   onExport,
 }: {
+  stage: CacheLoadFailure | null;
   onRetry: () => void;
   onRestore: () => void;
   onExport: () => void;
@@ -39,6 +42,7 @@ export function DataRecoveryScreen({
       <ArtSlot name="error" size={160} />
       <Title accessibilityLabel={title}>{title}</Title>
       <Body>{t('recovery.body')}</Body>
+      {__DEV__ && stage ? <Caption tone="text">{t(`recovery.stage.${stage}`)}</Caption> : null}
       <Button label={t('recovery.retry')} onPress={onRetry} />
       <Button label={t('recovery.restore')} tone="secondary" onPress={onRestore} />
       <Button label={t('recovery.export')} tone="secondary" onPress={onExport} />

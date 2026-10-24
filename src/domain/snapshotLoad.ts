@@ -1,7 +1,17 @@
 import { migrateToLocal } from './backup';
 import { emptySnapshot, type AppSnapshot, type Circle, type FeedbackEntry, type GiftRecord, type IdeaCacheEntry, type Occasion, type OccasionState, type Person, type PrivateGift, type Profile } from './types';
 
-export type CacheLoadFailure = 'decrypt' | 'invalid' | 'key';
+export type CacheLoadFailure = 'key' | 'decrypt' | 'parse' | 'validate';
+
+/** A load failure with no payload. The message is only the stage name. */
+export class CacheStageError extends Error {
+  readonly stage: 'decrypt' | 'parse';
+
+  constructor(stage: 'decrypt' | 'parse') {
+    super(stage);
+    this.stage = stage;
+  }
+}
 
 export type CacheLoadResult =
   | { ok: true; snapshot: AppSnapshot }
@@ -270,10 +280,11 @@ export function decideCacheLoad(input: {
     const value = input.open(input.blob, input.key);
     const snapshot = normalizeStoredSnapshot(value, input.now);
     if (!snapshot) {
-      return { ok: false, reason: 'invalid', blob: input.blob };
+      return { ok: false, reason: 'validate', blob: input.blob };
     }
     return { ok: true, snapshot };
-  } catch {
-    return { ok: false, reason: 'decrypt', blob: input.blob };
+  } catch (caught) {
+    const reason = caught instanceof CacheStageError ? caught.stage : 'decrypt';
+    return { ok: false, reason, blob: input.blob };
   }
 }

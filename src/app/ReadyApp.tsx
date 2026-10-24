@@ -79,6 +79,7 @@ function Navigator() {
     <View style={[styles.fill, { backgroundColor: logoMounted ? launchBackground : gifteez.colors.background }]}>
       {showRecovery ? (
         <DataRecoveryScreen
+          stage={gifteez.recoveryStage}
           onRetry={gifteez.retryStartup}
           onRestore={() => { gifteez.pickBackup().catch(() => undefined); }}
           onExport={() => { gifteez.exportRawCache().catch(() => undefined); }}

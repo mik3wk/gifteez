@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, Image, StyleSheet, Text, View } from 'react-native';
-import { budgetFraction, budgetTone } from '../domain/budgetBar';
+import { budgetFraction, budgetTone, formatSpentOfBudget } from '../domain/budgetBar';
 import type { CircleMember, CircleSection } from '../domain/circles';
 import { fairnessView } from '../domain/fairnessView';
 import type { FairnessRow } from '../domain/logic';
@@ -178,10 +178,7 @@ export function ListRow({
 }
 
 function memberAmount(member: CircleMember, money: (cents: number) => string): string {
-  if (member.budgetCents != null && member.budgetCents > 0) {
-    return t('people.budgetLeft', { used: money(member.yearSpentCents), budget: money(member.budgetCents) });
-  }
-  return money(member.yearSpentCents);
+  return formatSpentOfBudget(member.yearSpentCents, member.budgetCents, money);
 }
 
 /** The fairness card used on Home and the Fairness tab. Amounts are dollars, never percents. */
@@ -226,7 +223,7 @@ export function CircleFairnessCard({
     </View>
   );
   const rows = members.map((member, index) => {
-    const barBudget = member.budgetCents != null && member.budgetCents > 0 ? member.budgetCents : top > 0 ? top : null;
+    const barBudget = member.budgetCents != null ? member.budgetCents : top > 0 ? top : null;
     const amount = memberAmount(member, money);
     return (
       <View key={member.personId} style={styles.memberLine}>

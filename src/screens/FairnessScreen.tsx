@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
@@ -12,13 +12,15 @@ import {
   uncircledPeople,
   type CircleSuggestion,
 } from '../domain/circles';
+import { formatSpentOfBudget } from '../domain/budgetBar';
 import { canAddPerson, listCurrency, yearSpentCents } from '../domain/logic';
 import { relationshipCircleName } from '../domain/relationship';
 import { deviceLocale, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { SessionEntrance } from '../ui/motion';
-import { WaxSeal } from '../ui/stationery';
+import { CircleFairnessCard, RowCard } from '../ui/stationery';
 import { space } from '../theme/tokens';
+import { useTheme } from '../theme/useTheme';
 import {
   AppHeader,
   Body,
@@ -118,55 +120,26 @@ export function FairnessScreen() {
               />
             ))}
             {sections.map(section => (
-              <Card key={section.circleId}>
-                <Heading>{section.name}</Heading>
-                {section.status === 'even' ? (
-                  <WaxSeal state="balanced" label={t('fairness.evenStatus')} />
-                ) : null}
-                {section.status === 'empty' ? <Caption>{t('fairness.emptyCircle')}</Caption> : (
-                  [...section.members].sort((a, b) => a.name.localeCompare(b.name)).map(member => (
-                    <View key={member.personId}>
-                      <Caption tone="text">{member.name}</Caption>
-                      <Caption>{t('fairness.year', { amount: money(member.yearSpentCents) })}</Caption>
-                      {section.behind.some(item => item.personId === member.personId) ? (
-                        <Caption>{t('fairness.behind', { amount: money(member.behindCents) })}</Caption>
-                      ) : null}
-                    </View>
-                  ))
-                )}
-                <Button label={t('fairness.edit')} tone="secondary" onPress={() => openEditor(section.circleId)} />
-              </Card>
+              <CircleFairnessCard
+                key={section.circleId}
+                section={section}
+                money={money}
+                onOpenIdeas={personId => navigation.navigate('Person', { personId, section: 'ideas' })}
+                onEdit={() => openEditor(section.circleId)}
+              />
             ))}
-            {others.length > 0 ? (
-              <Card>
-                <Heading>{t('fairness.everyoneElse')}</Heading>
-                {others.map(person => {
-                  const spent = yearSpentCents(person.id, snapshot.gifts, year);
-                  const line = person.budgetCents == null
-                    ? t('fairness.year', { amount: money(spent) })
-                    : t('fairness.ownBudget', {
-                      used: money(spent),
-                      budget: money(person.budgetCents),
-                      left: money(Math.max(0, person.budgetCents - spent)),
-                    });
-                  return (
-                    <View key={person.id}>
-                      <Caption tone="text">{person.name}</Caption>
-                      <Caption>{line}</Caption>
-                    </View>
-                  );
-                })}
-              </Card>
-            ) : null}
-            <Button
-              label={t('fairness.newCircle')}
-              tone="secondary"
+            {others.length > 0 ? <Uncircled people={others} gifts={snapshot.gifts} year={year} money={money} /> : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('fairness.newCircle')}
               onPress={() => {
                 setDraft('');
                 setNameError('');
                 setEditor('new');
               }}
-            />
+              style={styles.addCircle}>
+              <AddCircleLabel />
+            </Pressable>
           </>
         )}
       </SessionEntrance>
@@ -229,6 +202,46 @@ export function FairnessScreen() {
   );
 }
 
+function AddCircleLabel() {
+  const { colors, type, typeScale } = useTheme();
+  return (
+    <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: colors.pink }]}>{`+ ${t('fairness.newCircle')}`}</Text>
+  );
+}
+
+function Uncircled({
+  people,
+  gifts,
+  year,
+  money,
+}: {
+  people: ReturnType<typeof uncircledPeople>;
+  gifts: Parameters<typeof yearSpentCents>[1];
+  year: number;
+  money: (cents: number) => string;
+}) {
+  const { colors, type, typeScale } = useTheme();
+  return (
+    <View style={styles.block}>
+      <Heading>{t('fairness.notInCircle')}</Heading>
+      <RowCard>
+        {people.map((person, index) => {
+          const spent = yearSpentCents(person.id, gifts, year);
+          const line = formatSpentOfBudget(spent, person.budgetCents, money);
+          return (
+            <View
+              key={person.id}
+              style={[styles.plainRow, { borderBottomColor: colors.border, borderBottomWidth: index === people.length - 1 ? 0 : StyleSheet.hairlineWidth }]}>
+              <Text numberOfLines={1} maxFontSizeMultiplier={typeScale.body} style={[type.body, styles.plainName, { color: colors.text }]}>{person.name}</Text>
+              <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: colors.muted }]}>{line}</Text>
+            </View>
+          );
+        })}
+      </RowCard>
+    </View>
+  );
+}
+
 function SuggestionCard({
   item,
   onAccept,
@@ -251,4 +264,8 @@ function SuggestionCard({
 
 const styles = StyleSheet.create({
   actions: { gap: space.xs },
+  block: { gap: space.xs },
+  addCircle: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
+  plainRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, minHeight: 48, paddingHorizontal: space.sm },
+  plainName: { flex: 1 },
 });
