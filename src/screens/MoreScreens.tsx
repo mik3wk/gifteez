@@ -7,7 +7,7 @@ import DeviceInfo from 'react-native-device-info';
 import type { RootStack } from '../app/navigation';
 import { describeImport } from '../domain/importNote';
 import { accountUnlocked, parseBudget } from '../domain/logic';
-import { t } from '../i18n';
+import { clockFrom, formatClock, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { autoSkinLabel, type SkinId } from '../theme/skins';
 import { chrome, space } from '../theme/tokens';
@@ -449,16 +449,6 @@ function budgetField(cents: number | null | undefined): string {
 function budgetLabel(cents: number | null | undefined): string {
   const shown = budgetField(cents);
   return shown ? `$${shown}` : t('settings.none');
-}
-
-function clockFrom(hour: number, minute: number): Date {
-  return new Date(2026, 0, 1, hour, minute, 0, 0);
-}
-
-function formatClock(hour: number, minute: number): string {
-  const shown = hour % 12 === 0 ? 12 : hour % 12;
-  const suffix = hour < 12 ? 'AM' : 'PM';
-  return `${shown}:${String(minute).padStart(2, '0')} ${suffix}`;
 }
 
 const styles = StyleSheet.create({

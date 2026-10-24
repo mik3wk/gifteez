@@ -72,3 +72,42 @@ export function planReminders(input: {
   });
   return slots.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
 }
+
+/** The next time a reminder will fire, or the next occasion when every slot is already past. */
+export function nextReminderWhen(input: {
+  people: Person[];
+  occasions: Occasion[];
+  now?: Date;
+  leadDays?: number;
+  hour?: number;
+  minute?: number;
+}): Date | null {
+  const now = input.now ?? new Date();
+  const slots = planReminders({
+    people: input.people,
+    occasions: input.occasions,
+    now,
+    enabled: true,
+    leadDays: input.leadDays,
+    hour: input.hour,
+    minute: input.minute,
+  });
+  if (slots[0]) {
+    return new Date(slots[0].at);
+  }
+  let soonest: Date | null = null;
+  input.occasions.filter(occasion => !occasion.deleted).forEach(occasion => {
+    const person = input.people.find(item => item.id === occasion.personId && !item.deleted);
+    if (!person) {
+      return;
+    }
+    const when = nextOccasionDate(occasion, now);
+    if (!when) {
+      return;
+    }
+    if (!soonest || when.getTime() < soonest.getTime()) {
+      soonest = when;
+    }
+  });
+  return soonest;
+}

@@ -181,6 +181,16 @@ export function formatStoredDate(value: string, locale = deviceLocale()): string
   return date ? formatLongDate(date, locale) : value;
 }
 
+export function formatClock(hour: number, minute: number): string {
+  const shown = hour % 12 === 0 ? 12 : hour % 12;
+  const suffix = hour < 12 ? 'AM' : 'PM';
+  return `${shown}:${String(minute).padStart(2, '0')} ${suffix}`;
+}
+
+export function clockFrom(hour: number, minute: number): Date {
+  return new Date(2026, 0, 1, hour, minute, 0, 0);
+}
+
 export function timeGreeting(date = new Date()): string {
   const hour = date.getHours();
   if (hour >= 5 && hour < 12) {

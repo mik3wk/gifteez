@@ -4,7 +4,7 @@ import type { AppEnv } from '../config/env';
 import { keyFromString, keyToString, openString, randomId, randomKey, sealJson } from '../crypto/crypto';
 import { cloudIdeaRequestLog, ideaCacheId, mergeIdeaBatches, moreLikeIdeas, resolveAge, suggestIdeas } from '../domain/ideas';
 import { deleteOccasion, deletePrivateGift, deleteSharedGift, updateOccasionDate, updatePrivateGift, updateSharedGift } from '../domain/edits';
-import { planReminders } from '../domain/reminders';
+import { nextReminderWhen, planReminders } from '../domain/reminders';
 import { classifyStartupError, startupCause, type StartupFailure } from '../domain/startup';
 import {
   addFeedback,
@@ -112,7 +112,7 @@ type GifteezApi = {
   refreshIdeas: (personId: string) => Promise<void>;
   cloudIdeas: (personId: string) => Promise<GiftIdea[]>;
   cloudRemaining: Record<string, number>;
-  setReminders: (enabled: boolean) => Promise<void>;
+  setReminders: (enabled: boolean, announce?: boolean) => Promise<void>;
   exportBackup: () => string;
   shareBackup: () => Promise<void>;
   pickBackup: () => Promise<void>;
@@ -1055,14 +1055,30 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         throw caught;
       }
     },
-    setReminders: async enabled => {
+    setReminders: async (enabled, announce = false) => {
       if (enabled) {
         const permission = await requestReminderPermission();
         const granted = permission === 'granted';
-        await commit(withProfile(snapshotRef.current, { reminders: granted ? 'on' : 'off' }));
         if (!granted) {
+          await commit(withProfile(snapshotRef.current, { reminders: 'off' }));
           fail(permission === 'denied' && Platform.OS === 'ios' ? 'notificationsSettings' : 'notifications');
+          await scheduleReminders(snapshotRef.current);
+          return;
         }
+        if (announce) {
+          const current = snapshotRef.current;
+          const when = nextReminderWhen({
+            people: current.people,
+            occasions: current.occasions,
+            leadDays: current.profile.reminderLeadDays,
+            hour: current.profile.reminderHour,
+            minute: current.profile.reminderMinute,
+          });
+          if (when) {
+            showNotice(t('person.remindSet', { date: formatDate(when) }));
+          }
+        }
+        await commit(withProfile(snapshotRef.current, { reminders: 'on' }));
       } else {
         await commit(withProfile(snapshotRef.current, { reminders: 'off' }));
       }

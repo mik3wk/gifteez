@@ -16,13 +16,13 @@ import { useTheme } from '../theme/useTheme';
 import { RibbonBanner, tagBowSource, tagStringSource } from '../ui/art';
 import { BudgetBar, CircleFairnessCard, ListRow, MonogramAvatar, RowCard, SealPill } from '../ui/stationery';
 import { CalendarReviewLink } from '../ui/CalendarReview';
-import { Body, Button, Caption, Card, EmptyState, IconButton, Screen, Sheet } from '../ui/ui';
+import { Button, Caption, Card, EmptyState, IconButton, ReminderBellSheet, Screen } from '../ui/ui';
 
 type Upcoming = { person: Person; occasion: Occasion; date: Date };
 
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, resumePersonId, clearResumePerson, openPaywall, setReminders, updateProfile } = useGifteez();
+  const { snapshot, resumePersonId, clearResumePerson, openPaywall, updateProfile } = useGifteez();
   const [remindersOpen, setRemindersOpen] = useState(false);
   const today = new Date();
   const year = today.getFullYear();
@@ -52,8 +52,6 @@ export function HomeScreen() {
     }
     navigation.navigate('AddPerson');
   }
-  const remindersOn = snapshot.profile.reminders === 'on';
-
   return (
     <Screen tab="home">
       <HomeHeader
@@ -133,14 +131,7 @@ export function HomeScreen() {
         </View>
       ) : null}
       {people.length > 0 ? <CalendarAction /> : null}
-      <Sheet visible={remindersOpen} compact title={t('people.remindersA11y')} onClose={() => setRemindersOpen(false)}>
-        <Body>{remindersOn ? t('people.remindersOn') : t('person.remindBody')}</Body>
-        {remindersOn ? (
-          <Button label={t('person.remindNo')} tone="secondary" onPress={() => { setReminders(false).catch(() => undefined); setRemindersOpen(false); }} />
-        ) : (
-          <Button label={t('person.remindYes')} onPress={() => { setReminders(true).catch(() => undefined); setRemindersOpen(false); }} />
-        )}
-      </Sheet>
+      <ReminderBellSheet visible={remindersOpen} onClose={() => setRemindersOpen(false)} />
     </Screen>
   );
 }

@@ -23,7 +23,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { openTab, type RootStack } from '../app/navigation';
 import { getEnv } from '../config/env';
-import { t } from '../i18n';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { clockFrom, formatClock, t } from '../i18n';
 import { hideNativeSplash } from '../platform/splash';
 import { useGifteez } from '../state/GifteezContext';
 import { useTheme } from '../theme/useTheme';
@@ -1141,10 +1142,72 @@ export function PersonRow({
   );
 }
 
-export function AppHeader({ title, greeting }: { title: string; greeting?: string }) {
-  const { snapshot, setReminders } = useGifteez();
-  const [open, setOpen] = useState(false);
+const REMINDER_LEADS = [1, 3, 7, 14];
+
+export function ReminderBellSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { snapshot, setReminders, updateProfile } = useGifteez();
   const on = snapshot.profile.reminders === 'on';
+  const [changing, setChanging] = useState(false);
+  const [lead, setLead] = useState(snapshot.profile.reminderLeadDays ?? 7);
+  const [clock, setClock] = useState(() => clockFrom(snapshot.profile.reminderHour ?? 9, snapshot.profile.reminderMinute ?? 0));
+  useEffect(() => {
+    if (!visible) {
+      setChanging(false);
+    }
+  }, [visible]);
+  const savedLead = snapshot.profile.reminderLeadDays ?? 7;
+  const savedHour = snapshot.profile.reminderHour ?? 9;
+  const savedMinute = snapshot.profile.reminderMinute ?? 0;
+  const leadOptions = REMINDER_LEADS.includes(lead) ? REMINDER_LEADS : [...REMINDER_LEADS, lead].sort((a, b) => a - b);
+  return (
+    <Sheet visible={visible} compact title={t('people.remindersA11y')} onClose={onClose}>
+      {on && !changing ? (
+        <>
+          <Body>{t('people.remindersOnDetail', { count: savedLead, time: formatClock(savedHour, savedMinute) })}</Body>
+          <Button label={t('common.change')} onPress={() => {
+            setLead(savedLead);
+            setClock(clockFrom(savedHour, savedMinute));
+            setChanging(true);
+          }} />
+          <Button label={t('common.done')} tone="secondary" onPress={onClose} />
+        </>
+      ) : on && changing ? (
+        <>
+          <Caption>{t('settings.reminderDays')}</Caption>
+          <Segment
+            value={String(lead)}
+            options={leadOptions.map(days => ({ id: String(days), label: String(days) }))}
+            onChange={id => {
+              const days = Number(id);
+              setLead(days);
+              updateProfile({ reminderLeadDays: days }).catch(() => undefined);
+            }}
+          />
+          <DateTimePicker
+            mode="time"
+            display="spinner"
+            value={clock}
+            style={{ height: 180 }}
+            accessibilityLabel={t('settings.reminderTime')}
+            onValueChange={(_event, date) => {
+              setClock(date);
+              updateProfile({ reminderHour: date.getHours(), reminderMinute: date.getMinutes() }).catch(() => undefined);
+            }}
+          />
+          <Button label={t('common.done')} onPress={onClose} />
+        </>
+      ) : (
+        <>
+          <Body>{t('person.remindBody')}</Body>
+          <Button label={t('person.remindYes')} onPress={() => { setReminders(true).catch(() => undefined); onClose(); }} />
+        </>
+      )}
+    </Sheet>
+  );
+}
+
+export function AppHeader({ title, greeting }: { title: string; greeting?: string }) {
+  const [open, setOpen] = useState(false);
   return (
     <View style={styles.header}>
       <View style={styles.headerCopy}>
@@ -1154,14 +1217,7 @@ export function AppHeader({ title, greeting }: { title: string; greeting?: strin
         </View>
       </View>
       <IconButton label={t('people.remindersA11y')} name="bell" onPress={() => setOpen(true)} />
-      <Sheet visible={open} title={t('people.remindersA11y')} onClose={() => setOpen(false)}>
-        <Body>{on ? t('people.remindersOn') : t('person.remindBody')}</Body>
-        {on ? (
-          <Button label={t('person.remindNo')} tone="secondary" onPress={() => { setReminders(false).catch(() => undefined); setOpen(false); }} />
-        ) : (
-          <Button label={t('person.remindYes')} onPress={() => { setReminders(true).catch(() => undefined); setOpen(false); }} />
-        )}
-      </Sheet>
+      <ReminderBellSheet visible={open} onClose={() => setOpen(false)} />
     </View>
   );
 }

@@ -1305,7 +1305,7 @@ function ReminderOffer() {
     <Card>
       <Heading>{t('people.remindersA11y')}</Heading>
       <Body>{t('person.remindBody')}</Body>
-      <Button label={t('person.remindYes')} tone="secondary" onPress={() => setReminders(true)} />
+      <Button label={t('person.remindYes')} tone="secondary" onPress={() => { setReminders(true, true).catch(() => undefined); }} />
       <Button label={t('person.remindNo')} tone="ghost" onPress={() => setReminders(false)} />
     </Card>
   );
