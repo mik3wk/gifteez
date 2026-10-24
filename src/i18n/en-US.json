@@ -158,7 +158,7 @@
     "budget": "Yearly budget (optional)",
     "perYear": "per year",
     "perYearSuffix": "/ year",
-    "budgetFromCircle": "{amount} · from {name} circle",
+    "budgetFromCircle": "{amount} · {from}",
     "budgetCustom": "{amount} · custom",
     "override": "Override",
     "useCircleBudget": "Use circle budget",

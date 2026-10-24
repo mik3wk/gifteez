@@ -5,7 +5,7 @@ import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { cancelAddAction, homeTabReset, personBackLabel, type RootStack } from '../app/navigation';
 import { amazonSearchUrl, shopSearchQuery } from '../domain/amazon';
-import { budgetOrigin } from '../domain/budget';
+import { budgetOrigin, circleBudgetFrom, circleLabel } from '../domain/budget';
 import { describeImport } from '../domain/importNote';
 import { mainAppOpen } from '../domain/onboarding';
 import { importedVisitBanner, type ImportedVisit } from '../domain/importedBanner';
@@ -1463,7 +1463,7 @@ function BudgetSource({
     ? t('settings.none')
     : formatMoney(origin.cents, deviceLocale(), listCurrency(snapshot), true);
   const label = origin.kind === 'circle'
-    ? t('person.budgetFromCircle', { amount, name: origin.circleName })
+    ? t('person.budgetFromCircle', { amount, from: circleBudgetFrom(origin.circleName) })
     : t('person.budgetCustom', { amount });
   const action = origin.kind === 'circle' ? t('person.override') : t('person.useCircleBudget');
   return (
@@ -1627,7 +1627,7 @@ function validPurchaseDate(value: string): boolean {
 function personMeta(person: { relationship?: string; circleId?: string }, circles: { id: string; name: string }[]): string {
   const relationship = relationshipLabel(person.relationship);
   const circle = circles.find(item => item.id === person.circleId)?.name;
-  const parts = [relationship, circle ? t('person.circleMeta', { name: circle }) : ''].filter(Boolean);
+  const parts = [relationship, circle ? circleLabel(circle) : ''].filter(Boolean);
   return parts.join(' · ') || t('fairness.noCircle');
 }
 

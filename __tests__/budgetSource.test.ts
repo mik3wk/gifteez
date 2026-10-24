@@ -1,4 +1,4 @@
-import { applyCircleBudget, budgetOrigin, migrateBudgetSources } from '../src/domain/budget';
+import { applyCircleBudget, budgetOrigin, circleBudgetFrom, circleLabel, migrateBudgetSources } from '../src/domain/budget';
 import { assignCircle } from '../src/domain/circles';
 import { emptySnapshot, type Person } from '../src/domain/types';
 import { t } from '../src/i18n';
@@ -33,7 +33,11 @@ test('a per-person budget that differs from the circle becomes custom', () => {
   expect(budgetOrigin(next.people[0], next.circles).kind).toBe('circle');
   expect(next.people.find(item => item.id === 'maya')?.budgetCustom).toBe(true);
   expect(budgetOrigin(next.people[1], next.circles)).toMatchObject({ kind: 'custom', cents: 25000, circleName: 'Kids' });
-  expect(t('person.budgetFromCircle', { amount: '$200', name: 'Kids' })).toBe('$200 · from Kids circle');
+  expect(t('person.budgetFromCircle', { amount: '$200', from: circleBudgetFrom('Kids') })).toBe('$200 · from the Kids circle');
+  expect(circleBudgetFrom('Test Circle')).toBe('from Test Circle');
+  expect(circleBudgetFrom('test circle')).toBe('from test circle');
+  expect(circleLabel('Siblings')).toBe('Siblings circle');
+  expect(circleLabel('Test Circle')).toBe('Test Circle');
   expect(t('person.budgetCustom', { amount: '$250' })).toBe('$250 · custom');
   expect(t('person.override')).toBe('Override');
   expect(t('person.useCircleBudget')).toBe('Use circle budget');

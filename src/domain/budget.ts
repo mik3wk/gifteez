@@ -29,6 +29,24 @@ export function budgetOrigin(person: Person, circles: Circle[]): BudgetOrigin {
   return { kind: 'circle', cents: centsOf(circle.budgetCents), circleName: circle.name };
 }
 
+/** "Siblings circle", or the name alone when it already ends with circle. */
+export function circleLabel(name: string): string {
+  const trimmed = name.trim();
+  if (/circle$/i.test(trimmed)) {
+    return trimmed;
+  }
+  return `${trimmed} circle`;
+}
+
+/** "from the Siblings circle", or "from Test Circle" when the name already says circle. */
+export function circleBudgetFrom(name: string): string {
+  const trimmed = name.trim();
+  if (/circle$/i.test(trimmed)) {
+    return `from ${trimmed}`;
+  }
+  return `from the ${trimmed} circle`;
+}
+
 function withCustom(person: Person, budgetCents: number | null): Person {
   return { ...person, budgetCents, budgetCustom: true };
 }
