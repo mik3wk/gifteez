@@ -1,27 +1,30 @@
 import React, { useState } from 'react';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import DeviceInfo from 'react-native-device-info';
 import type { RootStack } from '../app/navigation';
-import { accountUnlocked, parseBudget } from '../domain/logic';
+import { accountUnlocked } from '../domain/logic';
 import { t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import type { SkinId } from '../theme/skins';
+import { chrome, space } from '../theme/tokens';
+import { useTheme } from '../theme/useTheme';
 import { CalendarReviewLink } from '../ui/CalendarReview';
+import { Icon, type IconName } from '../ui/icons';
 import { SessionEntrance } from '../ui/motion';
 import {
   AppHeader,
   Body,
-  Button,
   Caption,
-  Card,
   Chip,
   Cluster,
   Field,
-  Heading,
-  priceLabel,
   Screen,
-  Toggle,
+  Segment,
+  Sheet,
+  UnlockSheet,
 } from '../ui/ui';
 
 export { FairnessScreen } from './FairnessScreen';
@@ -35,18 +38,17 @@ const SKIN_CHOICES: Array<{ id: SkinId | 'auto'; label: string }> = [
   { id: 'summer', label: 'settings.skinSummer' },
 ];
 
+const LEAD_CHOICES = [1, 3, 7, 14];
+
+type SheetId = 'household' | 'name' | 'remind' | 'theme' | 'privacy' | 'contact' | 'skins' | 'unlock';
+
 export function SettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
   const {
     snapshot,
-    setReminders,
-    buy,
     restorePurchases,
-    storeProduct,
-    importFromContacts,
     shareBackup,
     pickBackup,
-    storeBusy,
     error,
     appearance,
     setAppearance,
@@ -54,206 +56,289 @@ export function SettingsScreen() {
     previewSkin,
     skinPreview,
   } = useGifteez();
+  const [sheet, setSheet] = useState<SheetId | null>(null);
   const [household, setHousehold] = useState(snapshot.profile.householdName ?? '');
   const [given, setGiven] = useState(snapshot.profile.givenName ?? '');
-  const [days, setDays] = useState(String(snapshot.profile.reminderLeadDays ?? 7));
-  const [hour, setHour] = useState(String(snapshot.profile.reminderHour ?? 9));
-  const [budget, setBudget] = useState(budgetField(snapshot.profile.defaultBudgetCents));
-  const [message, setMessage] = useState<string | null>(null);
+  const [lead, setLead] = useState(snapshot.profile.reminderLeadDays ?? 7);
+  const [clock, setClock] = useState(() => clockFrom(snapshot.profile.reminderHour ?? 9, snapshot.profile.reminderMinute ?? 0));
+  const householdValue = snapshot.profile.householdName?.trim() || t('people.householdDefault');
+  const givenValue = snapshot.profile.givenName?.trim() ?? '';
+  const remindValue = t('settings.remindValue', {
+    count: snapshot.profile.reminderLeadDays ?? 7,
+    time: formatClock(snapshot.profile.reminderHour ?? 9, snapshot.profile.reminderMinute ?? 0),
+  });
+  const themeValue = appearance === 'light'
+    ? t('settings.appearanceLight')
+    : appearance === 'dark'
+      ? t('settings.appearanceDark')
+      : t('settings.appearanceSystem');
+  const leadOptions = LEAD_CHOICES.includes(lead) ? LEAD_CHOICES : [...LEAD_CHOICES, lead].sort((a, b) => a - b);
+
+  function openHousehold() {
+    setHousehold(snapshot.profile.householdName ?? '');
+    setSheet('household');
+  }
+
+  function openName() {
+    setGiven(snapshot.profile.givenName ?? '');
+    setSheet('name');
+  }
+
+  function openRemind() {
+    const days = snapshot.profile.reminderLeadDays ?? 7;
+    const hour = snapshot.profile.reminderHour ?? 9;
+    const minute = snapshot.profile.reminderMinute ?? 0;
+    setLead(days);
+    setClock(clockFrom(hour, minute));
+    setSheet('remind');
+  }
 
   function saveHousehold() {
     const next = household.trim().slice(0, 40);
-    if (next === (snapshot.profile.householdName ?? '')) {
-      return;
+    setSheet(null);
+    if (next !== (snapshot.profile.householdName ?? '')) {
+      updateProfile({ householdName: next }).catch(() => undefined);
     }
-    updateProfile({ householdName: next }).catch(() => undefined);
   }
 
   function saveGiven() {
     const next = given.trim().slice(0, 40);
-    if (next === (snapshot.profile.givenName ?? '')) {
-      return;
+    setSheet(null);
+    if (next !== (snapshot.profile.givenName ?? '')) {
+      updateProfile({ givenName: next }).catch(() => undefined);
     }
-    updateProfile({ givenName: next }).catch(() => undefined);
-  }
-
-  function saveDays() {
-    const value = Number(days);
-    if (!Number.isInteger(value) || value < 0 || value > 30) {
-      return;
-    }
-    if (value === (snapshot.profile.reminderLeadDays ?? 7)) {
-      return;
-    }
-    updateProfile({ reminderLeadDays: value }).catch(() => undefined);
-  }
-
-  function saveHour() {
-    const value = Number(hour);
-    if (!Number.isInteger(value) || value < 0 || value > 23) {
-      return;
-    }
-    if (value === (snapshot.profile.reminderHour ?? 9)) {
-      return;
-    }
-    updateProfile({ reminderHour: value }).catch(() => undefined);
-  }
-
-  function saveBudget() {
-    if (!budget.trim()) {
-      if (snapshot.profile.defaultBudgetCents != null) {
-        updateProfile({ defaultBudgetCents: null }).catch(() => undefined);
-      }
-      return;
-    }
-    const cents = parseBudget(budget);
-    if (cents == null || cents === snapshot.profile.defaultBudgetCents) {
-      return;
-    }
-    updateProfile({ defaultBudgetCents: cents }).catch(() => undefined);
   }
 
   return (
     <Screen tab="settings">
       <AppHeader title={t('settings.title')} />
       <SessionEntrance id="settings">
-        <Card>
-          <Heading>{t('settings.household')}</Heading>
-          <Field
-            label={t('settings.householdName')}
-            value={household}
-            onChangeText={setHousehold}
-            onBlur={saveHousehold}
-            onSubmitEditing={saveHousehold}
-            placeholder={t('people.householdDefault')}
-            textContentType="name"
-            autoComplete="name"
+        <SettingsGroup title={t('settings.household')}>
+          <SettingsRow icon="home" label={t('settings.householdName')} value={householdValue} onPress={openHousehold} />
+          <SettingsRow icon="people" label={t('settings.yourName')} value={givenValue} onPress={openName} />
+        </SettingsGroup>
+        <SettingsGroup title={t('settings.reminders')}>
+          <ReminderRow />
+          <SettingsRow icon="bell" label={t('settings.remindMe')} value={remindValue} onPress={openRemind} />
+        </SettingsGroup>
+        <SettingsGroup title={t('settings.appearance')}>
+          <SettingsRow icon="sparkle" label={t('settings.theme')} value={themeValue} onPress={() => setSheet('theme')} />
+        </SettingsGroup>
+        <SettingsGroup title={t('settings.plus')}>
+          <SettingsRow
+            icon="gift"
+            label={t('settings.unlockAction')}
+            value={accountUnlocked(snapshot) ? t('settings.unlockedValue') : undefined}
+            onPress={() => setSheet('unlock')}
           />
-          <Field
-            label={t('settings.givenName')}
-            value={given}
-            onChangeText={setGiven}
-            onBlur={saveGiven}
-            onSubmitEditing={saveGiven}
-            textContentType="name"
-            autoComplete="name"
+          <SettingsRow icon="gift" label={t('settings.restore')} onPress={() => { restorePurchases().catch(() => undefined); }} />
+        </SettingsGroup>
+        {error ? <Caption tone="danger">{error}</Caption> : null}
+        <SettingsGroup title={t('settings.yourData')}>
+          <SettingsRow icon="gear" label={t('settings.export')} onPress={() => { shareBackup().catch(() => undefined); }} />
+          <SettingsRow icon="gear" label={t('settings.restoreRow')} onPress={() => { pickBackup().catch(() => undefined); }} />
+          <CalendarReviewLink
+            label={t('people.findBirthdays')}
+            row={open => <SettingsRow icon="calendar" label={t('people.findBirthdays')} onPress={open} />}
           />
-        </Card>
-        <Card>
-          <Heading>{t('settings.reminders')}</Heading>
-          <Body>{t('settings.remindersHint')}</Body>
-          <Toggle
-            label={t('settings.remindersLabel')}
-            value={snapshot.profile.reminders === 'on'}
-            onValueChange={value => { Promise.resolve(setReminders(value)).catch(() => undefined); }}
+        </SettingsGroup>
+        <SettingsGroup title={t('settings.about')}>
+          <SettingsRow icon="heart" label={t('settings.privacyTitle')} onPress={() => setSheet('privacy')} />
+          <SettingsRow icon="heart" label={t('settings.contact')} onPress={() => setSheet('contact')} />
+          <SettingsRow
+            icon="sparkle"
+            label={t('settings.version')}
+            value={`${DeviceInfo.getVersion()} (${DeviceInfo.getBuildNumber()})`}
+            chevron={false}
           />
-          <Field
-            label={t('settings.reminderDays')}
-            value={days}
-            onChangeText={setDays}
-            onBlur={saveDays}
-            onSubmitEditing={saveDays}
-            keyboardType="number-pad"
-          />
-          <Field
-            label={t('settings.reminderHour')}
-            value={hour}
-            onChangeText={setHour}
-            onBlur={saveHour}
-            onSubmitEditing={saveHour}
-            keyboardType="number-pad"
-          />
-        </Card>
-        <Card>
-          <Heading>{t('settings.theme')}</Heading>
-          <Cluster>
-            <Chip label={t('settings.appearanceSystem')} selected={appearance === 'system'} onPress={() => { setAppearance('system').catch(() => undefined); }} />
-            <Chip label={t('settings.appearanceLight')} selected={appearance === 'light'} onPress={() => { setAppearance('light').catch(() => undefined); }} />
-            <Chip label={t('settings.appearanceDark')} selected={appearance === 'dark'} onPress={() => { setAppearance('dark').catch(() => undefined); }} />
-          </Cluster>
-        </Card>
-        <Card>
-          <Heading>{t('settings.gifting')}</Heading>
-          <Field
-            label={t('settings.defaultBudget')}
-            value={budget}
-            onChangeText={setBudget}
-            onBlur={saveBudget}
-            onSubmitEditing={saveBudget}
-            keyboardType="decimal-pad"
-          />
-          <Button label={t('settings.circles')} tone="secondary" onPress={() => navigation.navigate('Fairness')} />
-        </Card>
-        <Card>
-          <Heading>{t('settings.importBackup')}</Heading>
-          <Body>{t('settings.backupHint')}</Body>
-          <Button label={t('settings.export')} tone="secondary" onPress={() => { shareBackup().catch(() => undefined); }} />
-          <Button label={t('settings.restoreBackup')} tone="secondary" onPress={() => { pickBackup().catch(() => undefined); }} />
-          <Body>{t('settings.calendarHint')}</Body>
-          <CalendarReviewLink label={t('settings.findEvents')} button />
-          <Body>{t('settings.contactsHint')}</Body>
-          <Button
-            label={t('settings.contacts')}
-            tone="secondary"
-            onPress={async () => setMessage(await describeImport(await importFromContacts()))}
-          />
-          {message ? <Body>{message}</Body> : null}
-        </Card>
-        <Card>
-          <Heading>{t('settings.unlock')}</Heading>
-          {accountUnlocked(snapshot) ? <Body>{t('settings.unlocked')}</Body> : (
-            <>
-              <Body>{priceLabel(storeProduct?.displayPrice)}</Body>
-              {error ? <Caption tone="danger">{error}</Caption> : null}
-              <Button label={t('settings.unlockAction')} busy={storeBusy} onPress={buy} />
-              <Button label={t('settings.restore')} tone="secondary" onPress={restorePurchases} />
-            </>
-          )}
-        </Card>
-        <Card>
-          <Heading>{t('settings.about')}</Heading>
-          <Caption tone="text">{t('settings.privacy')}</Caption>
-          <Caption tone="text">{t('shop.disclosure')}</Caption>
-          <Caption tone="text">{t('settings.aboutVersion', { version: DeviceInfo.getVersion(), build: DeviceInfo.getBuildNumber() })}</Caption>
-        </Card>
+        </SettingsGroup>
         {__DEV__ ? (
-          <Card>
-            <Heading>{t('settings.developer')}</Heading>
-            <Caption tone="text">{t('settings.skinPreview')}</Caption>
-            <Cluster>
-              {SKIN_CHOICES.map(choice => (
-                <Chip
-                  key={choice.id}
-                  label={t(choice.label)}
-                  selected={skinPreview === choice.id}
-                  onPress={() => previewSkin(choice.id)}
-                />
-              ))}
-            </Cluster>
-            <Button label={t('settings.resetRemote')} tone="secondary" onPress={() => previewSkin('remote')} />
-            <Button label={t('settings.gallery')} tone="secondary" onPress={() => navigation.navigate('ThemeGallery')} />
-          </Card>
+          <SettingsGroup title={t('settings.developer')}>
+            <SettingsRow icon="sparkle" label={t('settings.skinPreview')} onPress={() => setSheet('skins')} />
+            <SettingsRow icon="sparkle" label={t('settings.gallery')} onPress={() => navigation.navigate('ThemeGallery')} />
+          </SettingsGroup>
         ) : null}
       </SessionEntrance>
+      <Sheet visible={sheet === 'household'} title={t('settings.householdName')} doneLabel={t('common.done')} onClose={saveHousehold}>
+        <Field
+          label={t('settings.householdName')}
+          value={household}
+          onChangeText={setHousehold}
+          onSubmitEditing={saveHousehold}
+          placeholder={t('people.householdDefault')}
+          textContentType="name"
+          autoComplete="name"
+        />
+      </Sheet>
+      <Sheet visible={sheet === 'name'} title={t('settings.yourName')} doneLabel={t('common.done')} onClose={saveGiven}>
+        <Field
+          label={t('settings.yourName')}
+          value={given}
+          onChangeText={setGiven}
+          onSubmitEditing={saveGiven}
+          textContentType="name"
+          autoComplete="name"
+        />
+      </Sheet>
+      <Sheet visible={sheet === 'remind'} title={t('settings.remindMe')} doneLabel={t('common.done')} onClose={() => setSheet(null)}>
+        <Caption>{t('settings.reminderDays')}</Caption>
+        <Segment
+          value={String(lead)}
+          options={leadOptions.map(days => ({ id: String(days), label: String(days) }))}
+          onChange={id => {
+            const days = Number(id);
+            setLead(days);
+            updateProfile({ reminderLeadDays: days }).catch(() => undefined);
+          }}
+        />
+        {sheet === 'remind' ? (
+          <DateTimePicker
+            mode="time"
+            display="spinner"
+            value={clock}
+            onValueChange={(_event, date) => {
+              setClock(date);
+              updateProfile({ reminderHour: date.getHours(), reminderMinute: date.getMinutes() }).catch(() => undefined);
+            }}
+          />
+        ) : null}
+      </Sheet>
+      <Sheet visible={sheet === 'theme'} title={t('settings.theme')} doneLabel={t('common.done')} onClose={() => setSheet(null)}>
+        <Cluster>
+          <Chip label={t('settings.appearanceSystem')} selected={appearance === 'system'} onPress={() => { setAppearance('system').catch(() => undefined); }} />
+          <Chip label={t('settings.appearanceLight')} selected={appearance === 'light'} onPress={() => { setAppearance('light').catch(() => undefined); }} />
+          <Chip label={t('settings.appearanceDark')} selected={appearance === 'dark'} onPress={() => { setAppearance('dark').catch(() => undefined); }} />
+        </Cluster>
+      </Sheet>
+      <Sheet visible={sheet === 'privacy'} title={t('settings.privacyTitle')} onClose={() => setSheet(null)}>
+        <Body>{t('settings.privacy')}</Body>
+      </Sheet>
+      <Sheet visible={sheet === 'contact'} title={t('settings.contact')} onClose={() => setSheet(null)}>
+        <Body>{t('settings.contactBody')}</Body>
+      </Sheet>
+      <Sheet visible={sheet === 'skins'} title={t('settings.skinPreview')} onClose={() => setSheet(null)}>
+        <Caption>{t('settings.skinPreview')}</Caption>
+        <Cluster>
+          {SKIN_CHOICES.map(choice => (
+            <Chip
+              key={choice.id}
+              label={t(choice.label)}
+              selected={skinPreview === choice.id}
+              onPress={() => previewSkin(choice.id)}
+            />
+          ))}
+        </Cluster>
+        <Chip label={t('settings.resetRemote')} onPress={() => previewSkin('remote')} />
+      </Sheet>
+      <UnlockSheet visible={sheet === 'unlock'} onClose={() => setSheet(null)} />
     </Screen>
   );
 }
 
-function budgetField(cents: number | null | undefined): string {
-  if (cents == null) {
-    return '';
-  }
-  const dollars = cents / 100;
-  return Number.isInteger(dollars) ? String(dollars) : dollars.toFixed(2);
+function ReminderRow() {
+  const { snapshot, setReminders } = useGifteez();
+  const on = snapshot.profile.reminders === 'on';
+  const { colors, scheme, type, typeScale } = useTheme();
+  const off = scheme === 'dark' ? chrome.switchOffDark : chrome.switchOff;
+  const thumb = scheme === 'dark' ? chrome.switchThumbDark : chrome.white;
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityLabel={t('settings.remindersLabel')}
+      accessibilityState={{ checked: on }}
+      onPress={() => { Promise.resolve(setReminders(!on)).catch(() => undefined); }}
+      style={styles.row}>
+      <View style={[styles.tile, { backgroundColor: colors.surfaceAlt }]}>
+        <Icon name="bell" color={colors.pink} size={16} />
+      </View>
+      <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, styles.label, { color: colors.text }]}>{t('settings.occasionReminders')}</Text>
+      <Switch
+        pointerEvents="none"
+        value={on}
+        onValueChange={value => { Promise.resolve(setReminders(value)).catch(() => undefined); }}
+        trackColor={{ false: off, true: colors.pink }}
+        ios_backgroundColor={off}
+        thumbColor={on ? colors.onPink : thumb}
+      />
+    </Pressable>
+  );
 }
 
-async function describeImport(result: number | 'denied'): Promise<string> {
-  if (result === 'denied') {
-    return t('importFlow.denied');
-  }
-  if (result === 0) {
-    return t('importFlow.none');
-  }
-  return t('importFlow.added', { count: result });
+function SettingsGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  const { colors, type, typeScale, radius } = useTheme();
+  const rows = React.Children.toArray(children);
+  return (
+    <View style={styles.group}>
+      <Text
+        maxFontSizeMultiplier={typeScale.caption}
+        style={[type.caption, styles.groupLabel, { color: colors.muted }]}>
+        {title}
+      </Text>
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.card }]}>
+        {rows.map((child, index) => (
+          <View key={index}>
+            {child}
+            {index < rows.length - 1 ? <View style={[styles.hairline, { backgroundColor: colors.border }]} /> : null}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
 }
 
+export function SettingsRow({
+  icon,
+  label,
+  value,
+  onPress,
+  chevron = true,
+}: {
+  icon: IconName;
+  label: string;
+  value?: string;
+  onPress?: () => void;
+  chevron?: boolean;
+}) {
+  const { colors, type, typeScale } = useTheme();
+  const body = (
+    <>
+      <View style={[styles.tile, { backgroundColor: colors.surfaceAlt }]}>
+        <Icon name={icon} color={colors.pink} size={16} />
+      </View>
+      <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, styles.label, { color: colors.text }]}>{label}</Text>
+      {value ? (
+        <Text numberOfLines={1} maxFontSizeMultiplier={typeScale.caption} style={[type.caption, styles.value, { color: colors.muted }]}>{value}</Text>
+      ) : null}
+      {chevron && onPress ? <Icon name="chevron" color={colors.muted} size={16} /> : null}
+    </>
+  );
+  if (!onPress) {
+    return <View style={styles.row}>{body}</View>;
+  }
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.row}>
+      {body}
+    </Pressable>
+  );
+}
+
+function clockFrom(hour: number, minute: number): Date {
+  return new Date(2026, 0, 1, hour, minute, 0, 0);
+}
+
+function formatClock(hour: number, minute: number): string {
+  const shown = hour % 12 === 0 ? 12 : hour % 12;
+  const suffix = hour < 12 ? 'AM' : 'PM';
+  return `${shown}:${String(minute).padStart(2, '0')} ${suffix}`;
+}
+
+const styles = StyleSheet.create({
+  group: { gap: 6 },
+  groupLabel: { textTransform: 'uppercase', letterSpacing: 0.6, marginLeft: space.md },
+  card: { borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  row: { minHeight: 52, flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.md, gap: space.sm },
+  tile: { width: 28, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  label: { flex: 1 },
+  value: { maxWidth: '46%', textAlign: 'right' },
+  hairline: { height: StyleSheet.hairlineWidth, marginLeft: 56 },
+});

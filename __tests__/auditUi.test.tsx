@@ -90,7 +90,7 @@ test('settings shares a backup and labels reminders', async () => {
     );
   });
   const exportButton = renderer!.root.findAllByProps({ accessibilityRole: 'button' }).find(node =>
-    node.findAllByType(Text).some(item => item.props.children === 'Back up your list'),
+    node.findAllByType(Text).some(item => item.props.children === 'Export backup'),
   );
   expect(exportButton).toBeDefined();
   await ReactTestRenderer.act(() => {
