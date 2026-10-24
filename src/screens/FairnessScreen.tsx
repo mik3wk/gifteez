@@ -170,8 +170,12 @@ export function FairnessScreen() {
           </>
         )}
       </SessionEntrance>
-      <Sheet visible={editor != null} onClose={() => setEditor(null)}>
-        <Heading>{editor === 'new' ? t('fairness.newCircle') : editing?.name ?? t('fairness.edit')}</Heading>
+      <Sheet
+        visible={editor != null}
+        title={editor === 'new' ? t('fairness.newCircle') : editing?.name ?? t('fairness.edit')}
+        doneLabel={t('common.done')}
+        onClose={() => setEditor(null)}
+      >
         <Field
           label={t('fairness.circleName')}
           value={draft}

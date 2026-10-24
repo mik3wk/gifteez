@@ -14,7 +14,7 @@ import type { Occasion } from '../domain/types';
 import { formatDate, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { MonthDayField } from './DateField';
-import { Body, Button, Caption, Chip, Cluster, Field, Heading, Select, Stack, Toggle, useSheetFooter } from './ui';
+import { Body, Button, Caption, Chip, Cluster, Field, Select, Stack, Toggle, useSheetFooter } from './ui';
 
 const GROUPS: OccasionPreset['group'][] = ['holiday', 'celebration', 'life'];
 
@@ -134,7 +134,6 @@ export function OccasionPicker({ personId, onAdded }: { personId: string; onAdde
 
   return (
     <Stack>
-      <Heading>{t('person.addOccasionHeading')}</Heading>
       <Field
         label={t('person.searchOccasions')}
         value={query}

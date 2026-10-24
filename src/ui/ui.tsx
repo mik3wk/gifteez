@@ -1046,8 +1046,7 @@ export function AppHeader({ title, greeting }: { title: string; greeting?: strin
         </View>
       </View>
       <IconButton label={t('people.remindersA11y')} name="bell" onPress={() => setOpen(true)} />
-      <Sheet visible={open} onClose={() => setOpen(false)}>
-        <Heading>{t('people.remindersA11y')}</Heading>
+      <Sheet visible={open} title={t('people.remindersA11y')} onClose={() => setOpen(false)}>
         <Body>{on ? t('people.remindersOn') : t('person.remindBody')}</Body>
         {on ? (
           <Button label={t('person.remindNo')} tone="secondary" onPress={() => { setReminders(false).catch(() => undefined); setOpen(false); }} />
@@ -1192,14 +1191,20 @@ export function Sheet({
   visible,
   onClose,
   onDismiss,
+  title,
+  doneLabel,
   children,
 }: {
   visible: boolean;
   onClose: () => void;
   onDismiss?: () => void;
+  /** Left-aligned title. The close control sits on the same row. */
+  title?: string;
+  /** Replaces the close icon on forms. */
+  doneLabel?: string;
   children: React.ReactNode;
 }) {
-  const { colors } = useTheme();
+  const { colors, type, typeScale } = useTheme();
   const insets = useSafeAreaInsets();
   const reduce = useReduceMotion();
   const dismissRef = useRef(onDismiss);
@@ -1255,7 +1260,24 @@ export function Sheet({
           style={styles.screen}
           accessibilityElementsHidden={confirm != null}
           importantForAccessibility={confirm ? 'no-hide-descendants' : 'auto'}>
-          <IconButton label={t('common.close')} name="close" onPress={onClose} />
+          <View style={styles.grabberWrap}>
+            <View style={[styles.grabber, { backgroundColor: colors.border }]} />
+          </View>
+          <View style={styles.sheetHead}>
+            <Text
+              numberOfLines={1}
+              maxFontSizeMultiplier={typeScale.heading}
+              style={[type.heading, styles.sheetTitle, { color: colors.text }]}>
+              {title ?? ''}
+            </Text>
+            {doneLabel ? (
+              <Pressable accessibilityRole="button" accessibilityLabel={doneLabel} onPress={onClose} style={styles.sheetDone}>
+                <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: colors.pink }]}>{doneLabel}</Text>
+              </Pressable>
+            ) : (
+              <IconButton label={t('common.close')} name="close" onPress={onClose} />
+            )}
+          </View>
           <ScrollView contentContainerStyle={[styles.content, { paddingBottom: footer ? space.md : insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled">
             <Settle distance={10}>
               <View style={styles.column}>{children}</View>
@@ -1296,8 +1318,7 @@ export function priceLabel(displayPrice?: string | null): string {
 export function UnlockSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { buy, restorePurchases, storeProduct, storeBusy, error } = useGifteez();
   return (
-    <Sheet visible={visible} onClose={onClose}>
-      <Title>{t('settings.keepEveryone')}</Title>
+    <Sheet visible={visible} title={t('settings.keepEveryone')} onClose={onClose}>
       <Body>{t('settings.keepEveryoneBody', { count: getEnv().freeTierMaxPeople })}</Body>
       <Body>{priceLabel(storeProduct?.displayPrice)}</Body>
       {storeBusy ? <ActivityIndicator /> : null}
@@ -1511,6 +1532,11 @@ const styles = StyleSheet.create({
   segment: { flexDirection: 'row', borderWidth: stroke.inner, borderRadius: 999, padding: space.xxs, gap: space.xxs },
   segmentItem: { flex: 1, minHeight: 44, borderRadius: 999, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.xxs },
   toggle: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: touch.minTarget },
+  grabberWrap: { alignItems: 'center', paddingTop: space.xs },
+  grabber: { width: 36, height: 4, borderRadius: 2 },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', paddingLeft: space.md, minHeight: 44 },
+  sheetTitle: { flex: 1 },
+  sheetDone: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.sm },
   sheetConfirm: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 8 },
   scrim: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center', padding: space.lg },
   scrimFill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: 0.45 },

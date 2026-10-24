@@ -556,6 +556,7 @@ export function PersonScreen() {
 
       <Sheet
         visible={tuning}
+        title={t('person.tuneIdeas')}
         onClose={() => {
           setFreshCloud(current => current.filter(idea => hearted(idea.title)));
           setTuning(false);
@@ -568,7 +569,6 @@ export function PersonScreen() {
           }
         }}
       >
-        <Heading>{t('person.tuneIdeas')}</Heading>
         {tuning && buyAsk ? <BuyPrompt idea={buyAsk} onYes={() => acceptBuy(buyAsk)} onNo={() => setBuyAsk(null)} /> : null}
         <Body>{t('person.tagsHint')}</Body>
         <TagPicker tags={tuneTags} onChange={setTuneTags} />
@@ -630,6 +630,7 @@ export function PersonScreen() {
       </Sheet>
       <Sheet
         visible={addingOccasion}
+        title={t('person.addOccasionHeading')}
         onClose={() => {
           setAddingOccasion(false);
           pendingBuy.current = null;
@@ -647,8 +648,7 @@ export function PersonScreen() {
           }}
         />
       </Sheet>
-      <Sheet visible={pickingCircle} onClose={() => setPickingCircle(false)}>
-        <Heading>{t('fairness.pickCircle')}</Heading>
+      <Sheet visible={pickingCircle} title={t('fairness.pickCircle')} onClose={() => setPickingCircle(false)}>
         <CircleField
           value={person.circleId ?? ''}
           onChange={id => {
@@ -657,8 +657,7 @@ export function PersonScreen() {
           }}
         />
       </Sheet>
-      <Sheet visible={editingDetails} onClose={() => setEditingDetails(false)}>
-        <Heading>{t('person.details')}</Heading>
+      <Sheet visible={editingDetails} title={t('person.details')} doneLabel={t('common.done')} onClose={() => setEditingDetails(false)}>
         <Field
           label={t('person.name')}
           value={name}
@@ -757,10 +756,9 @@ export function PersonScreen() {
           }}
         />
       </Sheet>
-      <Sheet visible={menu?.kind === 'idea'} onClose={() => setMenu(null)} onDismiss={flushQueue}>
+      <Sheet visible={menu?.kind === 'idea'} title={menu?.kind === 'idea' ? menu.idea : ''} onClose={() => setMenu(null)} onDismiss={flushQueue}>
         {menu?.kind === 'idea' ? (
           <>
-            <Heading>{menu.idea}</Heading>
             <Button
               label={savedFor(menu.idea) ? t('person.unsaveIdea') : t('person.saveIdea')}
               tone="secondary"
@@ -774,7 +772,7 @@ export function PersonScreen() {
           </>
         ) : null}
       </Sheet>
-      <Sheet visible={Boolean(menuOccasion)} onClose={() => setMenu(null)} onDismiss={flushQueue}>
+      <Sheet visible={Boolean(menuOccasion)} title={menuOccasion ? occasionLabel(menuOccasion) : ''} onClose={() => setMenu(null)} onDismiss={flushQueue}>
         {menuOccasion ? (
           <OccasionMenu
             occasion={menuOccasion}
@@ -788,10 +786,9 @@ export function PersonScreen() {
           />
         ) : null}
       </Sheet>
-      <Sheet visible={menu?.kind === 'gift'} onClose={() => setMenu(null)} onDismiss={flushQueue}>
+      <Sheet visible={menu?.kind === 'gift'} title={menu?.kind === 'gift' ? menu.title : ''} onClose={() => setMenu(null)} onDismiss={flushQueue}>
         {menu?.kind === 'gift' ? (
           <>
-            <Heading>{menu.title}</Heading>
             <Button
               label={t('person.editGift')}
               accessibilityLabel={t('person.editGiftLabel', { title: menu.title })}
@@ -1033,7 +1030,6 @@ function OccasionMenu({
   }
   return (
     <>
-      <Heading>{label}</Heading>
       {note ? <Caption>{t(note)}</Caption> : null}
       {estimated ? <Caption>{t('person.dateEstimated')}</Caption> : null}
       {hidden || !state?.savedIdea ? null : <Body>{state.savedIdea}</Body>}
@@ -1271,7 +1267,12 @@ function GiftSheet({
 }) {
   const [adding, setAdding] = useState(false);
   return (
-    <Sheet visible onClose={() => { setAdding(false); onClose(); }}>
+    <Sheet
+      visible
+      title={adding ? t('person.addOccasionHeading') : title}
+      doneLabel={adding ? undefined : t('common.done')}
+      onClose={() => { setAdding(false); onClose(); }}
+    >
       {adding && personId ? (
         <>
           <Button label={t('common.back')} tone="ghost" onPress={() => setAdding(false)} />
@@ -1287,7 +1288,6 @@ function GiftSheet({
         </>
       ) : (
         <>
-          <Heading>{title}</Heading>
           {occasions && onOccasion ? (
             <>
               <Caption>{t('purchase.occasionOptional')}</Caption>

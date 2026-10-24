@@ -1,3 +1,4 @@
+import { budgetFraction, budgetTone } from '../src/domain/budgetBar';
 import { contrastRatio } from '../src/theme/skins';
 import { fairnessView } from '../src/domain/fairnessView';
 import type { FairnessRow } from '../src/domain/logic';
@@ -84,4 +85,15 @@ test('fairness bars share one scale and never use a percentage', () => {
   ]);
   expect(even.balanced).toBe(true);
   expect(even.spread).toBe(0);
+});
+
+test('a budget bar stays sage, turns gold near the budget, and rose once it is past', () => {
+  expect(budgetTone(0, 20000)).toBe('under');
+  expect(budgetTone(17900, 20000)).toBe('under');
+  expect(budgetTone(18000, 20000)).toBe('near');
+  expect(budgetTone(20000, 20000)).toBe('near');
+  expect(budgetTone(20001, 20000)).toBe('over');
+  expect(budgetTone(5000, null)).toBe('under');
+  expect(budgetFraction(25000, 20000)).toBe(1);
+  expect(budgetFraction(5000, null)).toBe(0);
 });

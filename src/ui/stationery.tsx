@@ -1,10 +1,12 @@
 import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Image, StyleSheet, Text, View } from 'react-native';
+import { budgetFraction, budgetTone } from '../domain/budgetBar';
 import { fairnessView } from '../domain/fairnessView';
 import type { FairnessRow } from '../domain/logic';
 import { monogramIndex, monogramLetters, MONOGRAM_SWATCHES } from '../domain/monogram';
 import type { SealState } from '../domain/seal';
 import { t } from '../i18n';
+import { tint } from '../theme/tint';
 import { useTheme } from '../theme/useTheme';
 import { space, touch } from '../theme/tokens';
 import { bowSource, crestSource, dividerSource, sealSource, type SealArtName } from './art';
@@ -21,7 +23,7 @@ export function MonogramAvatar({
   size?: number;
   crest?: boolean;
 }) {
-  const { scheme, type, typeScale } = useTheme();
+  const { colors, scheme, type, typeScale } = useTheme();
   const swatch = MONOGRAM_SWATCHES[monogramIndex(personId || name || 'gifteez')];
   const letters = monogramLetters(name) || 'G';
   const face = (
@@ -34,7 +36,8 @@ export function MonogramAvatar({
           height: size,
           borderRadius: size / 2,
           backgroundColor: swatch.fill,
-          borderColor: 'rgba(255,255,255,0.7)',
+          borderColor: colors.background,
+          borderWidth: 2,
         },
       ]}>
       <Text
@@ -60,15 +63,112 @@ function shownSeal(state: SealState): SealArtName {
   return state === 'claimed' ? 'not-started' : state;
 }
 
-export function WaxSeal({ state, size = 36, label }: { state: SealState; size?: number; label?: string }) {
+function sealInk(state: SealState, colors: { pink: string; sunshine: string; muted: string; teal: string }): string {
+  if (state === 'idea-saved') {
+    return colors.pink;
+  }
+  if (state === 'purchased') {
+    return colors.sunshine;
+  }
+  if (state === 'balanced' || state === 'logged') {
+    return colors.teal;
+  }
+  return colors.muted;
+}
+
+/** Wax seal overlapping a short label pill. The seal stays an image; the words are text. */
+export function SealPill({ state, label }: { state: SealState; label?: string }) {
   const { colors, type, typeScale } = useTheme();
   const art = shownSeal(state);
   const text = label ?? t(`seal.${art}`);
+  const ink = sealInk(state, colors);
   return (
-    <View style={styles.seal} accessibilityLabel={text}>
-      <Image accessible={false} source={sealSource(art)} resizeMode="contain" style={{ width: size, height: size }} />
-      <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: colors.text }]}>{text}</Text>
+    <View style={styles.sealPill} accessibilityLabel={text}>
+      <Image accessible={false} source={sealSource(art)} resizeMode="contain" style={styles.sealImage} />
+      <View style={[styles.sealLabel, { borderColor: ink, backgroundColor: tint(ink, 0.14) }]}>
+        <Text maxFontSizeMultiplier={typeScale.caption} numberOfLines={1} style={[type.caption, styles.sealText, { color: colors.text }]}>{text}</Text>
+      </View>
     </View>
+  );
+}
+
+export function WaxSeal({ state, label }: { state: SealState; size?: number; label?: string }) {
+  return <SealPill state={state} label={label} />;
+}
+
+export function BudgetBar({
+  spentCents,
+  budgetCents,
+  caption,
+}: {
+  spentCents: number;
+  budgetCents: number | null;
+  caption: string;
+}) {
+  const { colors, type, typeScale } = useTheme();
+  const tone = budgetTone(spentCents, budgetCents);
+  const fill = tone === 'over' ? colors.pink : tone === 'near' ? colors.sunshine : colors.teal;
+  const width = `${Math.round(budgetFraction(spentCents, budgetCents) * 100)}%`;
+  return (
+    <View accessible accessibilityLabel={caption}>
+      <View style={[styles.budgetTrack, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+        <View style={[styles.budgetFill, { width, backgroundColor: fill }]} />
+      </View>
+      <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, styles.budgetCaption, { color: colors.muted }]}>{caption}</Text>
+    </View>
+  );
+}
+
+export function RowCard({ children }: { children: React.ReactNode }) {
+  const { colors, radius } = useTheme();
+  return (
+    <View style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.card }]}>
+      {children}
+    </View>
+  );
+}
+
+export function ListRow({
+  name,
+  personId,
+  relationship,
+  detail,
+  budget,
+  seal,
+  sealLabel,
+  onPress,
+  last,
+}: {
+  name: string;
+  personId: string;
+  relationship?: string;
+  detail: string;
+  budget: string;
+  seal: SealState;
+  sealLabel?: string;
+  onPress: () => void;
+  last?: boolean;
+}) {
+  const { colors, type } = useTheme();
+  const label = [name, relationship, detail, budget, sealLabel ?? t(`seal.${shownSeal(seal)}`)].filter(Boolean).join(', ');
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={[styles.listRow, { borderBottomColor: colors.border, borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth }]}>
+      <MonogramAvatar name={name} personId={personId} size={52} />
+      <View style={styles.listCopy}>
+        <Text numberOfLines={1} style={[styles.listName, { color: colors.text, fontFamily: type.heading.fontFamily }]}>
+          {name}
+          {relationship ? <Text style={[styles.listMeta, { color: colors.muted }]}>{` · ${relationship}`}</Text> : null}
+        </Text>
+        <Text numberOfLines={1} style={[styles.listDetail, { color: colors.text }]}>{detail}</Text>
+        <Text numberOfLines={1} style={[styles.listBudget, { color: colors.muted }]}>{budget}</Text>
+      </View>
+      <SealPill state={seal} label={sealLabel} />
+      <Icon name="chevron" color={colors.muted} size={18} />
+    </Pressable>
   );
 }
 
@@ -197,8 +297,22 @@ export function FairnessCard({
 }
 
 const styles = StyleSheet.create({
-  monogram: { borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  monogram: { alignItems: 'center', justifyContent: 'center' },
   seal: { flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: touch.minTarget },
+  sealPill: { flexDirection: 'row', alignItems: 'center', height: 28 },
+  sealImage: { width: 28, height: 28, marginRight: -14, zIndex: 1 },
+  sealLabel: { height: 28, borderRadius: 14, borderWidth: 1, justifyContent: 'center', paddingLeft: 18, paddingRight: 10, maxWidth: 148 },
+  sealText: { fontSize: 13 },
+  budgetTrack: { height: 6, borderRadius: 3, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  budgetFill: { height: 6, borderRadius: 3 },
+  budgetCaption: { marginTop: 4 },
+  rowCard: { borderWidth: 1, overflow: 'hidden' },
+  listRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: 76, paddingHorizontal: space.sm, paddingVertical: space.xs },
+  listCopy: { flex: 1, gap: 2 },
+  listName: { fontSize: 20, lineHeight: 24 },
+  listMeta: { fontSize: 15, lineHeight: 20 },
+  listDetail: { fontSize: 15, lineHeight: 20 },
+  listBudget: { fontSize: 13, lineHeight: 16 },
   ribbonImage: { width: '100%', height: 22, marginHorizontal: -space.md },
   tag: {
     borderWidth: 1,
