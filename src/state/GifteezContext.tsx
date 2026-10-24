@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { Appearance, Linking, Platform } from 'react-native';
 import type { AppEnv } from '../config/env';
 import { keyFromString, keyToString, openString, randomId, randomKey, sealJson } from '../crypto/crypto';
+import { refreshLocalIdeas, shouldRefreshIdeas } from '../domain/ideaRefresh';
 import { allowsPetIdea, cloudIdeaRequestLog, ideaCacheId, mergeIdeaBatches, moreLikeIdeas, resolveAge, suggestIdeas } from '../domain/ideas';
 import { deleteOccasion, deletePrivateGift, deleteSharedGift, updateOccasionDate, updatePrivateGift, updateSharedGift } from '../domain/edits';
 import { nextReminderWhen, planReminders } from '../domain/reminders';
@@ -725,12 +726,16 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       return person.id;
     },
     savePerson: async (id, patch) => {
+      const existing = snapshotRef.current.people.find(item => item.id === id && !item.deleted);
       const result = updatePerson(snapshotRef.current, id, patch, Date.now());
       if (!result.ok) {
         fail(result.error);
         return;
       }
-      await commit(result.snapshot);
+      const next = existing && shouldRefreshIdeas(existing, patch)
+        ? refreshLocalIdeas(result.snapshot, id, Date.now())
+        : result.snapshot;
+      await commit(next);
       sync().catch(() => undefined);
     },
     createCircle: async name => {

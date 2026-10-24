@@ -274,7 +274,6 @@ export function PersonScreen() {
     logGift,
     vote,
     moreLike,
-    refreshIdeas,
     cloudIdeas,
     cloudRemaining,
     updateGift,
@@ -571,10 +570,6 @@ export function PersonScreen() {
       notes,
       birthYear: parsedYear,
     }).then(() => {
-      const tagsChanged = interestTags.join('|') !== (person.tags ?? []).join('|');
-      if (tagsChanged && interestTags.length > 0) {
-        refreshIdeas(person.id).catch(() => undefined);
-      }
       if ((person.circleId ?? null) !== nextCircle) {
         return setPersonCircle(person.id, nextCircle);
       }
