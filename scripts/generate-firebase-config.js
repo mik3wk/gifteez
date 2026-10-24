@@ -122,15 +122,14 @@ function renderJoinPage(template, env) {
     .replaceAll('__PLAY_STORE_URL__', escapeHtml(urls.playStore));
 }
 
-function rewriteAndroidHost(xml, domain) {
-  return xml.replace(
-    /(<data android:scheme="https" android:host=")[^"]*(" android:pathPrefix="\/join" \/>)/,
-    `$1${domain}$2`,
-  );
+function stripAndroidJoin(xml) {
+  return xml
+    .replace(/\s*<intent-filter>\s*<action android:name="android\.intent\.action\.VIEW" \/>\s*<category android:name="android\.intent\.category\.DEFAULT" \/>\s*<category android:name="android\.intent\.category\.BROWSABLE" \/>\s*<data android:scheme="gifteez" android:host="join" \/>\s*<\/intent-filter>/g, '')
+    .replace(/\s*<intent-filter android:autoVerify="true">\s*<action android:name="android\.intent\.action\.VIEW" \/>\s*<category android:name="android\.intent\.category\.DEFAULT" \/>\s*<category android:name="android\.intent\.category\.BROWSABLE" \/>\s*<data android:scheme="https" android:host="[^"]*" android:pathPrefix="\/join" \/>\s*<\/intent-filter>/g, '');
 }
 
-function rewriteEntitlements(xml, domain) {
-  return xml.replace(/<string>applinks:[^<]*<\/string>/, `<string>applinks:${domain}</string>`);
+function stripEntitlements(xml) {
+  return xml.replace(/\s*<key>com\.apple\.developer\.associated-domains<\/key>\s*<array>\s*(?:<string>applinks:[^<]*<\/string>\s*)*<\/array>/g, '');
 }
 
 function keepExisting(file) {
@@ -232,24 +231,22 @@ function writeFirebaseFiles(env, root) {
   return kept;
 }
 
-function writeInviteHosting(env, root) {
-  const domain = inviteDomain(env);
-  const template = fs.readFileSync(path.join(root, 'hosting/join/index.template.html'), 'utf8');
+function writeInviteHosting(_env, root) {
   const written = [];
   const put = (file, contents) => {
     if (writeIfChanged(file, contents)) {
       written.push(file);
     }
   };
-  put(path.join(root, 'hosting/join/index.html'), renderJoinPage(template, env));
-  put(path.join(root, 'hosting/.well-known/apple-app-site-association'), renderAasa(env));
-  put(path.join(root, 'hosting/.well-known/assetlinks.json'), renderAssetLinks(env));
-
   const manifestPath = path.join(root, 'android/app/src/main/AndroidManifest.xml');
-  put(manifestPath, rewriteAndroidHost(fs.readFileSync(manifestPath, 'utf8'), domain));
+  if (fs.existsSync(manifestPath)) {
+    put(manifestPath, stripAndroidJoin(fs.readFileSync(manifestPath, 'utf8')));
+  }
   const entitlementsPath = path.join(root, 'ios/Gifteez/Gifteez.entitlements');
-  put(entitlementsPath, rewriteEntitlements(fs.readFileSync(entitlementsPath, 'utf8'), domain));
-  return { domain, written };
+  if (fs.existsSync(entitlementsPath)) {
+    put(entitlementsPath, stripEntitlements(fs.readFileSync(entitlementsPath, 'utf8')));
+  }
+  return { written };
 }
 
 function main() {
@@ -259,16 +256,16 @@ function main() {
     : path.join(root, '.env.example');
   const env = parseEnv(fs.readFileSync(envPath, 'utf8'));
   const kept = writeFirebaseFiles(env, root);
-  const { domain, written } = writeInviteHosting(env, root);
+  const { written } = writeInviteHosting(env, root);
   if (kept.length > 0) {
     console.log(`Left existing Firebase config alone: ${kept.map(file => path.relative(root, file)).join(', ')}.`);
   } else {
     console.log(`Firebase config written from ${path.basename(envPath)} for project ${env.FIREBASE_PROJECT_ID || 'your-project-id'}.`);
   }
   if (written.length === 0) {
-    console.log(`Invite links use https://${domain}/join. Hosting and native files already matched.`);
+    console.log('Native join links are already gone.');
   } else {
-    console.log(`Invite links use https://${domain}/join. Updated ${written.map(file => path.relative(root, file)).join(', ')}.`);
+    console.log(`Removed join links from ${written.map(file => path.relative(root, file)).join(', ')}.`);
   }
 }
 
@@ -287,8 +284,8 @@ module.exports = {
   renderAasa,
   renderAssetLinks,
   renderJoinPage,
-  rewriteAndroidHost,
-  rewriteEntitlements,
+  stripAndroidJoin,
+  stripEntitlements,
   writeIfChanged,
   writeFirebaseFiles,
   writeInviteHosting,

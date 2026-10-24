@@ -13,33 +13,5 @@
   },
   "storage": {
     "rules": "storage.rules"
-  },
-  "hosting": {
-    "public": "hosting",
-    "ignore": [
-      "firebase.json",
-      "**/node_modules/**",
-      "**/*.template.html"
-    ],
-    "headers": [
-      {
-        "source": "/.well-known/apple-app-site-association",
-        "headers": [
-          { "key": "Content-Type", "value": "application/json" },
-          { "key": "Cache-Control", "value": "no-cache" }
-        ]
-      },
-      {
-        "source": "/.well-known/assetlinks.json",
-        "headers": [
-          { "key": "Content-Type", "value": "application/json" },
-          { "key": "Cache-Control", "value": "no-cache" }
-        ]
-      }
-    ],
-    "rewrites": [
-      { "source": "/join", "destination": "/join/index.html" },
-      { "source": "/join/**", "destination": "/join/index.html" }
-    ]
   }
 }

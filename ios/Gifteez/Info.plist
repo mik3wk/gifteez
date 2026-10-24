@@ -8,17 +8,6 @@
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>Gifteez</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>com.gifteez</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>gifteez</string>
-			</array>
-		</dict>
-	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
