@@ -686,6 +686,31 @@ export function logPurchase(input: {
   };
 }
 
+/** A gift can be logged with no occasion. It still counts in the yearly total. */
+export function recordGift(input: {
+  snapshot: AppSnapshot;
+  gift: GiftRecord;
+  occasion?: Occasion | null;
+}): AppSnapshot {
+  if (input.occasion) {
+    return logPurchase({
+      snapshot: input.snapshot,
+      occasion: input.occasion,
+      gift: {
+        ...input.gift,
+        personId: input.occasion.personId,
+        occasionId: input.occasion.id,
+      },
+    });
+  }
+  const gift = { ...input.gift, occasionId: '' };
+  return {
+    ...input.snapshot,
+    gifts: [...input.snapshot.gifts, gift],
+    dirty: { ...input.snapshot.dirty, [dirtyKey('gifts', gift.id)]: true },
+  };
+}
+
 export function addFeedback(snapshot: AppSnapshot, entry: FeedbackEntry): AppSnapshot {
   const without = snapshot.feedback.filter(
     item => !(item.personId === entry.personId && item.idea === entry.idea),

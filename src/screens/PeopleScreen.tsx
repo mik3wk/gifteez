@@ -10,7 +10,7 @@ import { deviceLocale, formatDate, formatLongDate, formatMoney, t } from '../i18
 import { useGifteez } from '../state/GifteezContext';
 import { space } from '../theme/tokens';
 import { MonogramAvatar } from '../ui/stationery';
-import { Button, Caption, EmptyState, Field, Heading, Screen, Title } from '../ui/ui';
+import { Body, Button, Caption, EmptyState, Field, Heading, Screen, Title } from '../ui/ui';
 
 export function PeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
@@ -50,6 +50,9 @@ export function PeopleScreen() {
       {snapshot.people.some(person => !person.deleted) ? null : (
         <EmptyState kind="people" text={t('people.addFirst')} action={t('people.addPerson')} onAction={() => navigation.navigate('AddPerson')} />
       )}
+      {needle && people.length === 0 && snapshot.people.some(person => !person.deleted) ? (
+        <Body>{t('people.noMatch', { query: query.trim() })}</Body>
+      ) : null}
       {people.map(person => {
         const item = upcomingOccasion(person.id, snapshot.occasions, today);
         const spent = yearSpentCents(person.id, snapshot.gifts, year);

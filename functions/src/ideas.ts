@@ -8,6 +8,8 @@ export type GiftIdea = {
 
 export type IdeaPrompt = {
   relationship?: string;
+  /** Whole years, when a birthday year is known. Never a name. */
+  age?: number | null;
   occasion?: string | null;
   tags?: string[];
   budgetCents?: number | null;
@@ -72,9 +74,10 @@ function clampPrice(value: unknown): number | null {
 
 export function promptHash(personId: string, prompt: IdeaPrompt): string {
   return JSON.stringify({
-    v: 2,
+    v: 3,
     personId,
     relationship: prompt.relationship ?? '',
+    age: prompt.age ?? null,
     occasion: prompt.occasion ?? '',
     tags: [...(prompt.tags ?? [])].sort(),
     budgetCents: prompt.budgetCents ?? null,
@@ -89,6 +92,7 @@ export function promptHash(personId: string, prompt: IdeaPrompt): string {
 export function modelPrompt(prompt: IdeaPrompt): IdeaPrompt {
   return {
     relationship: prompt.relationship ?? '',
+    age: prompt.age ?? null,
     occasion: prompt.occasion ?? null,
     tags: prompt.tags ?? [],
     budgetCents: prompt.budgetCents ?? null,
@@ -98,6 +102,28 @@ export function modelPrompt(prompt: IdeaPrompt): IdeaPrompt {
     notes: (prompt.notes ?? '').slice(0, 300),
     pastGifts: prompt.pastGifts ?? [],
   };
+}
+
+const SYSTEM_PROMPT = [
+  'You suggest practical gift ideas.',
+  'Do not use or guess a person\'s name. No name is provided.',
+  'Read relationship and age first and treat them as the life stage.',
+  'An adult sister, brother, parent, or partner is not a child and must not get kids\' toys, picture books, or playground gifts.',
+  'Suggest toys only for a child relationship or an age under 13.',
+  'Stay within the occasion budget and do not repeat past gifts.',
+  'Be specific but not brand-dependent.',
+  'Reply with JSON {"ideas":[{"title":"...","priceMin":60,"priceMax":120,"reason":"...","searchQuery":"..."}]} containing exactly 5 ideas.',
+  'priceMin and priceMax are positive whole dollars.',
+  'Each reason is one plain warm sentence. Vary the wording: the five reasons must not share the same opening or the same sentence shape.',
+  'searchQuery is 3 to 6 words. No preamble.',
+].join(' ');
+
+function userContent(prompt: IdeaPrompt): string {
+  const shaped = modelPrompt(prompt);
+  const relationship = shaped.relationship?.trim() || 'unspecified';
+  const age = shaped.age == null ? 'unknown' : String(shaped.age);
+  const lead = `Relationship: ${relationship}. Age: ${age}. Use this relationship and age as the life stage before any other field.`;
+  return `${lead}\n${JSON.stringify(shaped)}`;
 }
 
 export async function requestIdeas(apiKey: string, model: string, prompt: IdeaPrompt): Promise<GiftIdea[]> {
@@ -113,9 +139,9 @@ export async function requestIdeas(apiKey: string, model: string, prompt: IdeaPr
       messages: [
         {
           role: 'system',
-          content: 'You suggest practical gift ideas. Do not use or guess a person\'s name. Stay within the occasion budget and do not repeat past gifts. Be specific but not brand-dependent. Reply with JSON {"ideas":[{"title":"...","priceMin":60,"priceMax":120,"reason":"...","searchQuery":"..."}]} containing exactly 5 ideas. priceMin and priceMax are positive whole dollars. reason is one plain warm sentence. searchQuery is 3 to 6 words. No preamble.',
+          content: SYSTEM_PROMPT,
         },
-        { role: 'user', content: JSON.stringify(modelPrompt(prompt)) },
+        { role: 'user', content: userContent(prompt) },
       ],
     }),
   });

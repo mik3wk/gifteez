@@ -72,7 +72,7 @@ export function deleteSharedGift(input: {
     return fail('forbidden');
   }
   const next: GiftRecord = { ...gift, deleted: true, updatedAt: input.now };
-  const remaining = input.snapshot.gifts.some(
+  const remaining = !gift.occasionId || input.snapshot.gifts.some(
     item => item.id !== gift.id && !item.deleted && item.occasionId === gift.occasionId && item.year === gift.year,
   );
   const states = input.snapshot.states.map(state => {

@@ -6,7 +6,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
 import { amazonSearchUrl } from '../domain/amazon';
 import { INTEREST_TAGS } from '../domain/catalog';
-import { asGiftIdea, ideaCacheId, ideaKey } from '../domain/ideas';
+import { asGiftIdea, ideaCacheId, ideaKey, normalizeIdeaTitle } from '../domain/ideas';
 import type { GiftIdea } from '../domain/types';
 import { canEditSharedGift } from '../domain/edits';
 import { allTimeSpentCents, daysUntil, isRealMonthDay, listCurrency, occurrenceYear, parseBudget, parseLooseDate, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
@@ -19,7 +19,7 @@ import { useGifteez } from '../state/GifteezContext';
 import { occasionLook, space } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { DateField, MonthDayField } from '../ui/DateField';
-import { HeartPop, Moment, Shimmer } from '../ui/motion';
+import { HeartPop, Moment, Shimmer, ShimmerSlot } from '../ui/motion';
 import { OccasionPicker } from '../ui/OccasionPicker';
 import { CircleField } from '../ui/CircleField';
 import { RelationshipField } from '../ui/RelationshipField';
@@ -42,6 +42,7 @@ import {
   Screen,
   Segment,
   Sheet,
+  TabBar,
   Title,
 } from '../ui/ui';
 
@@ -76,7 +77,7 @@ export function AddPersonScreen() {
   const [relationshipError, setRelationshipError] = useState('');
   const [circleId, setCircleId] = useState('');
   return (
-    <Screen>
+    <Screen footer={<TabBar active="people" />}>
       <Title>{t('firstOpen.title')}</Title>
       <Body>{t('firstOpen.lead')}</Body>
       <Field
@@ -174,6 +175,7 @@ export function PersonScreen() {
     }
   }, [route.params.personId, route.params.section]);
   const [editingDetails, setEditingDetails] = useState(false);
+  const [editCircleId, setEditCircleId] = useState(person?.circleId ?? '');
   const [addingOccasion, setAddingOccasion] = useState(false);
   const [tuning, setTuning] = useState(false);
   const [cloudBusy, setCloudBusy] = useState(false);
@@ -292,12 +294,7 @@ export function PersonScreen() {
   function acceptBuy(idea: GiftIdea) {
     setBuyAsk(null);
     const occasion = next?.occasion ?? occasions[0];
-    if (!occasion) {
-      pendingBuy.current = idea;
-      setAddingOccasion(true);
-      return;
-    }
-    openPurchase(occasion.id, idea.title, idea.priceMin);
+    openPurchase(occasion?.id ?? '', idea.title, idea.priceMin);
   }
 
   function flushQueue() {
@@ -344,7 +341,7 @@ export function PersonScreen() {
           {person.imported ? <Caption>{t('person.openedImported')}</Caption> : null}
           <View style={styles.personHead}>
             <View style={styles.personMenu}>
-              <IconButton label={t('person.editDetails')} name="more" filled onPress={() => setEditingDetails(true)} />
+              <IconButton label={t('person.editDetails')} name="more" filled onPress={() => { setEditCircleId(person.circleId ?? ''); setEditingDetails(true); }} />
             </View>
             <MonogramAvatar name={person.name} personId={person.id} size={72} crest />
             <Display lines={2}>{person.name}</Display>
@@ -433,11 +430,7 @@ export function PersonScreen() {
               tone="secondary"
               onPress={() => {
                 const occasion = next?.occasion ?? occasions[0];
-                if (!occasion) {
-                  setAddingOccasion(true);
-                  return;
-                }
-                openPurchase(occasion.id, nextState?.savedIdea ?? '');
+                openPurchase(occasion?.id ?? '', nextState?.savedIdea ?? '');
               }}
             />
           )}
@@ -490,23 +483,8 @@ export function PersonScreen() {
           }}
         />
         <Button label={t('person.refresh')} tone="secondary" onPress={() => refreshIdeas(person.id)} />
-        {cloudBusy ? <Shimmer label={t('person.ideasLoading')} /> : null}
+        <ShimmerSlot label={t('person.ideasLoading')} busy={cloudBusy} />
         {cloudError ? <Body>{t('person.ideasError')}</Body> : null}
-        <Button
-          label={cloudError ? t('person.ideasRetry') : t('person.cloud')}
-          tone="secondary"
-          onPress={async () => {
-            setCloudBusy(true);
-            setCloudError(false);
-            try {
-              setFreshCloud(await cloudIdeas(person.id));
-            } catch {
-              setCloudError(true);
-            } finally {
-              setCloudBusy(false);
-            }
-          }}
-        />
         {freshCloud.filter(idea => !hiddenIdeas.has(idea.title)).map(idea => (
           <IdeaCard
             key={`fresh-${idea.title}`}
@@ -519,6 +497,25 @@ export function PersonScreen() {
             onShop={() => { shopIdea(idea).catch(() => undefined); }}
           />
         ))}
+        <Button
+          label={cloudError ? t('person.ideasRetry') : t('person.cloud')}
+          tone="secondary"
+          onPress={async () => {
+            setCloudBusy(true);
+            setCloudError(false);
+            try {
+              const added = await cloudIdeas(person.id);
+              setFreshCloud(current => {
+                const seen = new Set(added.map(idea => normalizeIdeaTitle(idea.title)));
+                return [...added, ...current.filter(idea => !seen.has(normalizeIdeaTitle(idea.title)))];
+              });
+            } catch {
+              setCloudError(true);
+            } finally {
+              setCloudBusy(false);
+            }
+          }}
+        />
         {cloudRemaining[person.id] != null ? <Body>{t('person.cloudLeft', { count: cloudRemaining[person.id] })}</Body> : null}
         <Body>{t('person.cloudHint')}</Body>
         <Caption tone="text">{t('shop.disclosure')}</Caption>
@@ -544,27 +541,13 @@ export function PersonScreen() {
       </Sheet>
       <Sheet visible={pickingCircle} onClose={() => setPickingCircle(false)}>
         <Heading>{t('fairness.pickCircle')}</Heading>
-        <Cluster>
-          <Chip
-            label={t('fairness.noCircle')}
-            selected={!person.circleId}
-            onPress={() => {
-              setPickingCircle(false);
-              setPersonCircle(person.id, null).catch(() => undefined);
-            }}
-          />
-          {snapshot.circles.map(circle => (
-            <Chip
-              key={circle.id}
-              label={circle.name}
-              selected={person.circleId === circle.id}
-              onPress={() => {
-                setPickingCircle(false);
-                setPersonCircle(person.id, circle.id).catch(() => undefined);
-              }}
-            />
-          ))}
-        </Cluster>
+        <CircleField
+          value={person.circleId ?? ''}
+          onChange={id => {
+            setPickingCircle(false);
+            setPersonCircle(person.id, id || null).catch(() => undefined);
+          }}
+        />
       </Sheet>
       <Sheet visible={editingDetails} onClose={() => setEditingDetails(false)}>
         <Heading>{t('person.details')}</Heading>
@@ -595,6 +578,7 @@ export function PersonScreen() {
             setRelationshipError('');
           }}
         />
+        <CircleField value={editCircleId} onChange={setEditCircleId} />
         <Field
           label={t('person.notes')}
           value={notes}
@@ -617,12 +601,18 @@ export function PersonScreen() {
             }
             toast(t('person.saved'));
             setEditingDetails(false);
+            const nextCircle = editCircleId || null;
             return savePerson(person.id, {
               name: trimmed,
               budgetCents: budget.trim() ? parseBudget(budget) : null,
               tags: interestTags,
               relationship: cleaned ?? '',
               notes,
+            }).then(() => {
+              if ((person.circleId ?? null) !== nextCircle) {
+                return setPersonCircle(person.id, nextCircle);
+              }
+              return undefined;
             });
           }}
         />
@@ -708,7 +698,7 @@ export function PersonScreen() {
           </>
         ) : null}
       </Sheet>
-      {buying ? (
+      {buying != null ? (
         <GiftSheet
           title={t('purchase.title')}
           gift={gift}
@@ -718,6 +708,10 @@ export function PersonScreen() {
           priceError={priceError}
           dateError={dateError}
           saveLabel={t('purchase.save')}
+          occasions={occasions}
+          occasionId={buying}
+          personId={person.id}
+          onOccasion={setBuying}
           onGift={value => {
             setGift(value);
             setGiftError('');
@@ -739,7 +733,7 @@ export function PersonScreen() {
             if (fields.gift || fields.price || fields.date) {
               return;
             }
-            const ok = await logGift(buying, gift, price, date);
+            const ok = await logGift(person.id, buying, gift, price, date);
             if (ok) {
               setMoment('wrap');
               setBuying(null);
@@ -1072,6 +1066,10 @@ function GiftSheet({
   dateError,
   saveLabel,
   saveAccessibilityLabel,
+  occasions,
+  occasionId,
+  personId,
+  onOccasion,
   onGift,
   onPrice,
   onDate,
@@ -1087,19 +1085,58 @@ function GiftSheet({
   dateError: string;
   saveLabel: string;
   saveAccessibilityLabel?: string;
+  occasions?: Occasion[];
+  occasionId?: string;
+  personId?: string;
+  onOccasion?: (occasionId: string) => void;
   onGift: (value: string) => void;
   onPrice: (value: string) => void;
   onDate: (value: string) => void;
   onSave: () => void | Promise<unknown>;
   onClose: () => void;
 }) {
+  const [adding, setAdding] = useState(false);
   return (
-    <Sheet visible onClose={onClose}>
-      <Heading>{title}</Heading>
-      <Field label={t('purchase.gift')} value={gift} error={giftError} onChangeText={onGift} />
-      <Field label={t('purchase.price')} value={price} error={priceError} onChangeText={onPrice} keyboardType="decimal-pad" />
-      <DateField label={t('purchase.date')} value={date} error={dateError} maximumDate={new Date()} onChange={onDate} />
-      <Button label={saveLabel} accessibilityLabel={saveAccessibilityLabel} onPress={onSave} />
+    <Sheet visible onClose={() => { setAdding(false); onClose(); }}>
+      {adding && personId ? (
+        <>
+          <Button label={t('common.back')} tone="ghost" onPress={() => setAdding(false)} />
+          <OccasionPicker
+            personId={personId}
+            onAdded={id => {
+              setAdding(false);
+              if (id) {
+                onOccasion?.(id);
+              }
+            }}
+          />
+        </>
+      ) : (
+        <>
+          <Heading>{title}</Heading>
+          <Field label={t('purchase.gift')} value={gift} error={giftError} onChangeText={onGift} />
+          <Field label={t('purchase.price')} value={price} error={priceError} onChangeText={onPrice} keyboardType="decimal-pad" />
+          <DateField label={t('purchase.date')} value={date} error={dateError} maximumDate={new Date()} onChange={onDate} />
+          {occasions && onOccasion ? (
+            <>
+              <Caption>{t('purchase.occasionOptional')}</Caption>
+              <Cluster>
+                <Chip label={t('purchase.noOccasion')} selected={!occasionId} onPress={() => onOccasion('')} />
+                {occasions.map(occasion => (
+                  <Chip
+                    key={occasion.id}
+                    label={occasionLabel(occasion)}
+                    selected={occasionId === occasion.id}
+                    onPress={() => onOccasion(occasion.id)}
+                  />
+                ))}
+              </Cluster>
+              <Button label={t('person.addOccasion')} tone="secondary" onPress={() => setAdding(true)} />
+            </>
+          ) : null}
+          <Button label={saveLabel} accessibilityLabel={saveAccessibilityLabel} onPress={onSave} />
+        </>
+      )}
     </Sheet>
   );
 }

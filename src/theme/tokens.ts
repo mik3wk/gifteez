@@ -59,7 +59,7 @@ export const stroke = { card: 1, control: 1, inner: 1 } as const;
 /** Press travel. Motion still reads this. The painted shadow is soft and separate. */
 export const shadowOffset = 4;
 export const touch = { minTarget: 48 } as const;
-export const layout = { maxContent: 640, tabBar: 76, toastGap: 200 } as const;
+export const layout = { maxContent: 640, tabBar: 96, toastGap: 200 } as const;
 
 /** Dialog and sheet backdrops. Black in both schemes so dark mode does not wash out. */
 export const scrim = 'rgba(0,0,0,0.6)';

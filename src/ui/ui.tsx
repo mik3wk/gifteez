@@ -1076,16 +1076,20 @@ export function TabBar({ active }: { active: TabId }) {
             accessibilityState={{ selected }}
             accessibilityLabel={tab.label}
             onPress={() => {
-              if (!selected) {
+              const state = navigation.getState?.();
+              const current = state?.routes[state.index]?.name;
+              if (current !== tab.route) {
                 openTab(navigation, tab.route);
               }
             }}
             style={styles.tab}>
             <View style={styles.tabInner}>
-              <Icon name={tab.icon} color={ink} size={20} />
               {selected ? (
                 <Image accessible={false} source={bowSource(scheme)} resizeMode="contain" style={styles.tabBow} />
-              ) : null}
+              ) : (
+                <View accessibilityElementsHidden importantForAccessibility="no" style={styles.tabBow} />
+              )}
+              <Icon name={tab.icon} color={ink} size={20} />
               <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: ink }]}>{tab.label}</Text>
             </View>
           </Pressable>
@@ -1223,7 +1227,7 @@ export function Sheet({
   };
   return (
     <Modal visible={visible} animationType={reduce ? 'fade' : 'slide'} presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+      <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: Platform.OS === 'ios' ? space.xs : insets.top }]}>
         <View
           style={styles.screen}
           accessibilityElementsHidden={confirm != null}
@@ -1464,8 +1468,8 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: 'row', paddingVertical: space.xs, paddingHorizontal: space.xxs, borderTopWidth: 1 },
   tab: { flex: 1, minHeight: touch.minTarget },
   tabFlex: { flex: 1 },
-  tabInner: { minHeight: touch.minTarget, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: space.xxs },
-  tabBow: { width: 18, height: 14 },
+  tabInner: { minHeight: 64, alignItems: 'center', justifyContent: 'flex-start', gap: space.xxs, paddingTop: space.xxs },
+  tabBow: { width: 22, height: 16 },
   iconButton: { minWidth: touch.minTarget, minHeight: touch.minTarget, alignItems: 'center', justifyContent: 'center' },
   hue: { width: 16, height: 16, borderRadius: 8, borderWidth: stroke.inner },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: touch.minTarget },

@@ -153,7 +153,7 @@ function ComingRow({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${item.person.name}, ${occasionLabel(item.occasion)}`}
+      accessibilityLabel={`${item.person.name}, ${occasionLabel(item.occasion)}, ${t(`seal.${rowSeal(item, states, gifts, today)}`)}`}
       onPress={onPress}
       style={[styles.coming, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.card }]}>
       <ArtSlot name={occasionLook(item.occasion.type).art} size={28} />
@@ -187,8 +187,18 @@ function HomeFairness({
       : t('fairness.homeBehind', { name: section.name, person: line.personName ?? '', amount: money(line.behindCents ?? 0) });
     return [{ id: section.circleId, text }];
   }).slice(0, 3);
-  if (lines.length === 0) {
+  const noCircles = (snapshot.circles ?? []).length === 0 && snapshot.people.some(person => !person.deleted);
+  if (lines.length === 0 && !noCircles) {
     return null;
+  }
+  if (lines.length === 0) {
+    return (
+      <Pressable accessibilityRole="button" accessibilityLabel={t('fairness.homePrompt')} onPress={onPress}>
+        <Card>
+          <Caption tone="text">{t('fairness.homePrompt')}</Caption>
+        </Card>
+      </Pressable>
+    );
   }
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={t('fairness.title')} onPress={onPress}>

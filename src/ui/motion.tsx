@@ -113,6 +113,20 @@ export function Bob({ children }: { children: React.ReactNode }) {
   return <Animated.View style={style}>{children}</Animated.View>;
 }
 
+const SHIMMER_BAR = 18;
+const SHIMMER_BARS = 3;
+
+/** Height of the three loading bars, so the slot can stay put before they appear. */
+export const shimmerSlotHeight = SHIMMER_BARS * SHIMMER_BAR + (SHIMMER_BARS - 1) * space.xs;
+
+export function ShimmerSlot({ label, busy }: { label: string; busy: boolean }) {
+  return (
+    <View style={{ minHeight: shimmerSlotHeight }} accessibilityElementsHidden={!busy}>
+      {busy ? <Shimmer label={label} /> : null}
+    </View>
+  );
+}
+
 export function Shimmer({ label }: { label: string }) {
   const { colors } = useTheme();
   const reduce = useReduceMotion();

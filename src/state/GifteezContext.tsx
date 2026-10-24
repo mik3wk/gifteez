@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { Appearance, Linking, Platform } from 'react-native';
 import type { AppEnv } from '../config/env';
 import { keyFromString, keyToString, openJson, randomId, randomKey, sealJson } from '../crypto/crypto';
-import { ideaCacheId, suggestIdeas } from '../domain/ideas';
+import { ageYears, ideaCacheId, mergeIdeaBatches, suggestIdeas } from '../domain/ideas';
 import { deleteOccasion, deletePrivateGift, deleteSharedGift, updateOccasionDate, updatePrivateGift, updateSharedGift } from '../domain/edits';
 import { planReminders } from '../domain/reminders';
 import { classifyStartupError, startupCause, type StartupFailure } from '../domain/startup';
@@ -11,7 +11,7 @@ import {
   addOccasion,
   addPerson,
   isRealMonthDay,
-  logPurchase,
+  recordGift,
   occurrenceYear,
   parkActive,
   parseBudget,
@@ -88,7 +88,7 @@ type GifteezApi = {
   saveIdeaFor: (occasionId: string, idea: string) => Promise<void>;
   unsaveIdea: (occasionId: string) => Promise<void>;
   toast: (message: string) => void;
-  logGift: (occasionId: string, title: string, price: string, date: string) => Promise<boolean>;
+  logGift: (personId: string, occasionId: string, title: string, price: string, date: string) => Promise<boolean>;
   updateGift: (giftId: string, title: string, price: string, date: string, privateGift: boolean) => Promise<boolean>;
   deleteGift: (giftId: string, privateGift: boolean) => Promise<void>;
   updateOccasion: (occasionId: string, month: number, day: number, year?: number) => Promise<void>;
@@ -701,9 +701,17 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       sync().catch(() => undefined);
     },
     toast: message => showNotice(message),
-    logGift: async (occasionId, title, price, date) => {
-      const occasion = snapshotRef.current.occasions.find(item => item.id === occasionId);
-      if (!occasion || !title.trim()) {
+    logGift: async (personId, occasionId, title, price, date) => {
+      const occasion = occasionId
+        ? snapshotRef.current.occasions.find(item => item.id === occasionId && !item.deleted)
+        : undefined;
+      if ((occasionId && !occasion) || !title.trim()) {
+        fail('invalid');
+        return false;
+      }
+      const ownerId = occasion?.personId ?? personId;
+      const person = snapshotRef.current.people.find(item => item.id === ownerId && !item.deleted);
+      if (!person) {
         fail('invalid');
         return false;
       }
@@ -713,14 +721,14 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         return false;
       }
       const purchasedOn = normalizeStoredDate(date);
-      const year = Number(purchasedOn.slice(0, 4)) || occurrenceYear(occasion, new Date());
-      await commit(logPurchase({
+      const year = Number(purchasedOn.slice(0, 4)) || (occasion ? occurrenceYear(occasion, new Date()) : new Date().getFullYear());
+      await commit(recordGift({
         snapshot: snapshotRef.current,
         occasion,
         gift: {
           id: randomId(),
-          personId: occasion.personId,
-          occasionId: occasion.id,
+          personId: person.id,
+          occasionId: occasion?.id ?? '',
           year,
           title: title.trim(),
           priceCents,
@@ -734,13 +742,20 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       return true;
     },
     vote: async (personId, idea, choice) => {
-      await commit(addFeedback(snapshotRef.current, {
+      const before = snapshotRef.current;
+      await commit(addFeedback(before, {
         id: randomId(),
         personId,
         idea,
         vote: choice,
         createdAt: Date.now(),
       }));
+      if (choice === 'down') {
+        offerUndo(t('person.notThisDone'), async () => {
+          await commit(before);
+          sync().catch(() => undefined);
+        }, () => sync());
+      }
     },
     focusPerson: async personId => {
       const person = snapshotRef.current.people.find(item => item.id === personId && !item.deleted);
@@ -818,6 +833,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
       const cacheId = ideaCacheId(personId, occasionKey, 'cloud');
       const existing = snapshotRef.current.ideas.find(item => item.id === cacheId && !item.deleted);
+      const age = ageYears(snapshotRef.current.occasions, personId);
       try {
         const result = await withTimeout(callFunction<CloudResult>(env, 'generateGiftIdeas', {
           deviceId: await deviceId(),
@@ -825,6 +841,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           refresh: Boolean(existing),
           prompt: {
             relationship: relationshipLabel(person.relationship),
+            ...(age == null ? {} : { age }),
             occasion: occasion ? occasionLabel(occasion.occasion) : null,
             tags: person.tags,
             budgetCents: person.budgetCents,
@@ -836,17 +853,18 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           },
         }));
         setCloudRemaining(current => ({ ...current, [personId]: result.remaining }));
+        const merged = mergeIdeaBatches(existing?.ideas ?? [], result.ideas);
         await commit(upsertIdeas(snapshotRef.current, {
           id: cacheId,
           personId,
           occasionKey,
-          ideas: result.ideas,
+          ideas: merged.ideas,
           source: 'cloud',
           salt: 0,
-          generatedAt: Date.now(),
+          generatedAt: existing?.generatedAt ?? Date.now(),
           updatedAt: Date.now(),
         }));
-        return result.ideas;
+        return merged.added;
       } catch (caught) {
         // Every failure, including App Check, a 404, a timeout, and a network error, is shown in the sheet.
         throw caught;

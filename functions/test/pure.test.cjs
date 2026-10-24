@@ -107,6 +107,42 @@ test('idea requests omit temperature and log only the OpenAI error', async () =>
   }
 });
 
+test('idea prompt stresses relationship and age and still omits the name', async () => {
+  const { requestIdeas, promptHash, modelPrompt } = require('../lib/ideas');
+  const originalFetch = global.fetch;
+  const bodies = [];
+  global.fetch = async (_url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ choices: [{ message: { content: '{"ideas":[{"title":"A linen apron","priceMin":30,"priceMax":50,"reason":"A kitchen layer they can actually use.","searchQuery":"linen kitchen apron adult"}]}' } }] }),
+    };
+  };
+  try {
+    await requestIdeas('sk-test-key', 'gpt-test', { name: 'Ada', relationship: 'Sister', age: 34, tags: ['books'] });
+    const message = JSON.stringify(bodies[0].messages);
+    assert.equal(message.includes('Ada'), false);
+    assert.match(message, /Sister/);
+    assert.match(message, /34/);
+    assert.match(bodies[0].messages[0].content, /life stage/);
+    assert.match(bodies[0].messages[0].content, /kids' toys/);
+    assert.match(bodies[0].messages[0].content, /same opening/);
+    assert.equal(Object.hasOwn(bodies[0], 'temperature'), false);
+    const shaped = modelPrompt({ name: 'Ada', relationship: 'Sister', age: 34 });
+    assert.equal(JSON.stringify(shaped).includes('Ada'), false);
+    assert.equal(shaped.relationship, 'Sister');
+    assert.equal(shaped.age, 34);
+    const hashed = promptHash('person', { relationship: 'Sister', age: 34 });
+    assert.equal(hashed.includes('Ada'), false);
+    assert.match(hashed, /Sister/);
+    assert.match(hashed, /34/);
+    assert.match(hashed, /"v":3/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('store receipts grant only a matching unrevoked purchase', () => {
   assert.equal(appleTransactionGrants({ productId: 'gifteez_unlock', bundleId: 'com.gifteez' }, 'gifteez_unlock', 'com.gifteez'), true);
   assert.equal(appleTransactionGrants({ productId: 'other', bundleId: 'com.gifteez' }, 'gifteez_unlock', 'com.gifteez'), false);

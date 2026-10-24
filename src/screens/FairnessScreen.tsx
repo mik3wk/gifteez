@@ -115,13 +115,17 @@ export function FairnessScreen() {
                 {section.status === 'even' ? (
                   <WaxSeal state="balanced" label={t('fairness.evenStatus')} />
                 ) : null}
-                {section.status === 'empty' ? <Caption>{t('fairness.emptyCircle')}</Caption> : null}
-                {section.behind.map(member => (
-                  <View key={member.personId}>
-                    <Caption tone="text">{member.name}</Caption>
-                    <Caption>{t('fairness.behind', { amount: money(member.behindCents) })}</Caption>
-                  </View>
-                ))}
+                {section.status === 'empty' ? <Caption>{t('fairness.emptyCircle')}</Caption> : (
+                  [...section.members].sort((a, b) => a.name.localeCompare(b.name)).map(member => (
+                    <View key={member.personId}>
+                      <Caption tone="text">{member.name}</Caption>
+                      <Caption>{t('fairness.year', { amount: money(member.yearSpentCents) })}</Caption>
+                      {section.behind.some(item => item.personId === member.personId) ? (
+                        <Caption>{t('fairness.behind', { amount: money(member.behindCents) })}</Caption>
+                      ) : null}
+                    </View>
+                  ))
+                )}
                 <Button label={t('fairness.edit')} tone="secondary" onPress={() => openEditor(section.circleId)} />
               </Card>
             ))}

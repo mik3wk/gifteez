@@ -6,6 +6,60 @@ export function ideaKey(idea: GiftIdea | string): string {
   return typeof idea === 'string' ? idea : idea.title;
 }
 
+/** Titles match across batches when spacing and case differ. */
+export function normalizeIdeaTitle(title: string): string {
+  return title.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+}
+
+/** Keep earlier ideas. A later batch only adds titles that are not already saved. */
+export function mergeIdeaBatches(existing: GiftIdea[], incoming: GiftIdea[]): { ideas: GiftIdea[]; added: GiftIdea[] } {
+  const seen = new Set<string>();
+  const ideas: GiftIdea[] = [];
+  existing.forEach(idea => {
+    const key = normalizeIdeaTitle(idea.title);
+    if (!key || seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    ideas.push(idea);
+  });
+  const added: GiftIdea[] = [];
+  incoming.forEach(idea => {
+    const key = normalizeIdeaTitle(idea.title);
+    if (!key || seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    added.push(idea);
+    ideas.push(idea);
+  });
+  return { ideas, added };
+}
+
+/** Age from a birthday year, when one is saved. The name is never part of this. */
+export function ageYears(
+  occasions: Array<{ personId: string; type: string; year?: number; month: number; day: number; deleted?: boolean }>,
+  personId: string,
+  today = new Date(),
+): number | null {
+  const birthday = occasions.find(item => (
+    item.personId === personId && !item.deleted && item.type === 'birthday' && typeof item.year === 'number'
+  ));
+  if (!birthday?.year) {
+    return null;
+  }
+  let age = today.getFullYear() - birthday.year;
+  const before = today.getMonth() + 1 < birthday.month
+    || (today.getMonth() + 1 === birthday.month && today.getDate() < birthday.day);
+  if (before) {
+    age -= 1;
+  }
+  if (age < 0 || age > 120) {
+    return null;
+  }
+  return age;
+}
+
 export function asGiftIdea(idea: GiftIdea | string): GiftIdea {
   if (typeof idea === 'string') {
     return { title: idea, priceMin: 15, priceMax: 45, reason: 'Something useful they can enjoy more than once.', searchQuery: 'thoughtful practical gift' };
