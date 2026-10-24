@@ -94,6 +94,21 @@ test('contacts stay unticked until the chosen ones fit the free slots', async ()
   await ReactTestRenderer.act(() => {
     boxes[0].props.onPress();
   });
+  expect(renderer!.root.findAllByType(Text).map(item => item.props.children)).toEqual(
+    expect.arrayContaining(['4 of 5 free left']),
+  );
+  await ReactTestRenderer.act(() => {
+    boxes[1].props.onPress();
+  });
+  expect(renderer!.root.findAllByType(Text).map(item => item.props.children)).toEqual(
+    expect.arrayContaining(['3 of 5 free left']),
+  );
+  await ReactTestRenderer.act(() => {
+    boxes[1].props.onPress();
+  });
+  expect(renderer!.root.findAllByType(Text).map(item => item.props.children)).toEqual(
+    expect.arrayContaining(['4 of 5 free left']),
+  );
   await ReactTestRenderer.act(async () => {
     await pressLabeled(renderer!, 'Add 1 person');
   });

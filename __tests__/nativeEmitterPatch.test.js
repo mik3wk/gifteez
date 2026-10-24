@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+
 jest.unmock('react-native/Libraries/Linking/Linking');
 jest.unmock('react-native/Libraries/AppState/AppState');
 jest.unmock('react-native/Libraries/Utilities/Appearance');
@@ -49,6 +52,12 @@ NativeModules.DevSettings.removeListeners = jest.fn();
 require('../index');
 
 const { Appearance, AppState, DevSettings, Keyboard, Linking, NativeEventEmitter, PushNotificationIOS } = require('react-native');
+
+test('the emitter patch stays on the public react-native entry', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/platform/safeNativeEmitter.js'), 'utf8');
+  expect(source).not.toMatch(/react-native\/Libraries/);
+  expect(source).toMatch(/import \{ NativeEventEmitter, NativeModules \} from 'react-native'/);
+});
 
 test('Linking keeps getInitialURL and addEventListener after the index patch', async () => {
   expect(typeof Linking.getInitialURL).toBe('function');

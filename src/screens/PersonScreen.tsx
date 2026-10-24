@@ -582,13 +582,13 @@ export function PersonScreen() {
         <View style={styles.pinnedTight}>
           {hidden ? <Body>{t('person.hiddenRecipient')}</Body> : null}
           {locked ? <Body>{t('person.readOnly')}</Body> : null}
-          {visitBanner.current?.show ? <Caption>{t('person.openedImported')}</Caption> : null}
           <View style={styles.navRow}>
             <BackLink label={backLabelFor(navigation)} onPress={() => leavePerson(navigation)} />
             <Pressable accessibilityRole="button" accessibilityLabel={t('person.editDetails')} onPress={openDetails} style={styles.backLink}>
               <Text maxFontSizeMultiplier={1.4} style={[type.body, { color: colors.pink }]}>{t('person.editShort')}</Text>
             </Pressable>
           </View>
+          {visitBanner.current?.show ? <Caption>{t('person.openedImported')}</Caption> : null}
           <View style={styles.personRow}>
             <MonogramAvatar name={person.name} personId={person.id} size={36} crest />
             <View style={styles.personCopy}>

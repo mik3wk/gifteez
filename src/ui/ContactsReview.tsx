@@ -56,6 +56,7 @@ export function ContactsReviewLink({
     getEnv().freeTierMaxPeople,
     accountUnlocked(gifteez.snapshot),
   );
+  const slotsShown = slotsLeft == null ? null : Math.max(0, slotsLeft - chosen.length);
 
   async function addChosen() {
     const decision = contactAddDecision(chosen.length, slotsLeft);
@@ -105,7 +106,7 @@ export function ContactsReviewLink({
             returnKeyType="search"
           />
         ) : null}
-        {!denied && slotsLeft != null ? <Caption>{t('importFlow.freeLeft', { left: slotsLeft, limit: getEnv().freeTierMaxPeople })}</Caption> : null}
+        {!denied && slotsShown != null ? <Caption>{t('importFlow.freeLeft', { left: slotsShown, limit: getEnv().freeTierMaxPeople })}</Caption> : null}
         {visible.map(person => {
           const index = drafts.indexOf(person);
           const key = String(index);
