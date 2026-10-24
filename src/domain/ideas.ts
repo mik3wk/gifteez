@@ -208,19 +208,20 @@ export function suggestIdeas(input: {
   );
   const notes = noteTokens(input.notes ?? '');
   const band = input.band ?? null;
+  const followsInterests = (idea: { tags: string[] }) => tags.size === 0 || idea.tags.some(tag => tags.has(tag));
   const ranked = CATALOG.map(idea => ({
     idea,
     score: scoreIdea(idea, tags, input.occasion, likedTags, blocked, band, notes),
     tie: hashToUint(`${input.personId}|${idea.text}|${input.salt}`),
   }))
-    .filter(item => item.score > -50)
+    .filter(item => item.score > -50 && followsInterests(item.idea))
     .sort((a, b) => b.score - a.score || a.tie - b.tie);
   const picked = ranked.slice(0, limit).map(item => toGiftIdea(item.idea, tags));
   if (picked.length >= limit) {
     return picked;
   }
   const titles = new Set(picked.map(idea => idea.title));
-  const filler = CATALOG.filter(idea => !titles.has(idea.text) && !blocked.has(idea.text) && audienceOk(idea, band))
+  const filler = CATALOG.filter(idea => !titles.has(idea.text) && !blocked.has(idea.text) && audienceOk(idea, band) && followsInterests(idea))
     .sort((a, b) => hashToUint(`${input.salt}|${a.text}`) - hashToUint(`${input.salt}|${b.text}`))
     .slice(0, limit - picked.length)
     .map(idea => toGiftIdea(idea, tags));
@@ -296,6 +297,17 @@ function scoreIdea(
   return score;
 }
 
-export function ideaCacheId(personId: string, occasionKey: string, source: string): string {
-  return `${personId}:${occasionKey}:${source}:v2`;
+export function ideaCacheId(personId: string, occasionKey: string, source: string, tags: readonly string[] = []): string {
+  const interests = [...new Set(tags.map(tag => tag.trim().toLowerCase()).filter(Boolean))].sort().join('+');
+  return `${personId}:${occasionKey}:${source}:${interests}:v3`;
+}
+
+/** Debug log of a cloud idea request. The person's name is never included. */
+export function cloudIdeaRequestLog(payload: object): string {
+  const copy = JSON.parse(JSON.stringify(payload)) as { name?: string; prompt?: { name?: string } };
+  delete copy.name;
+  if (copy.prompt) {
+    delete copy.prompt.name;
+  }
+  return JSON.stringify(copy);
 }

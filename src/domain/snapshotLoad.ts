@@ -133,11 +133,15 @@ function normalizeCircle(value: unknown): Circle | null {
   if (!isRecord(value) || !stringId(value.id) || typeof value.name !== 'string' || !value.name.trim()) {
     return null;
   }
-  return {
+  const circle: Circle = {
     id: value.id,
     name: value.name.trim(),
     createdAt: typeof value.createdAt === 'number' ? value.createdAt : 0,
   };
+  if (typeof value.budgetCents === 'number' && Number.isFinite(value.budgetCents) && value.budgetCents >= 0) {
+    circle.budgetCents = Math.round(value.budgetCents);
+  }
+  return circle;
 }
 
 function normalizeState(value: unknown): OccasionState | null {

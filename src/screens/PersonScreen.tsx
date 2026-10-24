@@ -1,10 +1,11 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
+import { CommonActions, useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStack } from '../app/navigation';
+import { peopleThenPerson, type RootStack } from '../app/navigation';
 import { amazonSearchUrl } from '../domain/amazon';
+import { describeImport } from '../domain/importNote';
 import { INTEREST_TAGS } from '../domain/catalog';
 import { asGiftIdea, ideaCacheId, ideaKey, ideasTooSimilar, normalizeIdeaTitle, sentenceCaseTitle } from '../domain/ideas';
 import type { GiftIdea } from '../domain/types';
@@ -65,8 +66,14 @@ function budgetField(cents: number | null | undefined): string {
 
 export function AddPersonScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, addPerson, completedPersonId, clearCompletedPerson, cancelPendingAdd } = useGifteez();
-  const presetBudget = budgetField(snapshot.profile.defaultBudgetCents);
+  const { snapshot, addPerson, completedPersonId, clearCompletedPerson, cancelPendingAdd, importFromContacts } = useGifteez();
+  function budgetPreset(id: string): string {
+    const circle = snapshot.circles.find(item => item.id === id);
+    if (circle && typeof circle.budgetCents === 'number') {
+      return budgetField(circle.budgetCents);
+    }
+    return budgetField(snapshot.profile.defaultBudgetCents);
+  }
   const cancelAdd = useRef(cancelPendingAdd);
   cancelAdd.current = cancelPendingAdd;
   const [name, setName] = useState('');
@@ -74,18 +81,28 @@ export function AddPersonScreen() {
   const [relationship, setRelationship] = useState('');
   const [relationshipError, setRelationshipError] = useState('');
   const [circleId, setCircleId] = useState('');
-  const [budget, setBudget] = useState(presetBudget);
+  const [preset, setPreset] = useState(() => budgetPreset(''));
+  const [budget, setBudget] = useState(preset);
+  const [importNote, setImportNote] = useState('');
   const [budgetError, setBudgetError] = useState('');
   const [birthYear, setBirthYear] = useState('');
   const [birthError, setBirthError] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [allowLeave, setAllowLeave] = useState(false);
   const nextId = useRef<string | null>(null);
-  const dirty = Boolean(name.trim() || relationship.trim() || circleId || budget.trim() !== presetBudget || birthYear.trim() || tags.length);
+  const dirty = Boolean(name.trim() || relationship.trim() || circleId || budget.trim() !== preset || birthYear.trim() || tags.length);
+  function chooseCircle(id: string) {
+    const nextPreset = budgetPreset(id);
+    setCircleId(id);
+    setBudget(current => (current === preset ? nextPreset : current));
+    setPreset(nextPreset);
+  }
   const firstRun = !snapshot.profile.onboarded;
+  const openedBeforePeople = useRef(firstRun);
   useLayoutEffect(() => {
     navigation.setOptions({
       headerBackVisible: false,
+      headerLeftBackgroundVisible: false,
       headerLeft: () => <AddFormBack />,
     });
   }, [navigation]);
@@ -107,6 +124,10 @@ export function AddPersonScreen() {
     }
     const personId = nextId.current;
     nextId.current = null;
+    if (openedBeforePeople.current) {
+      navigation.dispatch(CommonActions.reset(peopleThenPerson(personId)));
+      return;
+    }
     if (navigation.getState()?.routeNames?.includes('Person')) {
       navigation.replace('Person', { personId, section: 'ideas' });
     }
@@ -126,6 +147,12 @@ export function AddPersonScreen() {
     <Screen
       footer={(
         <View style={styles.footerStack}>
+          <Button
+            label={t('settings.contacts')}
+            tone="secondary"
+            onPress={async () => setImportNote(describeImport(await importFromContacts()))}
+          />
+          {importNote ? <Caption>{importNote}</Caption> : null}
           <Button
             label={t('person.save')}
             onPress={async () => {
@@ -188,7 +215,7 @@ export function AddPersonScreen() {
       />
       <Caption>{t('person.interests')}</Caption>
       <TagPicker tags={tags} onChange={setTags} />
-      <CircleField value={circleId} onChange={setCircleId} />
+      <CircleField value={circleId} onChange={chooseCircle} />
       <Field
         label={t('person.budget')}
         value={budget}
@@ -332,7 +359,7 @@ export function PersonScreen() {
       <Screen>
         <ArtSlot name="error" size={160} />
         <Body>{t('errors.generic')}</Body>
-        <Button label={t('common.back')} onPress={() => navigation.goBack()} />
+        <Button label={t('common.back')} onPress={() => leavePerson(navigation)} />
       </Screen>
     );
   }
@@ -342,8 +369,8 @@ export function PersonScreen() {
   const locked = false;
   const next = upcomingOccasion(person.id, snapshot.occasions, today);
   const occasionKey = next ? `${next.occasion.id}:${next.date.getFullYear()}` : 'general';
-  const onDevice = snapshot.ideas.find(item => item.id === ideaCacheId(person.id, occasionKey, 'on-device') && !item.deleted);
-  const cloud = snapshot.ideas.find(item => item.id === ideaCacheId(person.id, occasionKey, 'cloud') && !item.deleted);
+  const onDevice = snapshot.ideas.find(item => item.id === ideaCacheId(person.id, occasionKey, 'on-device', person.tags) && !item.deleted);
+  const cloud = snapshot.ideas.find(item => item.id === ideaCacheId(person.id, occasionKey, 'cloud', person.tags) && !item.deleted);
   const history = snapshot.gifts.filter(item => item.personId === person.id && !item.deleted);
   const showSpend = person.budgetCents != null || history.length > 0;
   const ideas = onDevice?.ideas ?? [];
@@ -454,10 +481,9 @@ export function PersonScreen() {
   function onSaveIdea(idea: GiftIdea | string) {
     const gift = asGiftIdea(idea);
     const held = looseIdeas.some(item => item.title === gift.title);
+    const kept = held ? looseIdeas.filter(item => item.title !== gift.title) : [...looseIdeas.filter(item => item.title !== gift.title), gift];
     if (!next) {
-      return savePerson(personId, {
-        savedIdeas: held ? looseIdeas.filter(item => item.title !== gift.title) : [...looseIdeas, gift],
-      });
+      return savePerson(personId, { savedIdeas: held ? looseIdeas.filter(item => item.title !== gift.title) : kept });
     }
     const onOccasion = nextState?.savedIdea === gift.title;
     if (held || onOccasion) {
@@ -469,7 +495,7 @@ export function PersonScreen() {
       }
       return undefined;
     }
-    return saveIdeaFor(next.occasion.id, gift.title);
+    return savePerson(personId, { savedIdeas: kept }).then(() => saveIdeaFor(next.occasion.id, gift.title));
   }
 
   function openDetails() {
@@ -482,6 +508,55 @@ export function PersonScreen() {
     setEditingDetails(true);
   }
 
+  function saveDetails(): boolean {
+    if (!person) {
+      return false;
+    }
+    const trimmed = name.trim();
+    const nextNameError = trimmed ? '' : t('errors.name');
+    const nextBudgetError = budget.trim() && parseBudget(budget) == null ? t('errors.price') : '';
+    const parsedYear = birthYear.trim() ? parseBirthYear(birthYear) : null;
+    const nextBirthError = birthYear.trim() && parsedYear == null ? t('person.birthYearInvalid') : '';
+    const cleaned = storeRelationship(relationship);
+    const nextRelationshipError = cleaned == null ? t('relationship.invalid') : '';
+    setNameError(nextNameError);
+    setBudgetError(nextBudgetError);
+    setBirthError(nextBirthError);
+    setRelationshipError(nextRelationshipError);
+    if (nextNameError || nextBudgetError || nextBirthError || nextRelationshipError) {
+      return false;
+    }
+    toast(t('person.saved'));
+    setEditingDetails(false);
+    const nextCircle = editCircleId || null;
+    savePerson(person.id, {
+      name: trimmed,
+      budgetCents: budget.trim() ? parseBudget(budget) : null,
+      tags: interestTags,
+      relationship: cleaned ?? '',
+      notes,
+      birthYear: parsedYear,
+    }).then(() => {
+      const tagsChanged = interestTags.join('|') !== (person.tags ?? []).join('|');
+      if (tagsChanged && interestTags.length > 0) {
+        refreshIdeas(person.id).catch(() => undefined);
+      }
+      if ((person.circleId ?? null) !== nextCircle) {
+        return setPersonCircle(person.id, nextCircle);
+      }
+      return undefined;
+    }).catch(() => undefined);
+    return true;
+  }
+
+  function finishDetails() {
+    if (!detailsDirty) {
+      setEditingDetails(false);
+      return;
+    }
+    saveDetails();
+  }
+
   return (
     <Screen
       tab="people"
@@ -490,9 +565,9 @@ export function PersonScreen() {
         <View style={styles.pinnedTight}>
           {hidden ? <Body>{t('person.hiddenRecipient')}</Body> : null}
           {locked ? <Body>{t('person.readOnly')}</Body> : null}
-          {person.imported ? <Caption>{t('person.openedImported')}</Caption> : null}
+          {person.imported && !person.opened ? <Caption>{t('person.openedImported')}</Caption> : null}
           <View style={styles.navRow}>
-            <BackLink label={backLabelFor(navigation)} onPress={() => navigation.goBack()} />
+            <BackLink label={backLabelFor(navigation)} onPress={() => leavePerson(navigation)} />
             <Pressable accessibilityRole="button" accessibilityLabel={t('person.editDetails')} onPress={openDetails} style={styles.backLink}>
               <Text maxFontSizeMultiplier={1.4} style={[type.body, { color: colors.pink }]}>{t('person.editShort')}</Text>
             </Pressable>
@@ -555,7 +630,7 @@ export function PersonScreen() {
                 idea={idea}
                 art={artName}
                 saved
-                onSave={() => onSaveIdea(ideaKey(idea))}
+                onSave={() => onSaveIdea(idea)}
                 onMore={() => setMenu({ kind: 'idea', idea: ideaKey(idea) })}
                 onShop={() => { shopIdea(idea).catch(() => undefined); }}
               />
@@ -578,7 +653,7 @@ export function PersonScreen() {
                   idea={idea}
                   art={artName}
                   saved={savedFor(ideaKey(idea))}
-                  onSave={() => onSaveIdea(ideaKey(idea))}
+                  onSave={() => onSaveIdea(idea)}
                   onMore={() => setMenu({ kind: 'idea', idea: ideaKey(idea) })}
                   onShop={() => { shopIdea(idea).catch(() => undefined); }}
                 />
@@ -589,7 +664,7 @@ export function PersonScreen() {
                   idea={idea}
                   art={artName}
                   saved={savedFor(ideaKey(idea))}
-                  onSave={() => onSaveIdea(ideaKey(idea))}
+                  onSave={() => onSaveIdea(idea)}
                   onMore={() => setMenu({ kind: 'idea', idea: ideaKey(idea) })}
                   onShop={() => { shopIdea(idea).catch(() => undefined); }}
                 />
@@ -610,7 +685,7 @@ export function PersonScreen() {
           {hasInterests ? (
             <Button
               label={cloudError ? t('person.ideasRetry') : t('person.cloud')}
-              tone="ghost"
+              tone="secondary"
               busy={cloudBusy}
               onPress={async () => {
                 setCloudBusy(true);
@@ -729,7 +804,7 @@ export function PersonScreen() {
           }}
         />
       </Sheet>
-      <Sheet visible={editingDetails} title={t('person.details')} doneLabel={t('common.done')} onClose={() => setEditingDetails(false)}>
+      <Sheet visible={editingDetails} title={t('person.details')} doneLabel={t('common.done')} onClose={finishDetails}>
         <Field
           label={t('person.name')}
           value={name}
@@ -779,45 +854,7 @@ export function PersonScreen() {
           onChangeText={value => setNotes(value.slice(0, 300))}
         />
         <Caption>{t('person.notesHint')}</Caption>
-        <Button
-          label={t('person.save')}
-          onPress={() => {
-            const trimmed = name.trim();
-            const nextNameError = trimmed ? '' : t('errors.name');
-            const nextBudgetError = budget.trim() && parseBudget(budget) == null ? t('errors.price') : '';
-            const parsedYear = birthYear.trim() ? parseBirthYear(birthYear) : null;
-            const nextBirthError = birthYear.trim() && parsedYear == null ? t('person.birthYearInvalid') : '';
-            const cleaned = storeRelationship(relationship);
-            const nextRelationshipError = cleaned == null ? t('relationship.invalid') : '';
-            setNameError(nextNameError);
-            setBudgetError(nextBudgetError);
-            setBirthError(nextBirthError);
-            setRelationshipError(nextRelationshipError);
-            if (nextNameError || nextBudgetError || nextBirthError || nextRelationshipError) {
-              return;
-            }
-            toast(t('person.saved'));
-            setEditingDetails(false);
-            const nextCircle = editCircleId || null;
-            return savePerson(person.id, {
-              name: trimmed,
-              budgetCents: budget.trim() ? parseBudget(budget) : null,
-              tags: interestTags,
-              relationship: cleaned ?? '',
-              notes,
-              birthYear: parsedYear,
-            }).then(() => {
-              const tagsChanged = interestTags.join('|') !== (person.tags ?? []).join('|');
-              if (tagsChanged && interestTags.length > 0) {
-                refreshIdeas(person.id).catch(() => undefined);
-              }
-              if ((person.circleId ?? null) !== nextCircle) {
-                return setPersonCircle(person.id, nextCircle);
-              }
-              return undefined;
-            });
-          }}
-        />
+        <Button label={t('person.save')} onPress={() => { saveDetails(); }} />
         <Button
           label={t('person.removePerson', { name: person.name })}
           tone="danger"
@@ -831,7 +868,7 @@ export function PersonScreen() {
               return;
             }
             setEditingDetails(false);
-            navigation.goBack();
+            leavePerson(navigation);
             await removePerson(person.id);
           }}
         />
@@ -1206,6 +1243,14 @@ function AddFormBack() {
   return <BackLink label={label} onPress={() => navigation.goBack()} />;
 }
 
+function leavePerson(navigation: NativeStackNavigationProp<RootStack>) {
+  if (navigation.canGoBack()) {
+    navigation.goBack();
+    return;
+  }
+  navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'People' }] }));
+}
+
 function backLabelFor(navigation: NativeStackNavigationProp<RootStack>): string {
   const state = navigation.getState?.();
   const previous = state?.routes[state.index - 1];
@@ -1294,7 +1339,7 @@ function IdeaCard({
         </View>
       </View>
       <View style={styles.actions}>
-        <Button flex tone="soft" label={t('person.shopIdea')} onPress={onShop} />
+        <Button flex tone="primary" label={t('person.shopIdea')} onPress={onShop} />
         <HeartPop saved={saved}>
           <Pressable
             accessibilityRole="button"

@@ -1,13 +1,14 @@
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { CommonActions, useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStack } from '../app/navigation';
+import { peopleThenPerson, type RootStack } from '../app/navigation';
 import { getEnv } from '../config/env';
 import { accountUnlocked, canAddPerson, listCurrency, sortPeople, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
 import { personSeal } from '../domain/seal';
 import { isOneTimeOccasion, occasionLabel } from '../domain/occasions';
 import { relationshipLabel } from '../domain/relationship';
+import { describeImport } from '../domain/importNote';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, t } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { space } from '../theme/tokens';
@@ -18,8 +19,9 @@ import { Caption, EmptyState, Field, Screen, Title } from '../ui/ui';
 export function PeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
   const { colors, type, typeScale } = useTheme();
-  const { snapshot, resumePersonId, clearResumePerson, openPaywall } = useGifteez();
+  const { snapshot, resumePersonId, clearResumePerson, openPaywall, importFromContacts } = useGifteez();
   const [query, setQuery] = useState('');
+  const [importNote, setImportNote] = useState('');
   const order = useRef<string[] | null>(null);
   useFocusEffect(useCallback(() => {
     order.current = null;
@@ -55,7 +57,7 @@ export function PeopleScreen() {
     }
     const personId = resumePersonId;
     clearResumePerson();
-    navigation.navigate('Person', { personId, section: 'ideas' });
+    navigation.dispatch(CommonActions.reset(peopleThenPerson(personId)));
   }, [clearResumePerson, navigation, resumePersonId]);
   const limit = getEnv().freeTierMaxPeople;
   const used = snapshot.people.filter(person => !person.deleted).length;
@@ -82,11 +84,22 @@ export function PeopleScreen() {
         onChangeText={setQuery}
         returnKeyType="search"
         autoCorrect={false}
+        autoCapitalize="none"
         autoComplete="off"
         textContentType="none"
       />
+      {importNote ? <Caption>{importNote}</Caption> : null}
       {snapshot.people.some(person => !person.deleted) ? null : (
-        <EmptyState kind="people" text={t('people.addFirst')} action={t('people.addPerson')} onAction={addSomeone} />
+        <EmptyState
+          kind="people"
+          text={t('people.addFirst')}
+          action={t('people.addPerson')}
+          onAction={addSomeone}
+          secondaryAction={t('settings.contacts')}
+          onSecondaryAction={() => {
+            importFromContacts().then(result => setImportNote(describeImport(result))).catch(() => undefined);
+          }}
+        />
       )}
       {needle && people.length === 0 && snapshot.people.some(person => !person.deleted) ? (
         <EmptyState kind="people" text={t('people.noMatch', { query: query.trim() })} />

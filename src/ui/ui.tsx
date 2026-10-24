@@ -515,6 +515,7 @@ export function Field({
   textContentType,
   autoComplete,
   autoCorrect,
+  autoCapitalize,
   onSubmitEditing,
   onBlur,
 }: {
@@ -530,6 +531,7 @@ export function Field({
   textContentType?: 'name' | 'emailAddress' | 'telephoneNumber' | 'oneTimeCode' | 'none';
   autoComplete?: 'name' | 'email' | 'tel' | 'sms-otp' | 'off';
   autoCorrect?: boolean;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   onSubmitEditing?: () => void;
   onBlur?: () => void;
 }) {
@@ -546,7 +548,7 @@ export function Field({
         placeholder={placeholder}
         placeholderTextColor={colors.muted}
         keyboardType={keyboardType}
-        autoCapitalize={textContentType === 'name' ? 'words' : keyboardType === 'email-address' ? 'none' : 'sentences'}
+        autoCapitalize={autoCapitalize ?? (textContentType === 'name' ? 'words' : keyboardType === 'email-address' ? 'none' : 'sentences')}
         autoCorrect={autoCorrect ?? (textContentType === 'name' || keyboardType === 'email-address' ? false : undefined)}
         spellCheck={autoCorrect === false ? false : undefined}
         returnKeyType={returnKeyType}
@@ -771,11 +773,15 @@ export function EmptyState({
   text,
   action,
   onAction,
+  secondaryAction,
+  onSecondaryAction,
 }: {
   kind: EmptyArtName;
   text: string;
   action?: string;
   onAction?: () => void;
+  secondaryAction?: string;
+  onSecondaryAction?: () => void;
 }) {
   return (
     <Card variant="dashed">
@@ -783,6 +789,7 @@ export function EmptyState({
         <ArtSlot name={kind} size={160} />
         <Body>{text}</Body>
         {action && onAction ? <Button label={action} onPress={onAction} /> : null}
+        {secondaryAction && onSecondaryAction ? <Button label={secondaryAction} tone="secondary" onPress={onSecondaryAction} /> : null}
       </View>
     </Card>
   );
@@ -1227,6 +1234,7 @@ export function Sheet({
   onDismiss,
   title,
   doneLabel,
+  compact,
   children,
 }: {
   visible: boolean;
@@ -1236,6 +1244,8 @@ export function Sheet({
   title?: string;
   /** Replaces the close icon on forms. */
   doneLabel?: string;
+  /** Bottom card sized to its content, for short forms such as reminders. */
+  compact?: boolean;
   children: React.ReactNode;
 }) {
   const { colors, type, typeScale } = useTheme();
@@ -1286,12 +1296,21 @@ export function Sheet({
     }
   }, [visible]);
   return (
-    <Modal visible={visible} animationType={reduce ? 'fade' : 'slide'} presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: Platform.OS === 'ios' ? space.xs : insets.top }]}>
+    <Modal
+      visible={visible}
+      transparent={compact}
+      animationType={reduce ? 'fade' : 'slide'}
+      presentationStyle={compact ? 'overFullScreen' : 'pageSheet'}
+      onRequestClose={onClose}>
+      <View style={compact ? styles.compactRoot : [styles.screen, { backgroundColor: colors.background, paddingTop: Platform.OS === 'ios' ? space.xs : insets.top }]}>
+        {compact ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={t('common.close')} onPress={onClose} style={styles.backdrop} />
+        ) : null}
+        <View style={compact ? [styles.compactCard, { backgroundColor: colors.background, paddingBottom: insets.bottom }] : styles.screen}>
         <SheetFooterContext.Provider value={setFooter}>
-        <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView style={compact ? undefined : styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View
-          style={styles.screen}
+          style={compact ? undefined : styles.screen}
           accessibilityElementsHidden={confirm != null}
           importantForAccessibility={confirm ? 'no-hide-descendants' : 'auto'}>
           <View style={styles.grabberWrap}>
@@ -1312,7 +1331,7 @@ export function Sheet({
               <IconButton label={t('common.close')} name="close" onPress={onClose} />
             )}
           </View>
-          <ScrollView contentContainerStyle={[styles.content, { paddingBottom: footer ? space.md : insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={[styles.content, { flexGrow: compact ? 0 : 1, paddingBottom: footer ? space.md : compact ? space.md : insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled">
             <Settle distance={10}>
               <View style={styles.column}>{children}</View>
             </Settle>
@@ -1336,6 +1355,7 @@ export function Sheet({
             />
           </View>
         ) : null}
+        </View>
       </View>
     </Modal>
   );
@@ -1469,6 +1489,9 @@ export function Toggle({
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  compactRoot: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: scrim },
+  compactCard: { maxHeight: '80%', borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: 'hidden' },
   statusBar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 4 },
   statusBarFront: { zIndex: 30, elevation: 30 },
   centerText: { textAlign: 'center', alignSelf: 'stretch' },

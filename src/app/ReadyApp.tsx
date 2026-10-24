@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, useColorScheme, View } from 'react-native';
-import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
+import { Linking, StyleSheet, useColorScheme, View } from 'react-native';
+import { CommonActions, NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { t } from '../i18n';
@@ -17,7 +17,7 @@ import { sticker, type as appType } from '../theme/tokens';
 import { ConfettiBurst, useReduceMotion } from '../ui/motion';
 import { BrandedLoading, ConfirmHost, Notice, OfflineBanner, UnlockSheet, confirmDestructive } from '../ui/ui';
 import type { AppEnv } from '../config/env';
-import type { RootStack } from './navigation';
+import { peopleThenPerson, type RootStack } from './navigation';
 
 const Stack = createNativeStackNavigator<RootStack>();
 const navigationRef = createNavigationContainerRef<RootStack>();
@@ -37,6 +37,7 @@ function Navigator() {
   const launchBackground = scheme === 'dark' ? sticker.dark.background : sticker.light.background;
   const reduceMotion = useReduceMotion();
   const [holdBrand, setHoldBrand] = useState(true);
+  const [navReady, setNavReady] = useState(false);
   const [logoMounted, setLogoMounted] = useState(true);
   const logoOpacity = useSharedValue(1);
   const logoStyle = useAnimatedStyle(() => ({ opacity: logoOpacity.value }));
@@ -64,6 +65,16 @@ function Navigator() {
   const showRecovery = !coverBoot && gifteez.dataRecovery;
   const showFailure = !coverBoot && !showRecovery && Boolean(gifteez.startupFailure);
   const showNav = !coverBoot && !showRecovery && !gifteez.startupFailure;
+  const onboarded = gifteez.snapshot.profile.onboarded;
+  const resumeId = gifteez.resumePersonId;
+  const clearResume = gifteez.clearResumePerson;
+  useEffect(() => {
+    if (!showNav || !navReady || !onboarded || !resumeId || !navigationRef.isReady()) {
+      return;
+    }
+    navigationRef.dispatch(CommonActions.reset(peopleThenPerson(resumeId)));
+    clearResume();
+  }, [clearResume, navReady, onboarded, resumeId, showNav]);
   useEffect(() => {
     if (coverBoot) {
       return undefined;
@@ -97,7 +108,7 @@ function Navigator() {
       <NavigationContainer
         ref={navigationRef}
         theme={theme}
-        onReady={() => undefined}
+        onReady={() => setNavReady(true)}
         onStateChange={() => gifteez.onNavigate()}>
         <Stack.Navigator screenOptions={{
           headerShadowVisible: false,
@@ -140,7 +151,15 @@ function Navigator() {
       ) : null}
       {showNav && gifteez.offline ? <OfflineBanner text={t('sync.offlineBanner')} /> : null}
       {(showNav || showRecovery) && gifteez.error ? (
-        <Notice text={gifteez.error} tone="danger" onClose={gifteez.clearError} />
+        <Notice
+          text={gifteez.error}
+          tone="danger"
+          onClose={gifteez.clearError}
+          action={gifteez.error === t('errors.notificationsSettings') ? t('errors.openSettings') : undefined}
+          onAction={gifteez.error === t('errors.notificationsSettings')
+            ? () => { Linking.openSettings().catch(() => undefined); }
+            : undefined}
+        />
       ) : showNav && gifteez.notice ? (
         <Notice
           text={gifteez.notice}

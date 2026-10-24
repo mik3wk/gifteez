@@ -33,16 +33,18 @@ async function loadNotifee(): Promise<{ api: NotifeeLike; timestamp: number } | 
   }
 }
 
-export async function requestReminderPermission(): Promise<boolean> {
+export type ReminderPermission = 'granted' | 'denied' | 'unavailable';
+
+export async function requestReminderPermission(): Promise<ReminderPermission> {
   const loaded = await loadNotifee();
   if (!loaded) {
-    return false;
+    return 'unavailable';
   }
   try {
     const settings = await loaded.api.requestPermission();
-    return (settings.authorizationStatus ?? 0) >= 1;
+    return (settings.authorizationStatus ?? 0) >= 1 ? 'granted' : 'denied';
   } catch {
-    return false;
+    return 'denied';
   }
 }
 

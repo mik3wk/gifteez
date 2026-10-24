@@ -1,8 +1,8 @@
 import React, { useLayoutEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { CommonActions, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStack } from '../app/navigation';
+import { peopleThenPerson, type RootStack } from '../app/navigation';
 import { getEnv } from '../config/env';
 import { circleSections, homeCircle, repeatedRelationship } from '../domain/circles';
 import { canAddPerson, daysUntil, listCurrency, occurrenceYear, yearSpentCents } from '../domain/logic';
@@ -43,7 +43,7 @@ export function HomeScreen() {
     }
     const personId = resumePersonId;
     clearResumePerson();
-    navigation.navigate('Person', { personId, section: 'ideas' });
+    navigation.dispatch(CommonActions.reset(peopleThenPerson(personId)));
   }, [clearResumePerson, navigation, resumePersonId]);
   function addSomeone() {
     if (!canAddPerson(snapshot, getEnv().freeTierMaxPeople)) {
@@ -133,7 +133,7 @@ export function HomeScreen() {
         </View>
       ) : null}
       {people.length > 0 ? <CalendarAction /> : null}
-      <Sheet visible={remindersOpen} title={t('people.remindersA11y')} onClose={() => setRemindersOpen(false)}>
+      <Sheet visible={remindersOpen} compact title={t('people.remindersA11y')} onClose={() => setRemindersOpen(false)}>
         <Body>{remindersOn ? t('people.remindersOn') : t('person.remindBody')}</Body>
         {remindersOn ? (
           <Button label={t('person.remindNo')} tone="secondary" onPress={() => { setReminders(false).catch(() => undefined); setRemindersOpen(false); }} />

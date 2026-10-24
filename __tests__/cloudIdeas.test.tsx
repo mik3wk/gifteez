@@ -38,7 +38,7 @@ jest.mock('../src/state/GifteezContext', () => {
     updatedAt: 1,
   }];
   snapshot.ideas = [{
-    id: cacheId('ada', 'general', 'on-device'),
+    id: cacheId('ada', 'general', 'on-device', ['books']),
     personId: 'ada',
     occasionKey: 'general',
     ideas: ['Wool socks'],
@@ -89,7 +89,7 @@ test('a rejected cloud ideas callable shows retry and keeps on-device ideas', as
   await ReactTestRenderer.act(async () => {
     renderer = ReactTestRenderer.create(<PersonScreen />);
   });
-  expect(ideaCacheId('ada', 'general', 'on-device')).toBe('ada:general:on-device:v2');
+  expect(ideaCacheId('ada', 'general', 'on-device', ['books'])).toBe('ada:general:on-device:books:v3');
   for (const failure of failures) {
     mockCallable.mockRejectedValueOnce(failure);
     const ask = buttonLabeled(renderer!, 'Ask for more ideas') ?? buttonLabeled(renderer!, 'Try again');

@@ -25,7 +25,7 @@ import {
   yearSpentCents,
 } from '../src/domain/logic';
 import { ideaReason } from '../src/domain/catalog';
-import { suggestIdeas } from '../src/domain/ideas';
+import { cloudIdeaRequestLog, ideaCacheId, suggestIdeas } from '../src/domain/ideas';
 import { colorsFor, parseSkin, skinForDate } from '../src/theme/skins';
 import { buildInviteUrl, openJson, parseLink, randomKey, sealJson, unwrapKey, wrapKey } from '../src/crypto/crypto';
 import { formatDate, formatMoney, t } from '../src/i18n';
@@ -177,6 +177,26 @@ test('on-device ideas stay on device, follow tags, and skip thumbs down', () => 
     }
   });
   expect(plain.some(idea => /pick they can use/i.test(idea.reason))).toBe(false);
+  const tea = suggestIdeas({
+    personId: 'tea',
+    name: 'Should Not Appear',
+    tags: ['tea'],
+    occasion: 'birthday',
+    feedback: [],
+    salt: 4,
+  });
+  expect(tea.length).toBeGreaterThan(0);
+  expect(tea.every(idea => /tea|teapot/i.test(idea.title))).toBe(true);
+  expect(tea.map(idea => idea.title)).not.toContain('A day pass or warm layer for a trail they like');
+  expect(tea.map(idea => idea.title)).not.toContain('A small dish for the jewelry they leave on the dresser');
+  expect(ideaCacheId('tea', 'general', 'on-device', ['tea'])).toBe('tea:general:on-device:tea:v3');
+  const logged = cloudIdeaRequestLog({
+    deviceId: 'device',
+    personId: 'tea',
+    prompt: { name: 'Should Not Appear', tags: ['tea'], relationship: 'Friend' },
+  });
+  expect(logged).not.toContain('Should Not Appear');
+  expect(logged).toContain('tea');
   const cooking = suggestIdeas({
     personId: 'p',
     name: 'Marie',

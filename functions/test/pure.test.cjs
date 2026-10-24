@@ -140,7 +140,7 @@ test('idea prompt stresses relationship and age and still omits the name', async
     assert.equal(hashed.includes('Ada'), false);
     assert.match(hashed, /Sister/);
     assert.match(hashed, /34/);
-    assert.match(hashed, /"v":4/);
+    assert.match(hashed, /"v":5/);
     const withBand = modelPrompt({ name: 'Ada', relationship: 'Sister', ageBand: 'adult', avoid: ['Pottery wheel class'] });
     assert.equal(JSON.stringify(withBand).includes('Ada'), false);
     assert.equal(withBand.ageBand, 'adult');

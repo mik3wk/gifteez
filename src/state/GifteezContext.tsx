@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { Appearance, Linking, Platform } from 'react-native';
 import type { AppEnv } from '../config/env';
 import { keyFromString, keyToString, openString, randomId, randomKey, sealJson } from '../crypto/crypto';
-import { ideaCacheId, mergeIdeaBatches, resolveAge, suggestIdeas } from '../domain/ideas';
+import { cloudIdeaRequestLog, ideaCacheId, mergeIdeaBatches, resolveAge, suggestIdeas } from '../domain/ideas';
 import { deleteOccasion, deletePrivateGift, deleteSharedGift, updateOccasionDate, updatePrivateGift, updateSharedGift } from '../domain/edits';
 import { planReminders } from '../domain/reminders';
 import { classifyStartupError, startupCause, type StartupFailure } from '../domain/startup';
@@ -28,6 +28,7 @@ import {
 import { emptySnapshot, type AppSnapshot, type GiftIdea, type Occasion, type OccasionType, type Person } from '../domain/types';
 import { formatDate, t } from '../i18n';
 import { applyAppearance, loadAppearance, saveAppearance, type AppearanceChoice } from '../platform/appearance';
+import { loadSkinPreview, saveSkinPreview } from '../platform/skinPreview';
 import { isIncomingBackup, pickBackupText, readBackupUri, shareBackupFile } from '../platform/backupFile';
 import { readCacheBlob, readSnapshotSlots, writeSnapshotSlots } from '../platform/cache';
 import { deviceId } from '../platform/device';
@@ -41,7 +42,7 @@ import { exportBackup, migrateToLocal, parseBackup, summarizeBackup, type Backup
 import { CacheStageError, decideCacheLoad, decideCommit, planSnapshotWrite, purgeDeleted, snapshotContentKey, type CacheLoadFailure } from '../domain/snapshotLoad';
 import { normalizeStoredDate, parseLocalDate } from '../domain/calendarDate';
 import { relationshipCircleName, relationshipLabel, storeRelationship, type RelationshipPresetKey } from '../domain/relationship';
-import { acceptSuggestion, addCircle, assignCircle, cleanCircleName, removeCircle, renameCircle as renameStoredCircle } from '../domain/circles';
+import { acceptSuggestion, addCircle, assignCircle, cleanCircleName, removeCircle, renameCircle as renameStoredCircle, withCircleBudget } from '../domain/circles';
 import { haptic } from '../platform/haptics';
 import type { CelebrateName } from '../theme/tokens';
 import { colorsFor, parseSkin, resolveSkin, withColorScheme, type ResolvedColors, type SkinId, type ThemeColors } from '../theme/skins';
@@ -81,6 +82,7 @@ type GifteezApi = {
   savePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'relationship' | 'notes' | 'savedIdeas'>> & { birthYear?: number | null }) => Promise<void>;
   createCircle: (name: string) => Promise<string | null>;
   renameCircle: (circleId: string, name: string) => Promise<void>;
+  setCircleBudget: (circleId: string, budgetCents: number | null) => Promise<void>;
   deleteCircle: (circleId: string) => Promise<void>;
   setPersonCircle: (personId: string, circleId: string | null) => Promise<void>;
   acceptCircleSuggestion: (key: RelationshipPresetKey, personIds: string[]) => Promise<void>;
@@ -365,6 +367,25 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
           // The list is already on the phone. Auth is only for cloud ideas and purchase checks.
         }
         try {
+          const storedPreview = await loadSkinPreview();
+          if (!cancelled && storedPreview && storedPreview !== 'remote') {
+            skinOverride.current = storedPreview;
+            setSkinPreview(storedPreview);
+            const season = storedPreview === 'spring' || storedPreview === 'summer'
+              ? parseSkin(storedPreview === 'spring' ? require('../../skins/spring.json') : require('../../skins/summer.json'))
+              : null;
+            const previewDownloaded = season ? { ...downloadedRef.current, [storedPreview]: season } : downloadedRef.current;
+            if (season) {
+              setDownloaded(previewDownloaded);
+            }
+            const preview = resolveSkin({
+              remoteValue: storedPreview === 'auto' ? 'auto' : storedPreview,
+              today: new Date(),
+              downloaded: previewDownloaded,
+            });
+            setSkinId(preview.id);
+            paint(preview.colors);
+          }
           const skinValue = await activeSkinParam(env);
           remoteSkin.current = skinValue || 'auto';
           const resolved = resolveSkin({ remoteValue: skinValue, today: new Date(), downloaded: downloadedRef.current });
@@ -688,6 +709,14 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       await commit(next);
       sync().catch(() => undefined);
     },
+    setCircleBudget: async (circleId, budgetCents) => {
+      const next = withCircleBudget(snapshotRef.current, circleId, budgetCents);
+      if (!next) {
+        return;
+      }
+      await commit(next);
+      sync().catch(() => undefined);
+    },
     deleteCircle: async circleId => {
       await commit(removeCircle(snapshotRef.current, circleId));
       sync().catch(() => undefined);
@@ -865,7 +894,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       const occasion = upcomingOccasion(personId, next.occasions, new Date());
       const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
-      const cacheId = ideaCacheId(personId, occasionKey, 'on-device');
+      const cacheId = ideaCacheId(personId, occasionKey, 'on-device', person.tags);
       if (!next.ideas.some(item => item.id === cacheId && !item.deleted)) {
         const ideas = suggestIdeas(ideaRequest(person, next, 0));
         next = upsertIdeas(next, {
@@ -889,7 +918,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       const occasion = upcomingOccasion(personId, snapshotRef.current.occasions, new Date());
       const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
-      const cacheId = ideaCacheId(personId, occasionKey, 'on-device');
+      const cacheId = ideaCacheId(personId, occasionKey, 'on-device', person.tags);
       const previous = snapshotRef.current.ideas.find(item => item.id === cacheId);
       const salt = (previous?.salt ?? 0) + 1;
       const ideas = suggestIdeas(ideaRequest(person, snapshotRef.current, salt));
@@ -911,7 +940,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       }
       const occasion = upcomingOccasion(personId, snapshotRef.current.occasions, new Date());
       const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
-      const cacheId = ideaCacheId(personId, occasionKey, 'cloud');
+      const cacheId = ideaCacheId(personId, occasionKey, 'cloud', person.tags);
       const existing = snapshotRef.current.ideas.find(item => item.id === cacheId && !item.deleted);
       const age = resolveAge({
         occasions: snapshotRef.current.occasions,
@@ -920,10 +949,10 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         notes: person.notes,
         relationship: person.relationship,
       });
-      const onDevice = snapshotRef.current.ideas.find(item => item.id === ideaCacheId(personId, occasionKey, 'on-device') && !item.deleted);
+      const onDevice = snapshotRef.current.ideas.find(item => item.id === ideaCacheId(personId, occasionKey, 'on-device', person.tags) && !item.deleted);
       const avoid = [...(onDevice?.ideas ?? []), ...(existing?.ideas ?? [])].map(idea => idea.title).slice(0, 24);
       try {
-        const result = await withTimeout(callFunction<CloudResult>(env, 'generateGiftIdeas', {
+        const request = {
           deviceId: await deviceId(),
           personId,
           refresh: Boolean(existing),
@@ -941,7 +970,11 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
             notes: (person.notes ?? '').slice(0, 300),
             pastGifts: snapshotRef.current.gifts.filter(gift => gift.personId === personId && !gift.deleted).map(gift => gift.title),
           },
-        }));
+        };
+        if (__DEV__) {
+          console.log('generateGiftIdeas', cloudIdeaRequestLog(request));
+        }
+        const result = await withTimeout(callFunction<CloudResult>(env, 'generateGiftIdeas', request));
         setCloudRemaining(current => ({ ...current, [personId]: result.remaining }));
         const merged = mergeIdeaBatches(existing?.ideas ?? [], result.ideas);
         await commit(upsertIdeas(snapshotRef.current, {
@@ -962,10 +995,11 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     },
     setReminders: async enabled => {
       if (enabled) {
-        const granted = await requestReminderPermission();
+        const permission = await requestReminderPermission();
+        const granted = permission === 'granted';
         await commit(withProfile(snapshotRef.current, { reminders: granted ? 'on' : 'off' }));
         if (!granted) {
-          fail('notifications');
+          fail(permission === 'denied' && Platform.OS === 'ios' ? 'notificationsSettings' : 'notifications');
         }
       } else {
         await commit(withProfile(snapshotRef.current, { reminders: 'off' }));
@@ -1037,6 +1071,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     previewSkin: id => {
       skinOverride.current = id === 'remote' ? 'remote' : id;
       setSkinPreview(id);
+      saveSkinPreview(id).catch(() => undefined);
       const remoteValue = id === 'remote' ? remoteSkin.current : id === 'auto' ? 'auto' : id;
       const season = id === 'spring' || id === 'summer'
         ? parseSkin(id === 'spring' ? require('../../skins/spring.json') : require('../../skins/summer.json'))
@@ -1273,7 +1308,7 @@ function withOnDeviceIdeas(snapshot: AppSnapshot, personId: string): AppSnapshot
   }
   const occasion = upcomingOccasion(personId, snapshot.occasions, new Date());
   const occasionKey = occasion ? `${occasion.occasion.id}:${occasion.date.getFullYear()}` : 'general';
-  const cacheId = ideaCacheId(personId, occasionKey, 'on-device');
+  const cacheId = ideaCacheId(personId, occasionKey, 'on-device', person.tags);
   const previous = snapshot.ideas.find(item => item.id === cacheId);
   const ideas = suggestIdeas(ideaRequest(person, snapshot, previous?.salt ?? 0));
   return upsertIdeas(snapshot, {

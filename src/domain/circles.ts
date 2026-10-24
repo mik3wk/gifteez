@@ -178,6 +178,26 @@ export function addCircle(snapshot: AppSnapshot, circle: Circle): AppSnapshot {
   return { ...snapshot, circles: [...activeCircles(snapshot), circle] };
 }
 
+export function withCircleBudget(snapshot: AppSnapshot, circleId: string, budgetCents: number | null): AppSnapshot | null {
+  if (!activeCircles(snapshot).some(circle => circle.id === circleId)) {
+    return null;
+  }
+  return {
+    ...snapshot,
+    circles: activeCircles(snapshot).map(circle => {
+      if (circle.id !== circleId) {
+        return circle;
+      }
+      if (budgetCents == null) {
+        const next = { ...circle };
+        delete next.budgetCents;
+        return next;
+      }
+      return { ...circle, budgetCents };
+    }),
+  };
+}
+
 export function renameCircle(snapshot: AppSnapshot, circleId: string, name: string): AppSnapshot | null {
   if (!activeCircles(snapshot).some(circle => circle.id === circleId)) {
     return null;

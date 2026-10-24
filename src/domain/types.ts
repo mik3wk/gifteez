@@ -39,6 +39,8 @@ export type Circle = {
   id: string;
   name: string;
   createdAt: number;
+  /** Optional amount that prefills a new member of this circle. */
+  budgetCents?: number | null;
 };
 
 export type Occasion = {
