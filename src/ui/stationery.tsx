@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, Image, StyleSheet, Text, View } from 'react-native';
 import { budgetFraction, budgetTone } from '../domain/budgetBar';
+import type { CircleMember, CircleSection } from '../domain/circles';
 import { fairnessView } from '../domain/fairnessView';
 import type { FairnessRow } from '../domain/logic';
 import { monogramIndex, monogramLetters, MONOGRAM_SWATCHES } from '../domain/monogram';
@@ -100,21 +101,25 @@ export function BudgetBar({
   spentCents,
   budgetCents,
   caption,
+  fill,
 }: {
   spentCents: number;
   budgetCents: number | null;
-  caption: string;
+  caption?: string;
+  fill?: string;
 }) {
   const { colors, type, typeScale } = useTheme();
   const tone = budgetTone(spentCents, budgetCents);
-  const fill = tone === 'over' ? colors.pink : tone === 'near' ? colors.sunshine : colors.teal;
+  const ink = fill ?? (tone === 'over' ? colors.pink : tone === 'near' ? colors.sunshine : colors.teal);
   const width = `${Math.round(budgetFraction(spentCents, budgetCents) * 100)}%`;
   return (
-    <View accessible accessibilityLabel={caption}>
+    <View accessible={Boolean(caption)} accessibilityLabel={caption}>
       <View style={[styles.budgetTrack, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
-        <View style={[styles.budgetFill, { width, backgroundColor: fill }]} />
+        <View style={[styles.budgetFill, { width, backgroundColor: ink }]} />
       </View>
-      <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, styles.budgetCaption, { color: colors.muted }]}>{caption}</Text>
+      {caption ? (
+        <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, styles.budgetCaption, { color: colors.muted }]}>{caption}</Text>
+      ) : null}
     </View>
   );
 }
@@ -169,6 +174,97 @@ export function ListRow({
       <SealPill state={seal} label={sealLabel} />
       <Icon name="chevron" color={colors.muted} size={18} />
     </Pressable>
+  );
+}
+
+function memberAmount(member: CircleMember, money: (cents: number) => string): string {
+  if (member.budgetCents != null && member.budgetCents > 0) {
+    return t('people.budgetLeft', { used: money(member.yearSpentCents), budget: money(member.budgetCents) });
+  }
+  return money(member.yearSpentCents);
+}
+
+/** The fairness card used on Home and the Fairness tab. Amounts are dollars, never percents. */
+export function CircleFairnessCard({
+  section,
+  money,
+  onOpenFairness,
+  onOpenIdeas,
+  onEdit,
+}: {
+  section: CircleSection;
+  money: (cents: number) => string;
+  onOpenFairness?: () => void;
+  onOpenIdeas?: (personId: string) => void;
+  onEdit?: () => void;
+}) {
+  const { colors, type, typeScale, radius } = useTheme();
+  const behind = section.behind[0];
+  const balanced = section.status !== 'behind';
+  const spread = section.members.reduce((max, member) => Math.max(max, member.behindCents), 0);
+  const top = section.members.reduce((max, member) => Math.max(max, member.yearSpentCents), 0);
+  const members = section.members.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const fills = [colors.teal, colors.lilac, colors.sunshine];
+  const footer = section.status === 'empty'
+    ? t('fairness.emptyCircle')
+    : section.status === 'behind' && behind
+      ? t('fairness.behindIdeas', { name: behind.name, amount: money(behind.behindCents) })
+      : spread === 0
+        ? t('fairness.matchedNice')
+        : t('fairness.withinNice', { amount: money(spread) });
+  const sealLabel = balanced || !behind
+    ? undefined
+    : t('fairness.behindSeal', { name: behind.name, amount: money(behind.behindCents) });
+  const head = (
+    <View style={styles.fairHead}>
+      <Icon name="scale" color={colors.teal} size={22} />
+      <View style={styles.fairTitle}>
+        <Text maxFontSizeMultiplier={typeScale.heading} style={[type.heading, { color: colors.text, fontSize: 22 }]}>{t('fairness.cardTitle')}</Text>
+        <Text maxFontSizeMultiplier={typeScale.caption} numberOfLines={1} style={[type.caption, { color: colors.muted }]}>{section.name}</Text>
+      </View>
+      {section.status === 'empty' ? null : <SealPill state={balanced ? 'balanced' : 'purchased'} label={sealLabel} />}
+    </View>
+  );
+  const rows = members.map((member, index) => {
+    const barBudget = member.budgetCents != null && member.budgetCents > 0 ? member.budgetCents : top > 0 ? top : null;
+    const amount = memberAmount(member, money);
+    return (
+      <View key={member.personId} style={styles.memberLine}>
+        <Text numberOfLines={1} maxFontSizeMultiplier={typeScale.body} style={[styles.memberName, { color: colors.text }]}>{member.name}</Text>
+        <View style={styles.memberBar}>
+          <BudgetBar spentCents={member.yearSpentCents} budgetCents={barBudget} fill={fills[index % fills.length]} />
+        </View>
+        <Text maxFontSizeMultiplier={typeScale.caption} style={[styles.memberAmount, { color: colors.text }]}>{amount}</Text>
+      </View>
+    );
+  });
+  const body = (
+    <View style={styles.fairBody}>
+      {head}
+      {rows}
+    </View>
+  );
+  const openIdeas = section.status === 'behind' && behind && onOpenIdeas ? () => onOpenIdeas(behind.personId) : null;
+  return (
+    <View style={[styles.tag, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.card }]}>
+      {onOpenFairness ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`${t('fairness.cardTitle')}, ${section.name}`} onPress={onOpenFairness}>
+          {body}
+        </Pressable>
+      ) : body}
+      {openIdeas ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={footer} onPress={openIdeas}>
+          <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.text }]}>{footer}</Text>
+        </Pressable>
+      ) : (
+        <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.text }]}>{footer}</Text>
+      )}
+      {onEdit ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={t('fairness.edit')} onPress={onEdit}>
+          <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: colors.pink }]}>{t('fairness.edit')}</Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -301,7 +397,7 @@ const styles = StyleSheet.create({
   seal: { flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: touch.minTarget },
   sealPill: { flexDirection: 'row', alignItems: 'center', height: 28 },
   sealImage: { width: 28, height: 28, marginRight: -14, zIndex: 1 },
-  sealLabel: { height: 28, borderRadius: 14, borderWidth: 1, justifyContent: 'center', paddingLeft: 18, paddingRight: 10, maxWidth: 148 },
+  sealLabel: { height: 28, borderRadius: 14, borderWidth: 1, justifyContent: 'center', paddingLeft: 18, paddingRight: 10, maxWidth: 168 },
   sealText: { fontSize: 13 },
   budgetTrack: { height: 6, borderRadius: 3, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
   budgetFill: { height: 6, borderRadius: 3 },
@@ -331,6 +427,12 @@ const styles = StyleSheet.create({
   track: { height: 10, borderRadius: 999, overflow: 'hidden' },
   bar: { height: '100%' },
   fairHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  fairTitle: { flex: 1, gap: 2 },
+  fairBody: { gap: space.sm },
+  memberLine: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  memberName: { width: 88, fontSize: 15, lineHeight: 20 },
+  memberBar: { flex: 1 },
+  memberAmount: { fontSize: 13, lineHeight: 16, textAlign: 'right' },
   fairRow: { gap: space.xxs },
   fairName: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
 });

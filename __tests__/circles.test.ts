@@ -2,6 +2,7 @@ import { exportBackup, migrateToLocal, parseBackup } from '../src/domain/backup'
 import {
   circleHomeLine,
   circleSections,
+  homeCircle,
   circleSuggestions,
   evenGapCents,
   isEvenSpend,
@@ -66,6 +67,7 @@ test('a circle of one person is even and an empty circle stays empty', () => {
   expect(sections[1]).toMatchObject({ status: 'empty', members: [], behind: [] });
   expect(circleHomeLine(sections[0])).toEqual({ status: 'even' });
   expect(circleHomeLine(sections[1])).toBeNull();
+  expect(homeCircle(sections)?.circleId).toBe('one');
 });
 
 test('suggestions group a stored key with the older label', () => {

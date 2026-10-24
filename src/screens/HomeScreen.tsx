@@ -1,34 +1,39 @@
-import React, { useLayoutEffect } from 'react';
-import { Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import React, { useLayoutEffect, useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../app/navigation';
 import { getEnv } from '../config/env';
-import { circleHomeLine, circleSections } from '../domain/circles';
+import { circleSections, homeCircle } from '../domain/circles';
 import { canAddPerson, daysUntil, listCurrency, occurrenceYear, yearSpentCents } from '../domain/logic';
 import { isOneTimeOccasion, nextOccasionDate, occasionLabel } from '../domain/occasions';
 import { relationshipLabel } from '../domain/relationship';
 import type { AppSnapshot, GiftRecord, Occasion, OccasionState, Person } from '../domain/types';
-import { deviceLocale, formatDate, formatLongDate, formatMoney, t, timeGreeting } from '../i18n';
+import { deviceLocale, formatDate, formatLongDate, formatMoney, formatWeekday, t, timeGreeting } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
-import { occasionLook, space } from '../theme/tokens';
+import { space } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
-import { heroCardSource, RibbonBanner } from '../ui/art';
-import { WaxSeal } from '../ui/stationery';
-import { ArtSlot, Body, Button, Caption, Card, EmptyState, Heading, Screen, Title } from '../ui/ui';
+import { bowSource, RibbonBanner } from '../ui/art';
+import { Icon } from '../ui/icons';
+import { BudgetBar, CircleFairnessCard, ListRow, MonogramAvatar, RowCard, SealPill } from '../ui/stationery';
+import { Body, Button, Caption, Card, EmptyState, IconButton, Screen, Sheet } from '../ui/ui';
 
 type Upcoming = { person: Person; occasion: Occasion; date: Date };
 
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { snapshot, resumePersonId, clearResumePerson, openPaywall } = useGifteez();
+  const { snapshot, resumePersonId, clearResumePerson, openPaywall, setReminders } = useGifteez();
+  const [remindersOpen, setRemindersOpen] = useState(false);
   const today = new Date();
   const year = today.getFullYear();
   const people = snapshot.people.filter(person => !person.deleted);
   const upcoming = upcomingRows(people, snapshot.occasions, today);
   const hero = upcoming[0];
-  const coming = upcoming.slice(1, 5);
+  const listed = upcoming.slice(0, 5);
+  const featured = homeCircle(circleSections(snapshot, year));
   const money = (cents: number) => formatMoney(cents, deviceLocale(), listCurrency(snapshot), true);
+  const household = householdTitle(snapshot.profile.householdName);
+  const greeting = greetingLine(snapshot.profile.givenName, today);
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
@@ -47,13 +52,15 @@ export function HomeScreen() {
     }
     navigation.navigate('AddPerson');
   }
+  const remindersOn = snapshot.profile.reminders === 'on';
 
   return (
     <Screen tab="home">
-      <View>
-        <Title>{t('appName')}</Title>
-        <Caption tone="text">{homeGreeting(today, upcoming)}</Caption>
-      </View>
+      <HomeHeader
+        household={household}
+        greeting={greeting}
+        onBell={() => setRemindersOpen(true)}
+      />
       {people.length === 0 ? (
         <EmptyState
           kind="people"
@@ -66,29 +73,118 @@ export function HomeScreen() {
       ) : (
         <NoOccasion person={people.slice().sort((a, b) => a.name.localeCompare(b.name))[0]} onAdd={navigation.navigate} />
       )}
+      {featured ? (
+        <CircleFairnessCard
+          section={featured}
+          money={money}
+          onOpenFairness={() => navigation.navigate('Fairness')}
+          onOpenIdeas={personId => navigation.navigate('Person', { personId, section: 'ideas' })}
+        />
+      ) : null}
+      {people.length > 0 && !featured && (snapshot.circles ?? []).length === 0 ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={t('fairness.homePrompt')} onPress={() => navigation.navigate('Fairness')}>
+          <Card>
+            <Caption tone="text">{t('fairness.homePrompt')}</Caption>
+          </Card>
+        </Pressable>
+      ) : null}
       {people.length > 0 ? <RibbonBanner /> : null}
-      {coming.length > 0 ? (
+      {listed.length > 0 ? (
         <View style={styles.block}>
           <View style={styles.rowBetween}>
-            <Heading>{t('people.comingUp')}</Heading>
-            <Pressable accessibilityRole="button" onPress={() => navigation.navigate('People')}>
-              <Caption tone="text">{t('people.seeAll')}</Caption>
+            <SectionTitle>{t('people.comingUp')}</SectionTitle>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('people.addPerson')} onPress={addSomeone}>
+              <AddLink>{`+ ${t('people.addPerson')}`}</AddLink>
             </Pressable>
           </View>
-          {coming.map(item => (
-            <ComingRow
-              key={`${item.person.id}:${item.occasion.id}`}
-              item={item}
-              gifts={snapshot.gifts}
-              states={snapshot.states}
-              today={today}
-              onPress={() => navigation.navigate('Person', { personId: item.person.id, section: 'ideas' })}
-            />
-          ))}
+          <RowCard>
+            {listed.map((item, index) => (
+              <ListRow
+                key={`${item.person.id}:${item.occasion.id}`}
+                name={item.person.name}
+                personId={item.person.id}
+                relationship={relationshipLabel(item.person.relationship) || undefined}
+                detail={`${occasionLabel(item.occasion)} · ${isOneTimeOccasion(item.occasion) ? formatLongDate(item.date) : formatDate(item.date)}`}
+                budget={rowBudget(item.person, snapshot, year, money)}
+                seal={rowSeal(item, snapshot.states, snapshot.gifts, today)}
+                onPress={() => navigation.navigate('Person', { personId: item.person.id, section: 'ideas' })}
+                last={index === listed.length - 1}
+              />
+            ))}
+          </RowCard>
+          {upcoming.length > 5 ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={t('people.seeAll')} onPress={() => navigation.navigate('People')}>
+              <Caption tone="text">{t('people.seeAll')}</Caption>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
-      <HomeFairness snapshot={snapshot} year={year} money={money} onPress={() => navigation.navigate('Fairness')} />
+      {people.length > 0 ? <CalendarAction /> : null}
+      <Sheet visible={remindersOpen} title={t('people.remindersA11y')} onClose={() => setRemindersOpen(false)}>
+        <Body>{remindersOn ? t('people.remindersOn') : t('person.remindBody')}</Body>
+        {remindersOn ? (
+          <Button label={t('person.remindNo')} tone="secondary" onPress={() => { setReminders(false).catch(() => undefined); setRemindersOpen(false); }} />
+        ) : (
+          <Button label={t('person.remindYes')} onPress={() => { setReminders(true).catch(() => undefined); setRemindersOpen(false); }} />
+        )}
+      </Sheet>
     </Screen>
+  );
+}
+
+function householdTitle(name: string | undefined): string {
+  const trimmed = name?.trim();
+  return trimmed || t('people.householdDefault');
+}
+
+function greetingLine(givenName: string | undefined, today: Date): string {
+  const greeting = timeGreeting(today);
+  const first = givenName?.trim();
+  return first ? t('people.greetingNamed', { greeting, name: first }) : greeting;
+}
+
+function HomeHeader({
+  household,
+  greeting,
+  onBell,
+}: {
+  household: string;
+  greeting: string;
+  onBell: () => void;
+}) {
+  const { colors, type, typeScale } = useTheme();
+  const initial = household.split(/\s+/)[0] || household;
+  return (
+    <View style={styles.header}>
+      <MonogramAvatar name={initial} personId="household" size={36} crest />
+      <View style={styles.headerCopy}>
+        <Caption>{greeting}</Caption>
+        <Text
+          accessibilityRole="header"
+          numberOfLines={1}
+          maxFontSizeMultiplier={typeScale.display}
+          style={[type.display, { color: colors.text, fontSize: 30, lineHeight: 34 }]}>
+          {household}
+        </Text>
+      </View>
+      <IconButton label={t('people.remindersA11y')} name="bell" onPress={onBell} />
+    </View>
+  );
+}
+
+function SectionTitle({ children }: { children: string }) {
+  const { colors, type, typeScale } = useTheme();
+  return (
+    <Text accessibilityRole="header" maxFontSizeMultiplier={typeScale.display} style={[type.display, { color: colors.text, fontSize: 28, lineHeight: 32 }]}>
+      {children}
+    </Text>
+  );
+}
+
+function AddLink({ children }: { children: string }) {
+  const { colors, type, typeScale } = useTheme();
+  return (
+    <Text maxFontSizeMultiplier={typeScale.button} style={[type.button, { color: colors.pink }]}>{children}</Text>
   );
 }
 
@@ -105,50 +201,48 @@ function Hero({
   money: (cents: number) => string;
   onOpen: NativeStackNavigationProp<RootStack>['navigate'];
 }) {
-  const { colors, scheme, type, typeScale } = useTheme();
-  const { width } = useWindowDimensions();
-  const cardWidth = Math.max(280, width - space.md * 2);
-  const scale = cardWidth / 370;
-  const cardHeight = 230 * scale;
+  const { colors, scheme, type, typeScale, radius } = useTheme();
   const today = new Date();
   const spent = yearSpentCents(item.person.id, snapshot.gifts, year);
-  const logged = isLogged(item, snapshot.gifts, snapshot.states, today);
   const days = daysUntil(item.date, today);
-  const when = days === 0 ? t('people.today').toUpperCase() : t('people.inDays', { count: days }).toUpperCase();
-  const relationship = relationshipLabel(item.person.relationship);
+  const when = days === 0 ? t('people.today') : t('people.inDays', { count: days });
   const dateLabel = isOneTimeOccasion(item.occasion) ? formatLongDate(item.date) : formatDate(item.date);
-  const meta = [relationship, dateLabel].filter(Boolean).join(' · ');
   const budget = item.person.budgetCents == null
-    ? t('people.heroOpen', { used: money(spent) })
-    : t('people.heroBudget', { budget: money(item.person.budgetCents), used: money(spent) });
-  const pad = 22 * scale;
+    ? t('people.spent', { used: money(spent) })
+    : t('people.budgeted', { used: money(spent), budget: money(item.person.budgetCents) });
   return (
-    <View style={[styles.heroWrap, { width: cardWidth, height: cardHeight, marginBottom: 12 * scale }]}>
-      <Image
-        accessible={false}
-        source={heroCardSource(scheme)}
-        resizeMode="contain"
-        style={{ position: 'absolute', left: -14 * scale, top: -16 * scale, width: 398 * scale, height: 266 * scale }}
-      />
-      <View style={[styles.heroCopy, { paddingHorizontal: pad, paddingTop: 28 * scale, paddingBottom: pad, maxWidth: cardWidth }]}>
-        <Text
-          maxFontSizeMultiplier={typeScale.caption}
-          style={[type.caption, { color: colors.pink, fontWeight: '600', letterSpacing: 1.4, fontSize: 11 * scale, maxWidth: 238 * scale }]}>
-          {t('people.nextKicker', { when })}
-        </Text>
-        <Text
-          numberOfLines={2}
-          maxFontSizeMultiplier={typeScale.display}
-          style={[type.display, { color: colors.text, fontSize: 28 * scale, lineHeight: 33 * scale, maxWidth: 238 * scale }]}>
-          {t('people.nextTitle', { name: item.person.name, occasion: occasionLabel(item.occasion) })}
-        </Text>
-        <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.muted, fontSize: 14 * scale, maxWidth: 238 * scale }]}>{meta}</Text>
-        <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.muted, fontSize: 14 * scale, maxWidth: 238 * scale }]}>{budget}</Text>
-        {logged ? <WaxSeal state="purchased" size={28} /> : null}
-        <View style={styles.heroSpacer} />
+    <View style={[styles.hero, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.card }]}>
+      <Image accessible={false} source={bowSource(scheme)} resizeMode="contain" style={styles.heroBow} />
+      <Text
+        maxFontSizeMultiplier={typeScale.caption}
+        style={[type.caption, styles.kicker, { color: colors.pink }]}>
+        {t('people.comingUp')}
+      </Text>
+      <View style={styles.heroRow}>
+        <MonogramAvatar name={item.person.name} personId={item.person.id} size={56} />
+        <View style={styles.heroCopy}>
+          <Text
+            numberOfLines={2}
+            maxFontSizeMultiplier={typeScale.display}
+            style={[type.display, styles.heroTitle, { color: colors.text }]}>
+            {t('people.nextTitle', { name: item.person.name, occasion: occasionLabel(item.occasion) })}
+          </Text>
+          <Text maxFontSizeMultiplier={typeScale.body} style={[type.body, { color: colors.muted, fontSize: 15 }]}>
+            {`${formatWeekday(item.date)}, ${dateLabel} · ${when}`}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.heroSeal}>
+        <SealPill state={rowSeal(item, snapshot.states, snapshot.gifts, today)} />
+      </View>
+      <View style={styles.heroFoot}>
+        <View style={styles.heroBudget}>
+          <BudgetBar spentCents={spent} budgetCents={item.person.budgetCents ?? null} caption={budget} />
+        </View>
         <Button
-          label={logged ? t('people.viewGift') : t('people.findGift')}
-          onPress={() => onOpen('Person', { personId: item.person.id, section: logged ? 'history' : 'ideas' })}
+          compact
+          label={t('people.planGift')}
+          onPress={() => onOpen('Person', { personId: item.person.id, section: 'ideas' })}
         />
       </View>
     </View>
@@ -173,90 +267,26 @@ function NoOccasion({
   );
 }
 
-function homeGreeting(today: Date, upcoming: Upcoming[]): string {
-  const due = upcoming.filter(item => {
-    const days = daysUntil(item.date, today);
-    return days >= 0 && days <= 7;
-  }).length;
-  if (due === 0) {
-    return timeGreeting(today);
-  }
-  return t('people.greetingWithSort', { greeting: timeGreeting(today), count: due });
-}
-
-function ComingRow({
-  item,
-  gifts,
-  states,
-  today,
-  onPress,
-}: {
-  item: Upcoming;
-  gifts: GiftRecord[];
-  states: OccasionState[];
-  today: Date;
-  onPress: () => void;
-}) {
-  const { colors, radius } = useTheme();
+function CalendarAction() {
+  const { colors, type, typeScale } = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${item.person.name}, ${occasionLabel(item.occasion)}, ${t(`seal.${rowSeal(item, states, gifts, today)}`)}`}
-      onPress={onPress}
-      style={[styles.coming, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.card }]}>
-      <ArtSlot name={occasionLook(item.occasion.type).art} size={28} />
-      <View style={styles.copy}>
-        <Body>{`${item.person.name} · ${occasionLabel(item.occasion)}`}</Body>
-        <Caption>{isOneTimeOccasion(item.occasion) ? formatLongDate(item.date) : formatDate(item.date)}</Caption>
-      </View>
-      <WaxSeal state={rowSeal(item, states, gifts, today)} size={28} />
+      accessibilityLabel={t('people.findBirthdays')}
+      onPress={() => undefined}
+      style={styles.calendar}>
+      <Icon name="calendar" color={colors.pink} size={18} />
+      <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: colors.pink }]}>{t('people.findBirthdays')}</Text>
     </Pressable>
   );
 }
 
-function HomeFairness({
-  snapshot,
-  year,
-  money,
-  onPress,
-}: {
-  snapshot: AppSnapshot;
-  year: number;
-  money: (cents: number) => string;
-  onPress: () => void;
-}) {
-  const lines = circleSections(snapshot, year).flatMap(section => {
-    const line = circleHomeLine(section);
-    if (!line) {
-      return [];
-    }
-    const text = line.status === 'even'
-      ? t('fairness.homeEven', { name: section.name })
-      : t('fairness.homeBehind', { name: section.name, person: line.personName ?? '', amount: money(line.behindCents ?? 0) });
-    return [{ id: section.circleId, text }];
-  }).slice(0, 3);
-  const noCircles = (snapshot.circles ?? []).length === 0 && snapshot.people.some(person => !person.deleted);
-  if (lines.length === 0 && !noCircles) {
-    return null;
+function rowBudget(person: Person, snapshot: AppSnapshot, year: number, money: (cents: number) => string): string {
+  const spent = yearSpentCents(person.id, snapshot.gifts, year);
+  if (person.budgetCents == null) {
+    return t('people.spent', { used: money(spent) });
   }
-  if (lines.length === 0) {
-    return (
-      <Pressable accessibilityRole="button" accessibilityLabel={t('fairness.homePrompt')} onPress={onPress}>
-        <Card>
-          <Caption tone="text">{t('fairness.homePrompt')}</Caption>
-        </Card>
-      </Pressable>
-    );
-  }
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={t('fairness.title')} onPress={onPress}>
-      <Card>
-        <Heading>{t('fairness.title')}</Heading>
-        {lines.map(line => <Caption key={line.id} tone="text">{line.text}</Caption>)}
-        <Caption>{t('fairness.seeAll')}</Caption>
-      </Card>
-    </Pressable>
-  );
+  return t('people.budgetYear', { used: money(spent), budget: money(person.budgetCents) });
 }
 
 function upcomingRows(people: Person[], occasions: Occasion[], today: Date): Upcoming[] {
@@ -294,10 +324,17 @@ function rowSeal(item: Upcoming, states: OccasionState[], gifts: GiftRecord[], t
 
 const styles = StyleSheet.create({
   block: { gap: space.xs },
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  coming: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderWidth: 1, padding: space.sm },
-  copy: { flex: 1, gap: 2 },
-  heroWrap: { overflow: 'visible', alignSelf: 'center' },
-  heroCopy: { flex: 1, gap: 2, overflow: 'visible' },
-  heroSpacer: { flex: 1, minHeight: 8 },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
+  header: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  headerCopy: { flex: 1, gap: 2 },
+  hero: { borderWidth: 1, padding: space.md, paddingTop: space.sm, gap: space.sm, overflow: 'visible' },
+  heroBow: { position: 'absolute', top: -8, right: 8, width: 56, height: 56, zIndex: 1 },
+  kicker: { fontSize: 12, fontWeight: '600', letterSpacing: 1.4, textTransform: 'uppercase', marginRight: 64 },
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingRight: 108 },
+  heroCopy: { flex: 1, gap: 2 },
+  heroTitle: { fontSize: 28, lineHeight: 32 },
+  heroSeal: { position: 'absolute', top: 58, right: space.sm },
+  heroFoot: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  heroBudget: { flex: 1 },
+  calendar: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', minHeight: 44 },
 });

@@ -16,6 +16,10 @@ export type BackupFile = {
   feedback: AppSnapshot['feedback'];
   /** Omitted on backups exported before circles existed. */
   circles?: Circle[];
+  /** Omitted until a household name is set. Missing still opens, and Home uses "Our gifts". */
+  householdName?: string;
+  /** Omitted until a first name is set. The greeting then stands alone. */
+  givenName?: string;
 };
 
 export type BackupFailure = 'json' | 'version' | 'shape';
@@ -62,6 +66,17 @@ function circlesOk(value: unknown): value is Circle[] {
   ));
 }
 
+function optionalName(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim().replace(/\s+/g, ' ');
+  if (!trimmed || trimmed.length > 40) {
+    return undefined;
+  }
+  return trimmed;
+}
+
 function rowsOk(value: unknown, extra?: (item: Record<string, unknown>) => boolean): boolean {
   if (!Array.isArray(value)) {
     return false;
@@ -97,6 +112,14 @@ export function exportBackup(snapshot: AppSnapshot, now = new Date()): string {
     feedback: snapshot.feedback,
     circles: snapshot.circles ?? [],
   };
+  const householdName = optionalName(snapshot.profile.householdName);
+  const givenName = optionalName(snapshot.profile.givenName);
+  if (householdName) {
+    file.householdName = householdName;
+  }
+  if (givenName) {
+    file.givenName = givenName;
+  }
   return JSON.stringify(file);
 }
 
@@ -135,10 +158,19 @@ export function parseBackup(text: string, now: number): { ok: true; snapshot: Ap
     return { ok: false, reason: 'shape' };
   }
   const currency = typeof parsed.currency === 'string' && /^[A-Z]{3}$/.test(parsed.currency) ? parsed.currency : 'USD';
+  const householdName = optionalName(parsed.householdName);
+  const givenName = optionalName(parsed.givenName);
   const base = emptySnapshot(now);
   const built: AppSnapshot = {
     ...base,
-    profile: { ...base.profile, onboarded: true, currency, createdAt: now },
+    profile: {
+      ...base.profile,
+      onboarded: true,
+      currency,
+      createdAt: now,
+      ...(householdName ? { householdName } : {}),
+      ...(givenName ? { givenName } : {}),
+    },
     people: parsed.people as Person[],
     occasions: parsed.occasions as Occasion[],
     states: (parsed.states as OccasionState[]).map(state => {

@@ -1,4 +1,4 @@
-import { deviceLocale, formatDate, formatLongDate, formatMoney, t } from '../src/i18n';
+import { deviceLocale, formatDate, formatLongDate, formatMoney, t, timeGreeting } from '../src/i18n';
 
 function withIntl<K extends keyof typeof Intl>(key: K, value: unknown, run: () => void) {
   const descriptor = Object.getOwnPropertyDescriptor(Intl, key);
@@ -13,6 +13,15 @@ function withIntl<K extends keyof typeof Intl>(key: K, value: unknown, run: () =
     }
   }
 }
+
+test('the greeting is morning from 5, afternoon from 12, and evening from 17 through 5', () => {
+  expect(timeGreeting(new Date(2026, 0, 1, 4, 30))).toBe('Good evening');
+  expect(timeGreeting(new Date(2026, 0, 1, 5, 0))).toBe('Good morning');
+  expect(timeGreeting(new Date(2026, 0, 1, 11, 59))).toBe('Good morning');
+  expect(timeGreeting(new Date(2026, 0, 1, 12, 0))).toBe('Good afternoon');
+  expect(timeGreeting(new Date(2026, 0, 1, 16, 59))).toBe('Good afternoon');
+  expect(timeGreeting(new Date(2026, 0, 1, 17, 0))).toBe('Good evening');
+});
 
 test('whole dollar amounts can drop the trailing cents', () => {
   expect(formatMoney(0, 'en-US', 'USD', true)).toBe('$0');

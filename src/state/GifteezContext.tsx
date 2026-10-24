@@ -1229,6 +1229,12 @@ function restoredSnapshot(current: AppSnapshot, parsed: AppSnapshot): AppSnapsho
       createdAt: current.profile.createdAt || parsed.profile.createdAt,
       displayName: current.profile.displayName,
       onboarded: true,
+      ...(parsed.profile.householdName || current.profile.householdName
+        ? { householdName: parsed.profile.householdName || current.profile.householdName }
+        : {}),
+      ...(parsed.profile.givenName || current.profile.givenName
+        ? { givenName: parsed.profile.givenName || current.profile.givenName }
+        : {}),
     },
   };
 }

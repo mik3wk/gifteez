@@ -93,6 +93,16 @@ test('a round 5b list keeps people, circles, occasions, and purchases without a 
   expect(loaded.occasions[0]).toMatchObject({ id: 'bday', personId: 'dana', type: 'birthday', month: 11, day: 4 });
   expect(loaded.gifts[0]).toMatchObject({ id: 'mug', title: 'Mug', priceCents: 1800, occasionId: 'bday' });
   expect(loaded.profile.onboarded).toBe(true);
+  expect(loaded.profile.householdName).toBeUndefined();
+});
+
+test('a household name and first name survive the load and stay optional', () => {
+  const loaded = normalizeStoredSnapshot({
+    ...round5bList(),
+    profile: { ...round5bList().profile, householdName: 'Peterson Family', givenName: 'Michael' },
+  }, 9);
+  expect(loaded?.profile.householdName).toBe('Peterson Family');
+  expect(loaded?.profile.givenName).toBe('Michael');
 });
 
 test('a round 6 list keeps the birth year and the same people, circles, occasions, and purchases', () => {

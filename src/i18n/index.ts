@@ -159,6 +159,13 @@ export function formatDate(date: Date, locale = deviceLocale()): string {
     ?? `${SHORT_MONTHS[date.getMonth()]} ${date.getDate()}`;
 }
 
+const SHORT_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+export function formatWeekday(date: Date, locale = deviceLocale()): string {
+  return formatWithDateTime(date, locale, { weekday: 'short' })
+    ?? SHORT_WEEKDAYS[date.getDay()];
+}
+
 export function formatLongDate(date: Date, locale = deviceLocale()): string {
   return formatWithDateTime(date, locale, { month: 'short', day: 'numeric', year: 'numeric' })
     ?? `${SHORT_MONTHS[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
@@ -176,10 +183,10 @@ export function formatStoredDate(value: string, locale = deviceLocale()): string
 
 export function timeGreeting(date = new Date()): string {
   const hour = date.getHours();
-  if (hour < 12) {
+  if (hour >= 5 && hour < 12) {
     return t('people.greetingMorning');
   }
-  if (hour < 17) {
+  if (hour >= 12 && hour < 17) {
     return t('people.greetingAfternoon');
   }
   return t('people.greetingEvening');

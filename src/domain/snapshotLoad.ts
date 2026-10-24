@@ -184,6 +184,8 @@ function normalizeProfile(value: unknown, base: Profile, hasPeople: boolean): Pr
   const raw = isRecord(value) ? value : {};
   const reminders = raw.reminders === 'on' || raw.reminders === 'off' || raw.reminders === 'unset' ? raw.reminders : 'unset';
   const currency = typeof raw.currency === 'string' && /^[A-Z]{3}$/.test(raw.currency) ? raw.currency : undefined;
+  const householdName = typeof raw.householdName === 'string' ? raw.householdName.trim().slice(0, 40) : '';
+  const givenName = typeof raw.givenName === 'string' ? raw.givenName.trim().slice(0, 40) : '';
   return {
     ...base,
     uid: typeof raw.uid === 'string' ? raw.uid : null,
@@ -199,6 +201,8 @@ function normalizeProfile(value: unknown, base: Profile, hasPeople: boolean): Pr
     inviteId: null,
     reminders,
     ...(currency ? { currency } : {}),
+    ...(householdName ? { householdName } : {}),
+    ...(givenName ? { givenName } : {}),
   };
 }
 

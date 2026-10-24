@@ -114,6 +114,18 @@ export function circleSuggestions(people: Person[]): CircleSuggestion[] {
     }));
 }
 
+/** The circle Home should show: the one furthest behind, or the first circle that has people. */
+export function homeCircle(sections: CircleSection[]): CircleSection | null {
+  const filled = sections.filter(section => section.status !== 'empty');
+  if (filled.length === 0) {
+    return null;
+  }
+  const behind = filled
+    .filter(section => section.status === 'behind')
+    .sort((a, b) => (b.behind[0]?.behindCents ?? 0) - (a.behind[0]?.behindCents ?? 0) || a.name.localeCompare(b.name));
+  return behind[0] ?? filled[0];
+}
+
 /** One slim Home line. Empty circles are omitted. The first person behind is the most behind. */
 export function circleHomeLine(section: CircleSection): { status: 'even' | 'behind'; personName?: string; behindCents?: number } | null {
   if (section.status === 'empty') {

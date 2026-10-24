@@ -176,6 +176,10 @@ export type Profile = {
   reminders?: 'unset' | 'on' | 'off';
   /** ISO currency for amounts on this phone. Missing means USD. */
   currency?: string;
+  /** Household title on Home. Missing means "Our gifts". */
+  householdName?: string;
+  /** First name in the greeting. Missing means the greeting stands alone. */
+  givenName?: string;
 };
 
 export type DirtyMap = Record<string, true>;
