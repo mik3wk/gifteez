@@ -7,6 +7,7 @@ import { t } from '../i18n';
 import { AddPersonScreen, PersonScreen } from '../screens/PersonScreen';
 import { FirstOpenScreen } from '../screens/FirstOpen';
 import { FairnessScreen, SettingsScreen } from '../screens/MoreScreens';
+import { HomeScreen } from '../screens/HomeScreen';
 import { PeopleScreen } from '../screens/PeopleScreen';
 import { StartupScreen } from '../screens/StartupScreen';
 import { GifteezProvider, useGifteez } from '../state/GifteezContext';
@@ -103,6 +104,7 @@ function Navigator() {
         }}>
           {gifteez.snapshot.profile.onboarded ? (
             <>
+              <Stack.Screen name="Home" component={HomeScreen} options={tabOptions} />
               <Stack.Screen name="People" component={PeopleScreen} options={tabOptions} />
               <Stack.Screen name="Person" component={PersonScreen} options={{ title: t('person.ideas') }} />
               <Stack.Screen name="AddPerson" component={AddPersonScreen} options={{ title: t('person.addTitle') }} />

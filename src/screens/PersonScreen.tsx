@@ -11,7 +11,6 @@ import { allTimeSpentCents, daysUntil, isRealMonthDay, listCurrency, occurrenceY
 import { dateIsEstimated, isOneTimeOccasion, nextOccasionDate, occasionLabel, occasionNeedsDate, presetFor } from '../domain/occasions';
 import type { Occasion, OccasionState } from '../domain/types';
 import { relationshipLabel, storeRelationship } from '../domain/relationship';
-import { initialPersonSection, summaryPrimary, summaryPrimaryLabel } from './personSummary';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, formatStoredDate, t, todayIso } from '../i18n';
 import { useGifteez } from '../state/GifteezContext';
 import { occasionLook, space } from '../theme/tokens';
@@ -37,8 +36,6 @@ import {
   Display,
   Heading,
   IconButton,
-  OccasionChip,
-  ProgressBar,
   Screen,
   Segment,
   Sheet,
@@ -148,7 +145,6 @@ export function PersonScreen() {
   const { colors } = useTheme();
   const person = snapshot.people.find(item => item.id === route.params.personId && !item.deleted);
   const today = new Date();
-  const firstUpcoming = person ? upcomingOccasion(person.id, snapshot.occasions, today) : null;
   const [budget, setBudget] = useState(person?.budgetCents == null ? '' : String(person.budgetCents / 100));
   const [name, setName] = useState(person?.name ?? '');
   const [relationship, setRelationship] = useState(person?.relationship ?? '');
@@ -167,9 +163,12 @@ export function PersonScreen() {
   const [priceError, setPriceError] = useState('');
   const [dateError, setDateError] = useState('');
   const [pickingCircle, setPickingCircle] = useState(false);
-  const [section, setSection] = useState<'ideas' | 'occasions' | 'history'>(() =>
-    initialPersonSection(firstUpcoming ? daysUntil(firstUpcoming.date, today) : null),
-  );
+  const [section, setSection] = useState<'ideas' | 'occasions' | 'history'>(route.params.section ?? 'ideas');
+  useEffect(() => {
+    if (route.params.section) {
+      setSection(route.params.section);
+    }
+  }, [route.params.personId, route.params.section]);
   const [editingDetails, setEditingDetails] = useState(false);
   const [addingOccasion, setAddingOccasion] = useState(false);
   const [tuning, setTuning] = useState(false);
@@ -232,26 +231,13 @@ export function PersonScreen() {
   const nextState = next
     ? snapshot.states.find(item => item.occasionId === next.occasion.id && item.year === occurrenceYear(next.occasion, today) && !item.deleted)
     : undefined;
-  const summaryInput = {
-    hidden,
-    locked,
-    hasOccasion: Boolean(next),
-    purchased: nextState?.status === 'purchased',
-    claimedByMe: false,
-    claimedByOther: false,
-    savedIdea: Boolean(nextState?.savedIdea),
-  };
-  const action = summaryPrimary(summaryInput);
-  const primaryLabel = summaryPrimaryLabel(summaryInput) ?? '';
-  const days = next ? daysUntil(next.date, today) : null;
   const occasions = snapshot.occasions.filter(item => item.personId === person.id && !item.deleted);
   const menuOccasion = menu?.kind === 'occasion' ? occasions.find(item => item.id === menu.id) : undefined;
   const budgetLabel = hidden
     ? ''
     : person.budgetCents == null
       ? t('people.spent', { used: money(spent) })
-      : t('people.budgetLeft', { used: money(spent), budget: money(person.budgetCents) });
-  const progress = hidden || person.budgetCents == null || person.budgetCents <= 0 ? null : spent / person.budgetCents;
+      : t('people.budgetYear', { used: money(spent), budget: money(person.budgetCents) });
 
   function savedFor(idea: string): boolean {
     return Boolean(next && nextState?.savedIdea === idea);
@@ -303,21 +289,6 @@ export function PersonScreen() {
     return saveIdeaFor(next.occasion.id, idea);
   }
 
-  function runPrimary() {
-    if (action === 'add') {
-      setSection('occasions');
-      setAddingOccasion(true);
-      return;
-    }
-    if (action === 'find') {
-      setSection('ideas');
-      return;
-    }
-    if (action === 'log' && next) {
-      openPurchase(next.occasion.id, nextState?.savedIdea ?? '');
-    }
-  }
-
   return (
     <Screen
       pinned={(
@@ -325,52 +296,18 @@ export function PersonScreen() {
           {hidden ? <Body>{t('person.hiddenRecipient')}</Body> : null}
           {locked ? <Body>{t('person.readOnly')}</Body> : null}
           {person.imported ? <Caption>{t('person.openedImported')}</Caption> : null}
-          <Card>
-            <View style={styles.summaryName}>
-              <View style={styles.avatarName}>
-                <MonogramAvatar name={person.name} personId={person.id} />
-                <View style={styles.personCopy}>
-                  <Display lines={2}>{person.name}</Display>
-                  {person.relationship ? <Caption tone="text">{relationshipLabel(person.relationship)}</Caption> : null}
-                  <Chip
-                    label={snapshot.circles.find(circle => circle.id === person.circleId)?.name ?? t('fairness.noCircle')}
-                    selected={Boolean(person.circleId && snapshot.circles.some(circle => circle.id === person.circleId))}
-                    onPress={() => setPickingCircle(true)}
-                  />
-                </View>
-              </View>
+          <View style={styles.personHead}>
+            <View style={styles.personMenu}>
               <IconButton label={t('person.editDetails')} name="more" filled onPress={() => setEditingDetails(true)} />
             </View>
-            {next ? (
-              <OccasionChip
-                occasionId={next.occasion.type}
-                label={occasionLabel(next.occasion)}
-                trailing={days == null ? undefined : days === 0 ? t('people.today') : t('people.inDays', { count: days })}
-              />
-            ) : (
-              <Caption>{t('people.noOccasion')}</Caption>
-            )}
+            <MonogramAvatar name={person.name} personId={person.id} size={72} crest />
+            <Display lines={2}>{person.name}</Display>
+            <Pressable accessibilityRole="button" onPress={() => setPickingCircle(true)}>
+              <Caption tone="text">{personMeta(person, snapshot.circles)}</Caption>
+            </Pressable>
             {budgetLabel ? <Caption tone="text">{budgetLabel}</Caption> : null}
-            {hidden ? null : <ProgressBar value={progress} />}
-            {action === 'log' && nextState?.savedIdea ? (
-              <Body>{t('person.savedIdeaLine', { idea: nextState.savedIdea })}</Body>
-            ) : null}
-            {action === 'logged' ? (
-              <View style={styles.logged}>
-                <Caption tone="text">{t('person.logged')}</Caption>
-              </View>
-            ) : null}
-            {action && action !== 'logged' ? (
-              <Button icon={action === 'find' ? 'gift' : undefined} label={primaryLabel} onPress={runPrimary} />
-            ) : null}
-            {moment ? (
-              <Moment
-                kind="wrap"
-                name="purchase"
-                onDone={() => setMoment(null)}
-              />
-            ) : null}
-          </Card>
+            {moment ? <Moment kind="wrap" name="purchase" onDone={() => setMoment(null)} /> : null}
+          </View>
           <Segment
             value={section}
             onChange={id => setSection(id as 'ideas' | 'occasions' | 'history')}
@@ -428,6 +365,20 @@ export function PersonScreen() {
         <>
           {showSpend ? <SpendBreakdown personId={person.id} budgetCents={person.budgetCents} money={money} /> : null}
           {history.length === 0 ? <EmptyState kind="ideas" text={t('person.historyEmpty')} /> : null}
+          {locked ? null : (
+            <Button
+              label={t('person.logGift')}
+              tone="secondary"
+              onPress={() => {
+                const occasion = next?.occasion ?? occasions[0];
+                if (!occasion) {
+                  setAddingOccasion(true);
+                  return;
+                }
+                openPurchase(occasion.id, nextState?.savedIdea ?? '');
+              }}
+            />
+          )}
           {history.map(item => {
             const editable = canEditSharedGift(snapshot, item, snapshot.profile.uid);
             return (
@@ -1082,7 +1033,16 @@ function validPurchaseDate(value: string): boolean {
   return Boolean(loose && isRealMonthDay(loose.month, loose.day));
 }
 
+function personMeta(person: { relationship?: string; circleId?: string }, circles: { id: string; name: string }[]): string {
+  const relationship = relationshipLabel(person.relationship);
+  const circle = circles.find(item => item.id === person.circleId)?.name;
+  const parts = [relationship, circle ? t('person.circleMeta', { name: circle }) : ''].filter(Boolean);
+  return parts.join(' · ') || t('fairness.noCircle');
+}
+
 const styles = StyleSheet.create({
+  personHead: { alignItems: 'center', gap: space.xs },
+  personMenu: { position: 'absolute', top: 0, right: 0, zIndex: 1 },
   summaryName: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.xs },
   avatarName: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flex: 1 },
   personCopy: { flex: 1, gap: 2 },

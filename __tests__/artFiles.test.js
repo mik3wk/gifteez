@@ -43,6 +43,15 @@ test('every emblem, empty state, and celebration has a 1x, 2x, and 3x sticker', 
   expect(fs.existsSync(path.join(art, 'celebrate', 'confetti-burst.png'))).toBe(true);
   expect(fs.existsSync(path.join(art, 'celebrate', 'confetti-burst@2x.png'))).toBe(true);
   expect(fs.existsSync(path.join(art, 'celebrate', 'confetti-burst@3x.png'))).toBe(true);
+  ['not-started', 'idea-saved', 'purchased', 'logged', 'balanced'].forEach(name => {
+    expectScales(path.join(art, 'seals'), `seal-${name}`);
+  });
+  expect(fs.existsSync(path.join(art, 'seals', 'seal-claimed.png'))).toBe(false);
+  ['ribbon-bow', 'ribbon-bow-dark', 'ribbon-divider', 'ribbon-divider-dark'].forEach(name => {
+    expectScales(path.join(art, 'ribbon'), name);
+  });
+  expectScales(path.join(art, 'crest'), 'crest-wreath');
+  expectScales(path.join(art, 'crest'), 'crest-wreath-dark');
 });
 
 test('the iOS marketing icon is a square RGB PNG without alpha', async () => {

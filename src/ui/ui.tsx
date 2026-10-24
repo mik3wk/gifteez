@@ -29,8 +29,8 @@ import { useGifteez } from '../state/GifteezContext';
 import { useTheme } from '../theme/useTheme';
 import { iconOnSurface, layout, occasionLook, scrim, space, sticker, stroke, touch, type ArtName, type CelebrateName, type ChipTint, type EmptyArtName } from '../theme/tokens';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { artSource } from './art';
-import { BowMark, MonogramAvatar } from './stationery';
+import { artSource, bowSource } from './art';
+import { MonogramAvatar } from './stationery';
 import { Icon, type IconName } from './icons';
 import { CelebrateArt, Settle, useReduceMotion, useStickerMotion } from './motion';
 
@@ -97,7 +97,7 @@ function StickerBox({
   );
 }
 
-export type TabId = 'people' | 'fairness' | 'settings';
+export type TabId = 'home' | 'people' | 'fairness' | 'settings';
 
 export function Screen({
   children,
@@ -1054,15 +1054,16 @@ export function AppHeader({ title, greeting }: { title: string; greeting?: strin
   );
 }
 
-const TABS: Array<{ id: TabId; icon: IconName; label: string; route: 'People' | 'Fairness' | 'Settings' }> = [
-  { id: 'people', icon: 'people', label: t('people.home'), route: 'People' },
+const TABS: Array<{ id: TabId; icon: IconName; label: string; route: 'Home' | 'People' | 'Fairness' | 'Settings' }> = [
+  { id: 'home', icon: 'home', label: t('people.home'), route: 'Home' },
+  { id: 'people', icon: 'people', label: t('people.title'), route: 'People' },
   { id: 'fairness', icon: 'scale', label: t('people.fairness'), route: 'Fairness' },
   { id: 'settings', icon: 'gear', label: t('people.settings'), route: 'Settings' },
 ];
 
 export function TabBar({ active }: { active: TabId }) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
-  const { colors, type, typeScale } = useTheme();
+  const { colors, scheme, type, typeScale } = useTheme();
   return (
     <View accessibilityRole="tablist" style={[styles.tabs, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
       {TABS.map(tab => {
@@ -1082,7 +1083,9 @@ export function TabBar({ active }: { active: TabId }) {
             style={styles.tab}>
             <View style={styles.tabInner}>
               <Icon name={tab.icon} color={ink} size={20} />
-              {selected ? <BowMark color={colors.pink} size={14} /> : null}
+              {selected ? (
+                <Image accessible={false} source={bowSource(scheme)} resizeMode="contain" style={styles.tabBow} />
+              ) : null}
               <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: ink }]}>{tab.label}</Text>
             </View>
           </Pressable>
@@ -1462,6 +1465,7 @@ const styles = StyleSheet.create({
   tab: { flex: 1, minHeight: touch.minTarget },
   tabFlex: { flex: 1 },
   tabInner: { minHeight: touch.minTarget, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: space.xxs },
+  tabBow: { width: 18, height: 14 },
   iconButton: { minWidth: touch.minTarget, minHeight: touch.minTarget, alignItems: 'center', justifyContent: 'center' },
   hue: { width: 16, height: 16, borderRadius: 8, borderWidth: stroke.inner },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: touch.minTarget },

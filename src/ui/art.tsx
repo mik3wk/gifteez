@@ -58,6 +58,26 @@ function paired(pair: { light: number; dark: number }, scheme: Scheme): number {
   return scheme === 'dark' ? pair.dark : pair.light;
 }
 
+const SEAL_ART = {
+  'not-started': require('../assets/art/seals/seal-not-started.png'),
+  'idea-saved': require('../assets/art/seals/seal-idea-saved.png'),
+  purchased: require('../assets/art/seals/seal-purchased.png'),
+  logged: require('../assets/art/seals/seal-logged.png'),
+  balanced: require('../assets/art/seals/seal-balanced.png'),
+} as const;
+
+const RIBBON = {
+  bow: { light: require('../assets/art/ribbon/ribbon-bow.png'), dark: require('../assets/art/ribbon/ribbon-bow-dark.png') },
+  divider: { light: require('../assets/art/ribbon/ribbon-divider.png'), dark: require('../assets/art/ribbon/ribbon-divider-dark.png') },
+};
+
+const CREST = {
+  light: require('../assets/art/crest/crest-wreath.png'),
+  dark: require('../assets/art/crest/crest-wreath-dark.png'),
+};
+
+export type SealArtName = keyof typeof SEAL_ART;
+
 /** Line art is already colored. Do not tint these files. */
 export function artSource(name: ArtName | EmptyArtName | CelebrateName, scheme: Scheme = 'light'): number {
   if (Object.prototype.hasOwnProperty.call(EMPTY_ART, name)) {
@@ -68,6 +88,22 @@ export function artSource(name: ArtName | EmptyArtName | CelebrateName, scheme: 
   }
   const emblem = EMBLEM[name as ArtName] ?? EMBLEM.gift;
   return paired(emblem, scheme);
+}
+
+export function sealSource(name: SealArtName): number {
+  return SEAL_ART[name];
+}
+
+export function bowSource(scheme: Scheme): number {
+  return paired(RIBBON.bow, scheme);
+}
+
+export function dividerSource(scheme: Scheme): number {
+  return paired(RIBBON.divider, scheme);
+}
+
+export function crestSource(scheme: Scheme): number {
+  return scheme === 'dark' ? CREST.dark : CREST.light;
 }
 
 /** Seasonal banners stay the season bitmaps. Occasion emblems are separate. */

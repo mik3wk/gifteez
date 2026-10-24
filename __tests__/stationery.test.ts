@@ -55,7 +55,7 @@ test('monogram letters and color follow the person, not the name length', () => 
 test('a logged gift wins the seal, and not-started stays an outline', () => {
   expect(personSeal({ status: 'idea-saved', claimed: true, logged: true })).toBe('logged');
   expect(personSeal({ status: 'purchased', claimed: true, logged: false })).toBe('purchased');
-  expect(personSeal({ status: 'not-started', claimed: true, logged: false })).toBe('claimed');
+  expect(personSeal({ status: 'not-started', claimed: true, logged: false })).toBe('not-started');
   expect(personSeal({ status: 'idea-saved', claimed: false, logged: false })).toBe('idea-saved');
   const idle = SEAL_PAINT.dark['not-started'];
   const logged = SEAL_PAINT.dark.logged;

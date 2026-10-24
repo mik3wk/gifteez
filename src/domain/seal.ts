@@ -35,9 +35,6 @@ export function personSeal(input: {
   if (input.status === 'purchased') {
     return 'purchased';
   }
-  if (input.claimed) {
-    return 'claimed';
-  }
   if (input.status === 'idea-saved') {
     return 'idea-saved';
   }
