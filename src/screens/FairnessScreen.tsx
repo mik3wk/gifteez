@@ -29,6 +29,7 @@ import {
   Card,
   Chip,
   Cluster,
+  confirmChoice,
   confirmDestructive,
   EmptyState,
   Field,
@@ -107,7 +108,24 @@ export function FairnessScreen() {
     }
     const current = editing?.budgetCents ?? null;
     if (cents !== current) {
-      await setCircleBudget(editor, cents);
+      const members = snapshot.people.filter(person => !person.deleted && person.circleId === editor);
+      if (members.length > 0) {
+        const amount = cents == null
+          ? t('settings.none')
+          : formatMoney(cents, deviceLocale(), listCurrency(snapshot), true);
+        const choice = await confirmChoice(
+          t('fairness.circleBudget'),
+          t('fairness.applyBudget', { amount, names: joinNames(members.map(person => person.name)) }),
+          t('fairness.applyEveryone'),
+          t('fairness.applyNew'),
+        );
+        if (choice === 'dismiss') {
+          return false;
+        }
+        await setCircleBudget(editor, cents, choice === 'primary' ? 'everyone' : 'new');
+      } else {
+        await setCircleBudget(editor, cents, 'new');
+      }
     }
     return true;
   }
@@ -214,6 +232,8 @@ export function FairnessScreen() {
           label={t('fairness.circleBudget')}
           value={budget}
           error={budgetError}
+          prefix="$"
+          suffix={t('person.perYearSuffix')}
           keyboardType="decimal-pad"
           onChangeText={value => {
             setBudget(value);

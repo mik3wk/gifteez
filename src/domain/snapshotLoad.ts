@@ -51,6 +51,11 @@ function normalizePerson(value: unknown): Person | null {
     createdAt: typeof value.createdAt === 'number' ? value.createdAt : 0,
     updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : 0,
   };
+  if (value.budgetCustom === true) {
+    person.budgetCustom = true;
+  } else {
+    delete person.budgetCustom;
+  }
   if (person.birthYear != null && (typeof person.birthYear !== 'number' || !Number.isInteger(person.birthYear) || person.birthYear < 1900 || person.birthYear > 2100)) {
     delete person.birthYear;
   }

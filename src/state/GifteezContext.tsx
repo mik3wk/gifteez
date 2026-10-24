@@ -44,7 +44,8 @@ import { exportBackup, migrateToLocal, parseBackup, summarizeBackup, type Backup
 import { CacheStageError, decideCacheLoad, decideCommit, planSnapshotWrite, purgeDeleted, snapshotContentKey, type CacheLoadFailure } from '../domain/snapshotLoad';
 import { normalizeStoredDate, parseLocalDate } from '../domain/calendarDate';
 import { relationshipCircleName, relationshipLabel, storeRelationship, type RelationshipPresetKey } from '../domain/relationship';
-import { acceptSuggestion, addCircle, assignCircle, cleanCircleName, removeCircle, renameCircle as renameStoredCircle, withCircleBudget } from '../domain/circles';
+import { applyCircleBudget } from '../domain/budget';
+import { acceptSuggestion, addCircle, assignCircle, cleanCircleName, removeCircle, renameCircle as renameStoredCircle } from '../domain/circles';
 import { haptic } from '../platform/haptics';
 import type { CelebrateName } from '../theme/tokens';
 import { colorsFor, parseSkin, resolveSkin, withColorScheme, type ResolvedColors, type SkinId, type ThemeColors } from '../theme/skins';
@@ -81,10 +82,10 @@ type GifteezApi = {
   clearNotice: () => void;
   clearError: () => void;
   addPerson: (input: { name: string; budget: string; tags: string[]; imported?: boolean; relationship?: string; circleId?: string; birthYear?: string }) => Promise<string | null>;
-  savePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'relationship' | 'notes' | 'savedIdeas'>> & { birthYear?: number | null }) => Promise<void>;
+  savePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'budgetCustom' | 'tags' | 'relationship' | 'notes' | 'savedIdeas'>> & { birthYear?: number | null }) => Promise<void>;
   createCircle: (name: string) => Promise<string | null>;
   renameCircle: (circleId: string, name: string) => Promise<void>;
-  setCircleBudget: (circleId: string, budgetCents: number | null) => Promise<void>;
+  setCircleBudget: (circleId: string, budgetCents: number | null, mode?: 'everyone' | 'new') => Promise<void>;
   deleteCircle: (circleId: string) => Promise<void>;
   setPersonCircle: (personId: string, circleId: string | null) => Promise<void>;
   acceptCircleSuggestion: (key: RelationshipPresetKey, personIds: string[]) => Promise<void>;
@@ -688,6 +689,9 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         id: randomId(),
         name,
         budgetCents: parseBudget(input.budget),
+        ...(input.circleId && (parseBudget(input.budget) ?? null) !== ((snapshotRef.current.circles ?? []).find(circle => circle.id === input.circleId)?.budgetCents ?? null)
+          ? { budgetCustom: true as const }
+          : {}),
         tags: input.tags,
         imported: Boolean(input.imported),
         opened: !input.imported,
@@ -752,8 +756,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
       await commit(next);
       sync().catch(() => undefined);
     },
-    setCircleBudget: async (circleId, budgetCents) => {
-      const next = withCircleBudget(snapshotRef.current, circleId, budgetCents);
+    setCircleBudget: async (circleId, budgetCents, mode = 'new') => {
+      const next = applyCircleBudget(snapshotRef.current, circleId, budgetCents, mode);
       if (!next) {
         return;
       }

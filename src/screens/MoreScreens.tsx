@@ -154,7 +154,7 @@ export function SettingsScreen() {
         <SettingsGroup title={t('settings.appearance')}>
           <SettingsRow icon="sparkle" label={t('settings.theme')} value={themeValue} onPress={() => setSheet('theme')} />
         </SettingsGroup>
-        <SettingsGroup title={t('settings.gifts')}>
+        <SettingsGroup title={t('settings.gifts')} footer={t('settings.startingBudgetFooter')}>
           <SettingsRow
             icon="gift"
             label={t('settings.defaultBudget')}
@@ -272,6 +272,8 @@ export function SettingsScreen() {
           label={t('settings.defaultBudget')}
           value={budget}
           error={budgetError}
+          prefix="$"
+          suffix={t('person.perYearSuffix')}
           keyboardType="decimal-pad"
           onChangeText={value => {
             setBudget(value);
@@ -279,7 +281,7 @@ export function SettingsScreen() {
           }}
           onSubmitEditing={saveBudget}
         />
-        <Caption>{t('person.perYear')}</Caption>
+        <Caption>{t('settings.startingBudgetFooter')}</Caption>
       </Sheet>
       <Sheet visible={sheet === 'theme'} title={t('settings.theme')} doneLabel={t('common.done')} onClose={() => setSheet(null)}>
         <Cluster>
@@ -415,9 +417,9 @@ function budgetField(cents: number | null | undefined): string {
   return Number.isInteger(dollars) ? String(dollars) : dollars.toFixed(2);
 }
 
-function budgetLabel(cents: number | null | undefined): string | undefined {
+function budgetLabel(cents: number | null | undefined): string {
   const shown = budgetField(cents);
-  return shown ? `$${shown}` : undefined;
+  return shown ? `$${shown}` : t('settings.none');
 }
 
 function clockFrom(hour: number, minute: number): Date {

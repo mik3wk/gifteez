@@ -1,3 +1,4 @@
+import { migrateBudgetSources } from './budget';
 import { cleanCircleName, foldKeptEven, stripKeptEven } from './circles';
 import { emptySnapshot, type AppSnapshot, type Circle, type GiftRecord, type IdeaCacheEntry, type Occasion, type OccasionState, type Person } from './types';
 import { cleanRelationship } from './relationship';
@@ -184,7 +185,7 @@ export function parseBackup(text: string, now: number): { ok: true; snapshot: Ap
     feedback: parsed.feedback as AppSnapshot['feedback'],
     circles: 'circles' in parsed && circlesOk(parsed.circles) ? parsed.circles : [],
   };
-  return { ok: true, snapshot: foldKeptEven(built, now) };
+  return { ok: true, snapshot: migrateBudgetSources(foldKeptEven(built, now)) };
 }
 
 function stripGift(gift: GiftRecord): GiftRecord {
@@ -249,7 +250,7 @@ export function migrateToLocal(snapshot: AppSnapshot): AppSnapshot {
     entitlementPaid: snapshot.entitlementPaid,
     circles: snapshot.circles ?? [],
   };
-  return foldKeptEven(local, Date.now());
+  return migrateBudgetSources(foldKeptEven(local, Date.now()));
 }
 
 export type BackupSummary = {

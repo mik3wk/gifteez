@@ -238,10 +238,27 @@ export function assignCircle(snapshot: AppSnapshot, personId: string, circleId: 
         return item;
       }
       const next = { ...item, updatedAt: now };
-      if (circleId) {
-        next.circleId = circleId;
-      } else {
+      if (!circleId) {
         delete next.circleId;
+        return next;
+      }
+      next.circleId = circleId;
+      const circle = activeCircles(snapshot).find(item => item.id === circleId);
+      if (!circle) {
+        return next;
+      }
+      const circleCents = circle.budgetCents ?? null;
+      if (next.budgetCustom && (next.budgetCents ?? null) === circleCents) {
+        delete next.budgetCustom;
+        return next;
+      }
+      if (!next.budgetCustom && (next.budgetCents ?? null) !== circleCents && next.budgetCents != null) {
+        next.budgetCustom = true;
+        return next;
+      }
+      if (!next.budgetCustom) {
+        next.budgetCents = circleCents;
+        delete next.budgetCustom;
       }
       return next;
     }),

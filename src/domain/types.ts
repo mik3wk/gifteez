@@ -23,6 +23,8 @@ export type Person = {
   notes?: string;
   /** Optional birth year. A birthday occasion's year wins when both are set. */
   birthYear?: number;
+  /** This person's amount stays put when the circle budget changes. */
+  budgetCustom?: boolean;
   /** Ideas kept when there is no occasion to attach them to. */
   savedIdeas?: GiftIdea[];
 };
@@ -39,7 +41,7 @@ export type Circle = {
   id: string;
   name: string;
   createdAt: number;
-  /** Optional amount that prefills a new member of this circle. */
+  /** Budget per person. Members use it unless they have their own amount. */
   budgetCents?: number | null;
 };
 

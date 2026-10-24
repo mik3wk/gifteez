@@ -5,6 +5,7 @@ import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { cancelAddAction, homeTabReset, type RootStack } from '../app/navigation';
 import { amazonSearchUrl } from '../domain/amazon';
+import { budgetOrigin } from '../domain/budget';
 import { describeImport } from '../domain/importNote';
 import { mainAppOpen } from '../domain/onboarding';
 import { importedVisitBanner, type ImportedVisit } from '../domain/importedBanner';
@@ -14,7 +15,7 @@ import type { GiftIdea } from '../domain/types';
 import { canEditSharedGift } from '../domain/edits';
 import { allTimeSpentCents, daysUntil, isRealMonthDay, listCurrency, occurrenceYear, parseBirthYear, parseBudget, parseLooseDate, statusFor, upcomingOccasion, yearSpentCents } from '../domain/logic';
 import { dateIsEstimated, isOneTimeOccasion, nextOccasionDate, occasionLabel, occasionNeedsDate, presetFor } from '../domain/occasions';
-import type { Occasion, OccasionState } from '../domain/types';
+import type { Occasion, OccasionState, Person } from '../domain/types';
 import { relationshipLabel, storeRelationship } from '../domain/relationship';
 import { deviceLocale, formatDate, formatLongDate, formatMoney, formatStoredDate, t, todayIso } from '../i18n';
 import { openInApp } from '../platform/browser';
@@ -236,13 +237,14 @@ export function AddPersonScreen() {
         label={t('person.budget')}
         value={budget}
         error={budgetError}
+        prefix="$"
+        suffix={t('person.perYearSuffix')}
         onChangeText={value => {
           setBudget(value);
           setBudgetError('');
         }}
         keyboardType="decimal-pad"
       />
-      <Caption>{t('person.perYear')}</Caption>
       <Field
         label={t('person.birthYear')}
         value={birthYear}
@@ -547,9 +549,12 @@ export function PersonScreen() {
     toast(t('person.saved'));
     setEditingDetails(false);
     const nextCircle = editCircleId || null;
+    const nextBudget = budget.trim() ? parseBudget(budget) : null;
+    const circle = snapshot.circles.find(item => item.id === (nextCircle ?? ''));
     savePerson(person.id, {
       name: trimmed,
-      budgetCents: budget.trim() ? parseBudget(budget) : null,
+      budgetCents: nextBudget,
+      ...(circle ? { budgetCustom: (nextBudget ?? null) !== (circle.budgetCents ?? null) } : { budgetCustom: false }),
       tags: interestTags,
       relationship: cleaned ?? '',
       notes,
@@ -599,9 +604,20 @@ export function PersonScreen() {
               </Pressable>
               <BudgetLine
                 spent={spent}
-                budgetCents={person.budgetCents}
+                budgetCents={budgetOrigin(person, snapshot.circles).cents}
                 money={money}
                 onSetBudget={openDetails}
+              />
+              <BudgetSource
+                person={person}
+                onOverride={openDetails}
+                onUseCircle={() => {
+                  const circle = snapshot.circles.find(item => item.id === person.circleId);
+                  savePerson(person.id, {
+                    budgetCents: circle?.budgetCents ?? null,
+                    budgetCustom: false,
+                  }).catch(() => undefined);
+                }}
               />
               <View style={styles.interestRow}>
                 {person.tags.map(tag => (
@@ -840,13 +856,14 @@ export function PersonScreen() {
           label={t('person.budget')}
           value={budget}
           error={budgetError}
+          prefix="$"
+          suffix={t('person.perYearSuffix')}
           onChangeText={value => {
             setBudget(value);
             setBudgetError('');
           }}
           keyboardType="decimal-pad"
         />
-        <Caption>{t('person.perYear')}</Caption>
         <Field
           label={t('person.birthYear')}
           value={birthYear}
@@ -1387,6 +1404,38 @@ function IdeaCard({
   );
 }
 
+function BudgetSource({
+  person,
+  onOverride,
+  onUseCircle,
+}: {
+  person: Person;
+  onOverride: () => void;
+  onUseCircle: () => void;
+}) {
+  const { colors, type, typeScale } = useTheme();
+  const { snapshot } = useGifteez();
+  const origin = budgetOrigin(person, snapshot.circles);
+  if (origin.kind === 'own') {
+    return null;
+  }
+  const amount = origin.cents == null
+    ? t('settings.none')
+    : formatMoney(origin.cents, deviceLocale(), listCurrency(snapshot), true);
+  const label = origin.kind === 'circle'
+    ? t('person.budgetFromCircle', { amount, name: origin.circleName })
+    : t('person.budgetCustom', { amount });
+  const action = origin.kind === 'circle' ? t('person.override') : t('person.useCircleBudget');
+  return (
+    <View style={styles.sourceRow}>
+      <Text style={[type.caption, styles.sourceCopy, { color: colors.text }]}>{label}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={action} onPress={origin.kind === 'circle' ? onOverride : onUseCircle}>
+        <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: colors.pink }]}>{action}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function BudgetLine({
   spent,
   budgetCents,
@@ -1544,6 +1593,8 @@ const styles = StyleSheet.create({
   personRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: 64 },
   personName: { fontSize: 25, lineHeight: 28 },
   nextOccasion: { fontSize: 12, lineHeight: 16, maxWidth: 108, textAlign: 'right' },
+  sourceRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  sourceCopy: { flex: 1 },
   budgetBlock: { gap: 4 },
   budgetTrack: { height: 4, borderRadius: 2, overflow: 'hidden' },
   budgetFill: { height: 4, borderRadius: 2 },

@@ -253,7 +253,10 @@ type ConfirmRequest = {
   message: string;
   confirmLabel: string;
   confirmAccessibilityLabel?: string;
-  resolve: (value: boolean) => void;
+  /** Replaces Cancel. The primary button stays the first choice. */
+  secondaryLabel?: string;
+  tone?: 'primary' | 'danger';
+  resolve: (value: boolean | 'secondary') => void;
   settled?: boolean;
 };
 
@@ -270,7 +273,7 @@ function noteConfirm(open: boolean) {
   confirmWatchers.forEach(listener => listener());
 }
 
-function settleConfirm(request: ConfirmRequest, value: boolean) {
+function settleConfirm(request: ConfirmRequest, value: boolean | 'secondary') {
   if (request.settled) {
     return;
   }
@@ -287,7 +290,14 @@ export function confirmDestructive(
 ): Promise<boolean> {
   return new Promise(resolve => {
     noteConfirm(true);
-    const request: ConfirmRequest = { title, message, confirmLabel, confirmAccessibilityLabel, resolve };
+    const request: ConfirmRequest = {
+      title,
+      message,
+      confirmLabel,
+      confirmAccessibilityLabel,
+      tone: 'danger',
+      resolve: value => resolve(value === true),
+    };
     const sheetHost = sheetConfirmHosts[sheetConfirmHosts.length - 1];
     if (sheetHost) {
       sheetHost(request);
@@ -304,12 +314,54 @@ export function confirmDestructive(
   });
 }
 
+/** Two actions. Dismissing chooses neither. */
+export function confirmChoice(
+  title: string,
+  message: string,
+  primaryLabel: string,
+  secondaryLabel: string,
+): Promise<'primary' | 'secondary' | 'dismiss'> {
+  return new Promise(resolve => {
+    noteConfirm(true);
+    const request: ConfirmRequest = {
+      title,
+      message,
+      confirmLabel: primaryLabel,
+      secondaryLabel,
+      tone: 'primary',
+      resolve: value => {
+        if (value === 'secondary') {
+          resolve('secondary');
+          return;
+        }
+        resolve(value ? 'primary' : 'dismiss');
+      },
+    };
+    const sheetHost = sheetConfirmHosts[sheetConfirmHosts.length - 1];
+    if (sheetHost) {
+      sheetHost(request);
+      return;
+    }
+    if (!confirmListener) {
+      Alert.alert(title, message, [
+        { text: secondaryLabel, onPress: () => settleConfirm(request, 'secondary') },
+        { text: primaryLabel, onPress: () => settleConfirm(request, true) },
+      ], { cancelable: true, onDismiss: () => settleConfirm(request, false) });
+      return;
+    }
+    confirmListener(request);
+  });
+}
+
 export function ConfirmDialog({
   title,
   message,
   confirmLabel,
   confirmAccessibilityLabel,
+  secondaryLabel,
+  tone = 'danger',
   onConfirm,
+  onSecondary,
   onCancel,
   nested,
 }: {
@@ -317,7 +369,10 @@ export function ConfirmDialog({
   message: string;
   confirmLabel: string;
   confirmAccessibilityLabel?: string;
+  secondaryLabel?: string;
+  tone?: 'primary' | 'danger';
   onConfirm: () => void;
+  onSecondary?: () => void;
   onCancel: () => void;
   /** Inside an open sheet. A second Modal on iOS stays invisible and swallows every touch. */
   nested?: boolean;
@@ -328,9 +383,13 @@ export function ConfirmDialog({
       <View style={styles.dialog}>
         <Card>
           <Heading>{title}</Heading>
-          <Body>{message}</Body>
-          <Button label={confirmLabel} accessibilityLabel={confirmAccessibilityLabel} tone="danger" onPress={onConfirm} />
-          <Button label={t('common.cancel')} tone="secondary" onPress={onCancel} />
+          {message ? <Body>{message}</Body> : null}
+          <Button label={confirmLabel} accessibilityLabel={confirmAccessibilityLabel} tone={tone} onPress={onConfirm} />
+          <Button
+            label={secondaryLabel ?? t('common.cancel')}
+            tone="secondary"
+            onPress={secondaryLabel ? (onSecondary ?? onCancel) : onCancel}
+          />
         </Card>
       </View>
     </View>
@@ -358,7 +417,7 @@ export function ConfirmHost() {
   if (!request) {
     return null;
   }
-  const finish = (value: boolean) => {
+  const finish = (value: boolean | 'secondary') => {
     settleConfirm(request, value);
     setRequest(null);
   };
@@ -368,7 +427,10 @@ export function ConfirmHost() {
       message={request.message}
       confirmLabel={request.confirmLabel}
       confirmAccessibilityLabel={request.confirmAccessibilityLabel}
+      secondaryLabel={request.secondaryLabel}
+      tone={request.tone ?? 'danger'}
       onConfirm={() => finish(true)}
+      onSecondary={() => finish('secondary')}
       onCancel={() => finish(false)}
     />
   );
@@ -518,6 +580,8 @@ export function Field({
   autoCapitalize,
   onSubmitEditing,
   onBlur,
+  prefix,
+  suffix,
 }: {
   label: string;
   value: string;
@@ -534,40 +598,50 @@ export function Field({
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   onSubmitEditing?: () => void;
   onBlur?: () => void;
+  /** Shown inside the field, before the value. */
+  prefix?: string;
+  /** Shown on the same line, after the value. */
+  suffix?: string;
 }) {
   const { colors, type, typeScale, radius } = useTheme();
   const bad = Boolean(error) || Boolean(invalid);
+  const adorned = Boolean(prefix || suffix);
+  const box = {
+    color: colors.text,
+    borderColor: bad ? colors.dangerText : colors.outline,
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+  };
+  const inputProps = {
+    accessibilityLabel: error ? `${accessibilityLabel ?? label}. ${error}` : (accessibilityLabel ?? label),
+    accessibilityHint: error,
+    value,
+    onChangeText,
+    placeholder,
+    placeholderTextColor: colors.muted,
+    keyboardType,
+    autoCapitalize: autoCapitalize ?? (textContentType === 'name' ? 'words' : keyboardType === 'email-address' ? 'none' : 'sentences'),
+    autoCorrect: autoCorrect ?? (textContentType === 'name' || keyboardType === 'email-address' ? false : undefined),
+    spellCheck: autoCorrect === false ? false : undefined,
+    returnKeyType,
+    textContentType,
+    autoComplete,
+    onSubmitEditing,
+    onBlur,
+    maxFontSizeMultiplier: typeScale.body,
+  };
   return (
     <View style={styles.field}>
       <Caption>{label}</Caption>
-      <TextInput
-        accessibilityLabel={error ? `${accessibilityLabel ?? label}. ${error}` : (accessibilityLabel ?? label)}
-        accessibilityHint={error}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.muted}
-        keyboardType={keyboardType}
-        autoCapitalize={autoCapitalize ?? (textContentType === 'name' ? 'words' : keyboardType === 'email-address' ? 'none' : 'sentences')}
-        autoCorrect={autoCorrect ?? (textContentType === 'name' || keyboardType === 'email-address' ? false : undefined)}
-        spellCheck={autoCorrect === false ? false : undefined}
-        returnKeyType={returnKeyType}
-        textContentType={textContentType}
-        autoComplete={autoComplete}
-        onSubmitEditing={onSubmitEditing}
-        onBlur={onBlur}
-        maxFontSizeMultiplier={typeScale.body}
-        style={[
-          type.body,
-          styles.input,
-          {
-            color: colors.text,
-            borderColor: bad ? colors.dangerText : colors.outline,
-            backgroundColor: colors.surface,
-            borderRadius: radius.card,
-          },
-        ]}
-      />
+      {adorned ? (
+        <View style={[styles.input, styles.inputRow, box]}>
+          {prefix ? <Text accessibilityElementsHidden style={[type.body, { color: colors.muted }]}>{prefix}</Text> : null}
+          <TextInput {...inputProps} style={[type.body, styles.inputFill, { color: colors.text }]} />
+          {suffix ? <Text accessibilityElementsHidden style={[type.caption, { color: colors.muted }]}>{suffix}</Text> : null}
+        </View>
+      ) : (
+        <TextInput {...inputProps} style={[type.body, styles.input, box]} />
+      )}
       {error ? <Caption tone="danger">{error}</Caption> : null}
     </View>
   );
@@ -1307,7 +1381,7 @@ export function Sheet({
       });
     };
   }, [visible]);
-  const finishConfirm = (value: boolean) => {
+  const finishConfirm = (value: boolean | 'secondary') => {
     if (!confirm) {
       return;
     }
@@ -1377,7 +1451,10 @@ export function Sheet({
               message={confirm.message}
               confirmLabel={confirm.confirmLabel}
               confirmAccessibilityLabel={confirm.confirmAccessibilityLabel}
+              secondaryLabel={confirm.secondaryLabel}
+              tone={confirm.tone ?? 'danger'}
               onConfirm={() => finishConfirm(true)}
+              onSecondary={() => finishConfirm('secondary')}
               onCancel={() => finishConfirm(false)}
               nested
             />
@@ -1550,6 +1627,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     paddingVertical: space.xs,
   },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  inputFill: { flex: 1, minHeight: touch.minTarget, paddingVertical: 0 },
   floater: { position: 'absolute', left: 0, right: 0, alignItems: 'center', paddingHorizontal: space.md },
   floaterCard: { width: '100%', maxWidth: layout.maxContent },
   empty: { gap: space.sm, alignItems: 'center' },
