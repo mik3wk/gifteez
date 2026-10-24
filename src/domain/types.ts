@@ -23,6 +23,8 @@ export type Person = {
   notes?: string;
   /** Optional birth year. A birthday occasion's year wins when both are set. */
   birthYear?: number;
+  /** Ideas kept when there is no occasion to attach them to. */
+  savedIdeas?: GiftIdea[];
 };
 
 export type GiftIdea = {
@@ -188,6 +190,8 @@ export type Profile = {
   reminderLeadDays?: number;
   /** Local hour for reminders. Missing means 9. */
   reminderHour?: number;
+  /** Minute of that hour. Missing means 0. */
+  reminderMinute?: number;
 };
 
 export type DirtyMap = Record<string, true>;

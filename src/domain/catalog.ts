@@ -136,10 +136,27 @@ const TOPIC_NOUN: Record<string, string> = {
   foodie: 'food',
 };
 
-/** A reason that names a real interest, or a generic line when the person has none. */
+function reasonKind(lower: string): 'keepsake' | 'experience' | 'useful' {
+  if (/\b(letter|memory|poem|toast)\b/i.test(lower)) {
+    return 'keepsake';
+  }
+  if (/\b(class|classes|ticket|tickets|reservation|workshop|museum|brunch|meal|show)\b/i.test(lower)) {
+    return 'experience';
+  }
+  return 'useful';
+}
+
+/** A reason that matches the gift, and names a real interest when the gift is something to use. */
 export function ideaReason(text: string, topic: string | null): string {
   const gift = text.replace(/\.$/, '');
   const lower = gift.charAt(0).toLocaleLowerCase() + gift.slice(1);
+  const kind = reasonKind(lower);
+  if (kind === 'keepsake') {
+    return `A letter or keepsake: ${lower}.`;
+  }
+  if (kind === 'experience') {
+    return `Something to do together: ${lower}.`;
+  }
   if (!topic) {
     return `Something they can use: ${lower}.`;
   }

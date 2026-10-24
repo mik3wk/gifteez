@@ -82,6 +82,13 @@ export function AddPersonScreen() {
   const [allowLeave, setAllowLeave] = useState(false);
   const nextId = useRef<string | null>(null);
   const dirty = Boolean(name.trim() || relationship.trim() || circleId || budget.trim() !== presetBudget || birthYear.trim() || tags.length);
+  const firstRun = !snapshot.profile.onboarded;
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerBackVisible: false,
+      headerLeft: () => <AddFormBack />,
+    });
+  }, [navigation]);
   usePreventRemove(dirty && !allowLeave, ({ data }) => {
     confirmDestructive(
       t('firstOpen.discardTitle'),
@@ -154,7 +161,7 @@ export function AddPersonScreen() {
               }
             }}
           />
-          <TabBar active="people" />
+          {firstRun ? null : <TabBar active="people" />}
         </View>
       )}
     >
@@ -357,12 +364,32 @@ export function PersonScreen() {
     : undefined;
   const occasions = snapshot.occasions.filter(item => item.personId === person.id && !item.deleted);
   const menuOccasion = menu?.kind === 'occasion' ? occasions.find(item => item.id === menu.id) : undefined;
+  const looseIdeas = person.savedIdeas ?? [];
+  const personId = person.id;
 
   function savedFor(idea: string): boolean {
+    if (looseIdeas.some(item => item.title === idea)) {
+      return true;
+    }
     return Boolean(next && nextState?.savedIdea === idea);
   }
 
-  const savedList = [...visibleDevice, ...visibleCloud].filter(idea => savedFor(ideaKey(idea)));
+  const savedSeen = new Set<string>();
+  const savedList: Array<GiftIdea | string> = [];
+  looseIdeas.forEach(idea => {
+    if (!hiddenIdeas.has(idea.title) && !savedSeen.has(idea.title)) {
+      savedList.push(idea);
+      savedSeen.add(idea.title);
+    }
+  });
+  [...visibleDevice, ...visibleCloud].forEach(idea => {
+    const key = ideaKey(idea);
+    if (next && nextState?.savedIdea === key && !savedSeen.has(key)) {
+      savedList.push(idea);
+      savedSeen.add(key);
+    }
+  });
+  const hasInterests = person.tags.length > 0;
 
   function openPurchase(occasionId: string, idea: string, priceDollars?: number) {
     setBuying(occasionId);
@@ -424,15 +451,25 @@ export function PersonScreen() {
     setBuying(null);
   }
 
-  function onSaveIdea(idea: string) {
+  function onSaveIdea(idea: GiftIdea | string) {
+    const gift = asGiftIdea(idea);
+    const held = looseIdeas.some(item => item.title === gift.title);
     if (!next) {
-      toast(t('person.saveIdeaNeedsDate'));
+      return savePerson(personId, {
+        savedIdeas: held ? looseIdeas.filter(item => item.title !== gift.title) : [...looseIdeas, gift],
+      });
+    }
+    const onOccasion = nextState?.savedIdea === gift.title;
+    if (held || onOccasion) {
+      if (held) {
+        savePerson(personId, { savedIdeas: looseIdeas.filter(item => item.title !== gift.title) }).catch(() => undefined);
+      }
+      if (onOccasion) {
+        return unsaveIdea(next.occasion.id);
+      }
       return undefined;
     }
-    if (savedFor(idea)) {
-      return unsaveIdea(next.occasion.id);
-    }
-    return saveIdeaFor(next.occasion.id, idea);
+    return saveIdeaFor(next.occasion.id, gift.title);
   }
 
   function openDetails() {
@@ -473,6 +510,12 @@ export function PersonScreen() {
                 money={money}
                 onSetBudget={openDetails}
               />
+              <View style={styles.interestRow}>
+                {person.tags.map(tag => (
+                  <OutlineChip key={tag} label={t(`tags.${tag}`)} onPress={openDetails} />
+                ))}
+                <OutlineChip label={t('person.addChip')} onPress={openDetails} />
+              </View>
             </View>
             {next ? (
               <Text numberOfLines={1} style={[styles.nextOccasion, { color: colors.muted }]}>
@@ -480,11 +523,6 @@ export function PersonScreen() {
               </Text>
             ) : null}
           </View>
-          {person.tags.length > 0 ? (
-            <Text numberOfLines={1} style={[type.caption, { color: colors.muted }]}>
-              {person.tags.map(tag => t(`tags.${tag}`)).join(' · ')}
-            </Text>
-          ) : null}
           {moment ? <Moment kind="wrap" name="purchase" onDone={() => setMoment(null)} /> : null}
           <Segment
             value={section}
@@ -508,11 +546,8 @@ export function PersonScreen() {
               { id: 'saved', label: t('person.savedTab') },
             ]}
           />
-          <Pressable accessibilityRole="button" onPress={openDetails}>
-            <Caption tone="text">{`${person.tags.length ? t('person.interestsLine', { list: person.tags.map(tag => t(`tags.${tag}`)).join(', ') }) : t('person.addInterests')} · ${t('person.editShort')}`}</Caption>
-          </Pressable>
           {buyAsk ? <BuyPrompt idea={buyAsk} onYes={() => acceptBuy(buyAsk)} onNo={() => setBuyAsk(null)} /> : null}
-          {findingIdeas && ideas.length === 0 ? <Shimmer label={t('person.ideasLoading')} /> : null}
+          {hasInterests && findingIdeas && ideas.length === 0 ? <Shimmer label={t('person.ideasLoading')} /> : null}
           {ideaFilter === 'saved' ? (
             savedList.length === 0 ? <EmptyState kind="ideas" text={t('person.savedEmpty')} /> : savedList.map(idea => (
               <IdeaCard
@@ -525,15 +560,17 @@ export function PersonScreen() {
                 onShop={() => { shopIdea(idea).catch(() => undefined); }}
               />
             ))
+          ) : !hasInterests ? (
+            <EmptyState
+              kind="ideas"
+              text={t('person.ideasNeedInterests')}
+              action={t('person.addInterests')}
+              onAction={openDetails}
+            />
           ) : (
             <>
               {!findingIdeas && visibleDevice.length === 0 && visibleCloud.length === 0 ? (
-                <EmptyState
-                  kind="ideas"
-                  text={person.tags.length ? t('person.ideasEmpty') : t('person.ideasNeedInterests')}
-                  action={person.tags.length ? undefined : t('person.editShort')}
-                  onAction={person.tags.length ? undefined : openDetails}
-                />
+                <EmptyState kind="ideas" text={t('person.ideasEmpty')} />
               ) : null}
               {shownIdeas.map(idea => (
                 <IdeaCard
@@ -559,35 +596,39 @@ export function PersonScreen() {
               ))}
             </>
           )}
-          <Cluster>
-            {ideaFilter === 'forYou' && hiddenIdeaCount > 0 ? (
-              <Button label={t('person.showMore', { count: hiddenIdeaCount })} tone="ghost" onPress={() => setShowAllIdeas(true)} />
-            ) : null}
-            {ideaFilter === 'forYou' && showAllIdeas && ideas.length > 3 ? (
-              <Button label={t('person.showFewer')} tone="ghost" onPress={() => setShowAllIdeas(false)} />
-            ) : null}
-          </Cluster>
-          {cloudError ? <Body>{t('person.ideasError')}</Body> : null}
-          <Button
-            label={cloudError ? t('person.ideasRetry') : t('person.cloud')}
-            tone="ghost"
-            busy={cloudBusy}
-            onPress={async () => {
-              setCloudBusy(true);
-              setCloudError(false);
-              try {
-                await cloudIdeas(person.id);
-              } catch {
-                setCloudError(true);
-              } finally {
-                setCloudBusy(false);
-              }
-            }}
-          />
-          {cloudRemaining[person.id] != null ? (
+          {hasInterests ? (
+            <Cluster>
+              {ideaFilter === 'forYou' && hiddenIdeaCount > 0 ? (
+                <Button label={t('person.showMore', { count: hiddenIdeaCount })} tone="ghost" onPress={() => setShowAllIdeas(true)} />
+              ) : null}
+              {ideaFilter === 'forYou' && showAllIdeas && ideas.length > 3 ? (
+                <Button label={t('person.showFewer')} tone="ghost" onPress={() => setShowAllIdeas(false)} />
+              ) : null}
+            </Cluster>
+          ) : null}
+          {hasInterests && cloudError ? <Body>{t('person.ideasError')}</Body> : null}
+          {hasInterests ? (
+            <Button
+              label={cloudError ? t('person.ideasRetry') : t('person.cloud')}
+              tone="ghost"
+              busy={cloudBusy}
+              onPress={async () => {
+                setCloudBusy(true);
+                setCloudError(false);
+                try {
+                  await cloudIdeas(person.id);
+                } catch {
+                  setCloudError(true);
+                } finally {
+                  setCloudBusy(false);
+                }
+              }}
+            />
+          ) : null}
+          {hasInterests && cloudRemaining[person.id] != null ? (
             <Caption tone="text">{t('person.refreshesLeft', { count: cloudRemaining[person.id], name: person.name })}</Caption>
           ) : null}
-          <Caption tone="text">{t('shop.disclosure')}</Caption>
+          {hasInterests ? <Caption tone="text">{t('shop.disclosure')}</Caption> : null}
         </>
       ) : null}
       {section === 'occasions' ? (
@@ -766,6 +807,10 @@ export function PersonScreen() {
               notes,
               birthYear: parsedYear,
             }).then(() => {
+              const tagsChanged = interestTags.join('|') !== (person.tags ?? []).join('|');
+              if (tagsChanged && interestTags.length > 0) {
+                refreshIdeas(person.id).catch(() => undefined);
+              }
               if ((person.circleId ?? null) !== nextCircle) {
                 return setPersonCircle(person.id, nextCircle);
               }
@@ -1149,10 +1194,35 @@ function ReminderOffer() {
   );
 }
 
+function AddFormBack() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStack>>();
+  const state = navigation.getState?.();
+  const previous = state?.routes[state.index - 1];
+  const label = !previous || previous.name === 'FirstOpen'
+    ? t('common.cancel')
+    : previous.name === 'Home'
+      ? t('people.home')
+      : t('people.title');
+  return <BackLink label={label} onPress={() => navigation.goBack()} />;
+}
+
 function backLabelFor(navigation: NativeStackNavigationProp<RootStack>): string {
   const state = navigation.getState?.();
   const previous = state?.routes[state.index - 1];
   return previous?.name === 'Home' ? t('people.home') : t('people.title');
+}
+
+function OutlineChip({ label, onPress }: { label: string; onPress: () => void }) {
+  const { colors, type, typeScale, radius } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={[styles.outlineChip, { borderColor: colors.pink, borderRadius: radius.chip }]}>
+      <Text maxFontSizeMultiplier={typeScale.caption} style={[type.caption, { color: colors.pink }]}>{label}</Text>
+    </Pressable>
+  );
 }
 
 function BackLink({ label, onPress }: { label: string; onPress: () => void }) {
@@ -1407,6 +1477,8 @@ const styles = StyleSheet.create({
   summaryName: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.xs },
   avatarName: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flex: 1 },
   personCopy: { flex: 1, gap: 2 },
+  interestRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  outlineChip: { minHeight: 32, paddingHorizontal: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   ideaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.xs },
   ideaCopy: { flex: 1, gap: 2 },
   titlePrice: { flexDirection: 'row', alignItems: 'flex-start', gap: space.xs },

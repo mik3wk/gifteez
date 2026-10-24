@@ -465,7 +465,7 @@ export function addPerson(input: {
 export function updatePerson(
   snapshot: AppSnapshot,
   personId: string,
-  patch: Partial<Omit<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'opened' | 'deleted' | 'linkedUid' | 'relationship' | 'notes' | 'birthYear'>, 'birthYear'>> & { birthYear?: number | null },
+  patch: Partial<Omit<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'opened' | 'deleted' | 'linkedUid' | 'relationship' | 'notes' | 'birthYear' | 'savedIdeas'>, 'birthYear'>> & { birthYear?: number | null },
   now: number,
 ): Mutation<Person> {
   const current = snapshot.people.find(person => person.id === personId);
@@ -490,6 +490,9 @@ export function updatePerson(
     } else {
       next.birthYear = birthYear;
     }
+  }
+  if (patch.savedIdeas !== undefined && patch.savedIdeas.length === 0) {
+    delete next.savedIdeas;
   }
   if (patch.relationship !== undefined) {
     const cleaned = storeRelationship(patch.relationship);

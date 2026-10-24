@@ -1,5 +1,5 @@
 import { migrateToLocal } from './backup';
-import { emptySnapshot, type AppSnapshot, type Circle, type FeedbackEntry, type GiftRecord, type IdeaCacheEntry, type Occasion, type OccasionState, type Person, type PrivateGift, type Profile } from './types';
+import { emptySnapshot, type AppSnapshot, type Circle, type FeedbackEntry, type GiftIdea, type GiftRecord, type IdeaCacheEntry, type Occasion, type OccasionState, type Person, type PrivateGift, type Profile } from './types';
 
 export type CacheLoadFailure = 'key' | 'decrypt' | 'parse' | 'validate';
 
@@ -65,7 +65,33 @@ function normalizePerson(value: unknown): Person | null {
       delete person.notes;
     }
   }
+  const savedIdeas = normalizeSavedIdeas(person.savedIdeas);
+  if (savedIdeas) {
+    person.savedIdeas = savedIdeas;
+  } else {
+    delete person.savedIdeas;
+  }
   return person;
+}
+
+function normalizeSavedIdeas(value: unknown): GiftIdea[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const ideas = value.flatMap(item => {
+    if (!isRecord(item) || typeof item.title !== 'string' || !item.title.trim()) {
+      return [];
+    }
+    const title = item.title.trim();
+    return [{
+      title,
+      priceMin: typeof item.priceMin === 'number' && Number.isFinite(item.priceMin) ? item.priceMin : 0,
+      priceMax: typeof item.priceMax === 'number' && Number.isFinite(item.priceMax) ? item.priceMax : 0,
+      reason: typeof item.reason === 'string' ? item.reason : '',
+      searchQuery: typeof item.searchQuery === 'string' && item.searchQuery.trim() ? item.searchQuery : title,
+    }];
+  });
+  return ideas.length ? ideas : undefined;
 }
 
 function normalizeOccasion(value: unknown): Occasion | null {
@@ -217,6 +243,7 @@ function normalizeProfile(value: unknown, base: Profile, hasPeople: boolean): Pr
     ...(typeof raw.defaultBudgetCents === 'number' && raw.defaultBudgetCents >= 0 ? { defaultBudgetCents: Math.round(raw.defaultBudgetCents) } : {}),
     ...(typeof raw.reminderLeadDays === 'number' && raw.reminderLeadDays >= 0 && raw.reminderLeadDays <= 30 ? { reminderLeadDays: Math.round(raw.reminderLeadDays) } : {}),
     ...(typeof raw.reminderHour === 'number' && raw.reminderHour >= 0 && raw.reminderHour <= 23 ? { reminderHour: Math.round(raw.reminderHour) } : {}),
+    ...(typeof raw.reminderMinute === 'number' && raw.reminderMinute >= 0 && raw.reminderMinute <= 59 ? { reminderMinute: Math.round(raw.reminderMinute) } : {}),
   };
 }
 

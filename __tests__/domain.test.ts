@@ -24,6 +24,7 @@ import {
   withAccountUnlock,
   yearSpentCents,
 } from '../src/domain/logic';
+import { ideaReason } from '../src/domain/catalog';
 import { suggestIdeas } from '../src/domain/ideas';
 import { colorsFor, parseSkin, skinForDate } from '../src/theme/skins';
 import { buildInviteUrl, openJson, parseLink, randomKey, sealJson, unwrapKey, wrapKey } from '../src/crypto/crypto';
@@ -162,7 +163,19 @@ test('on-device ideas stay on device, follow tags, and skip thumbs down', () => 
     feedback: [],
     salt: 1,
   });
-  expect(plain.every(idea => idea.reason.startsWith('Something they can use:'))).toBe(true);
+  const letter = ideaReason('A letter about a favorite memory, plus one small useful thing', 'experiences');
+  expect(letter.startsWith('A letter or keepsake:')).toBe(true);
+  expect(letter.includes('Something they can use')).toBe(false);
+  expect(ideaReason('A class pass for something they have mentioned', null).startsWith('Something to do together:')).toBe(true);
+  plain.forEach(idea => {
+    if (/letter|memory|poem|toast/i.test(idea.title)) {
+      expect(idea.reason.startsWith('A letter or keepsake:')).toBe(true);
+    } else if (/\b(class|ticket|reservation|workshop|museum|brunch|meal|show)\b/i.test(idea.title)) {
+      expect(idea.reason.startsWith('Something to do together:')).toBe(true);
+    } else {
+      expect(idea.reason.startsWith('Something they can use:')).toBe(true);
+    }
+  });
   expect(plain.some(idea => /pick they can use/i.test(idea.reason))).toBe(false);
   const cooking = suggestIdeas({
     personId: 'p',

@@ -78,7 +78,7 @@ type GifteezApi = {
   clearNotice: () => void;
   clearError: () => void;
   addPerson: (input: { name: string; budget: string; tags: string[]; imported?: boolean; relationship?: string; circleId?: string; birthYear?: string }) => Promise<string | null>;
-  savePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'relationship' | 'notes'>> & { birthYear?: number | null }) => Promise<void>;
+  savePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'budgetCents' | 'tags' | 'relationship' | 'notes' | 'savedIdeas'>> & { birthYear?: number | null }) => Promise<void>;
   createCircle: (name: string) => Promise<string | null>;
   renameCircle: (circleId: string, name: string) => Promise<void>;
   deleteCircle: (circleId: string) => Promise<void>;
@@ -1029,7 +1029,7 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
     },
     updateProfile: async patch => {
       await commit(withProfile(snapshotRef.current, patch));
-      if (patch.reminders === 'on' || patch.reminderHour != null || patch.reminderLeadDays != null) {
+      if (patch.reminders === 'on' || patch.reminderHour != null || patch.reminderLeadDays != null || patch.reminderMinute != null) {
         scheduleReminders(snapshotRef.current).catch(() => undefined);
       }
     },
@@ -1240,6 +1240,7 @@ async function scheduleReminders(snapshot: AppSnapshot): Promise<void> {
     enabled: true,
     leadDays: snapshot.profile.reminderLeadDays,
     hour: snapshot.profile.reminderHour,
+    minute: snapshot.profile.reminderMinute,
   });
   await applyReminderPlan(slots);
 }

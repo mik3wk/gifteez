@@ -31,7 +31,7 @@ jest.mock('../src/state/GifteezContext', () => {
     id: 'ada',
     name: 'Ada',
     budgetCents: 20000,
-    tags: [],
+    tags: ['books'],
     imported: false,
     opened: true,
     createdAt: 1,
