@@ -71,6 +71,10 @@ const RAW_CATALOG: Array<Pick<CatalogIdea, 'text' | 'tags' | 'occasions'>> = [
   { text: 'A guidebook or packing cube for the next trip', tags: ['travel'], occasions: 'any' },
   { text: 'A weekend breakfast out, planned around their schedule', tags: ['travel', 'experiences', 'foodie'], occasions: 'any' },
   { text: 'A toy or kit you can use together', tags: ['kids'], occasions: ['birthday', 'christmas'] },
+  { text: 'A building set they can build and take apart', tags: ['kids', 'games'], occasions: ['birthday', 'christmas'] },
+  { text: 'An art kit with paper and crayons', tags: ['kids', 'art', 'crafts'], occasions: ['birthday', 'christmas'] },
+  { text: 'A picture book or early chapter book', tags: ['kids', 'books'], occasions: ['birthday', 'christmas'] },
+  { text: 'A ball, bubbles, or a kite for outdoor play', tags: ['kids', 'outdoors'], occasions: ['birthday', 'christmas'] },
   { text: 'A book they can grow into, with a note in the front', tags: ['kids', 'books'], occasions: ['birthday', 'christmas'] },
   { text: 'Treats or a cozy bed for the pet', tags: ['pets'], occasions: 'any' },
   { text: 'A portrait of their pet from a photo they already took', tags: ['pets', 'art'], occasions: 'any' },
@@ -196,10 +200,16 @@ const ADULT_ONLY = new Set([
   'A candle and a soft throw for the couch',
   'A candle, a game, and something sweet for the first night',
   'A nice bottle of olive oil, honey, or hot sauce',
+  'A card game small enough to bring to dinner',
+  'Quality paper, pens, or paint for a current project',
 ]);
 
 const CHILD_ONLY = new Set([
   'A toy or kit you can use together',
+  'A building set they can build and take apart',
+  'An art kit with paper and crayons',
+  'A picture book or early chapter book',
+  'A ball, bubbles, or a kite for outdoor play',
   'A book they can grow into, with a note in the front',
   'A small treat bag or a pumpkin to carve together',
   'A soft keepsake for the new baby, plus a note for the parents',

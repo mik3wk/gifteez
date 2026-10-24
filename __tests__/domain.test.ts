@@ -197,14 +197,26 @@ test('on-device ideas stay on device, follow tags, and skip thumbs down', () => 
   const six = suggestIdeas({
     personId: 'six',
     name: 'Sam',
-    tags: [],
+    tags: ['games', 'art'],
     occasion: 'birthday',
     feedback: [],
     salt: 2,
     years: 6,
+    band: 'kid',
   });
-  expect(six.some(idea => /toy|kit|board game|card game|puzzle|book they can grow/i.test(idea.title))).toBe(true);
-  expect(six.some(idea => /fragrance|lotion|jewelry|live show|candle|reservation/i.test(idea.title))).toBe(false);
+  expect(six.some(idea => /building set|art kit|picture book|outdoor play|toy or kit|book they can grow/i.test(idea.title))).toBe(true);
+  expect(six.some(idea => /card game|paper, pens|pet portrait|fragrance|lotion|jewelry|live show|candle|reservation/i.test(idea.title))).toBe(false);
+  const sixPets = suggestIdeas({
+    personId: 'six-pets',
+    name: 'Sam',
+    tags: ['pets'],
+    occasion: 'birthday',
+    feedback: [],
+    salt: 2,
+    years: 6,
+    band: 'kid',
+  });
+  expect(sixPets.some(idea => /portrait of their pet|treats or a cozy bed/i.test(idea.title))).toBe(false);
   const artSeed = 'Quality paper, pens, or paint for a current project';
   const likeArt = moreLikeIdeas({ seed: artSeed, tags: ['art'], band: 'adult' });
   expect(likeArt.length).toBeGreaterThan(0);

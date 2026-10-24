@@ -210,19 +210,26 @@ export function suggestIdeas(input: {
   const notes = noteTokens(input.notes ?? '');
   const band = input.band ?? (typeof input.years === 'number' ? ageBandFromYears(input.years) : null);
   const followsInterests = (idea: { tags: string[] }) => tags.size === 0 || idea.tags.some(tag => tags.has(tag));
+  const petsOk = (idea: CatalogIdea) => allowsPetIdea([...tags], idea);
   const ranked = CATALOG.map(idea => ({
     idea,
     score: scoreIdea(idea, tags, input.occasion, likedTags, blocked, band, notes),
     tie: hashToUint(`${input.personId}|${idea.text}|${input.salt}`),
   }))
-    .filter(item => item.score > -50 && followsInterests(item.idea))
+    .filter(item => item.score > -50 && followsInterests(item.idea) && petsOk(item.idea))
     .sort((a, b) => b.score - a.score || a.tie - b.tie);
   const picked = ranked.slice(0, limit).map(item => toGiftIdea(item.idea, tags));
   if (picked.length >= limit) {
     return picked;
   }
   const titles = new Set(picked.map(idea => idea.title));
-  const filler = CATALOG.filter(idea => !titles.has(idea.text) && !blocked.has(idea.text) && audienceOk(idea, band) && followsInterests(idea))
+  const filler = CATALOG.filter(idea => (
+    !titles.has(idea.text)
+    && !blocked.has(idea.text)
+    && audienceOk(idea, band)
+    && petsOk(idea)
+    && ((band === 'baby' || band === 'kid') || followsInterests(idea))
+  ))
     .sort((a, b) => hashToUint(`${input.salt}|${a.text}`) - hashToUint(`${input.salt}|${b.text}`))
     .slice(0, limit - picked.length)
     .map(idea => toGiftIdea(idea, tags));
@@ -247,13 +254,24 @@ function noteTokens(notes: string): Set<string> {
 }
 
 function audienceOk(idea: CatalogIdea, band: AgeBand | null): boolean {
-  if ((band === 'baby' || band === 'kid') && idea.audience === 'adult') {
-    return false;
+  if (band === 'baby' || band === 'kid') {
+    return idea.audience === 'child';
   }
   if (band === 'adult' && idea.audience === 'child') {
     return false;
   }
   return true;
+}
+
+/** Pet gifts stay out unless pets is one of the stated interests. */
+export function allowsPetIdea(tags: readonly string[], idea: { tags?: readonly string[]; title?: string; text?: string }): boolean {
+  const stated = tags.some(tag => tag.trim().toLowerCase() === 'pets');
+  const tagged = (idea.tags ?? []).some(tag => tag.toLowerCase() === 'pets');
+  const titled = /\bpet\b/i.test(`${idea.title ?? ''} ${idea.text ?? ''}`);
+  if (!tagged && !titled) {
+    return true;
+  }
+  return stated;
 }
 
 function scoreIdea(
@@ -265,7 +283,7 @@ function scoreIdea(
   band: AgeBand | null,
   notes: Set<string>,
 ): number {
-  if (blocked.has(idea.text) || !audienceOk(idea, band)) {
+  if (blocked.has(idea.text) || !audienceOk(idea, band) || !allowsPetIdea([...tags], idea)) {
     return -100;
   }
   let score = 1;
@@ -341,7 +359,7 @@ export function moreLikeIdeas(input: {
     if (normalizeIdeaTitle(idea.text) === normalized) {
       return false;
     }
-    if (!audienceOk(idea, band)) {
+    if (!audienceOk(idea, band) || !allowsPetIdea(input.tags, idea)) {
       return false;
     }
     if (idea.tags.some(tag => !allowed.has(tag))) {

@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { Appearance, Linking, Platform } from 'react-native';
 import type { AppEnv } from '../config/env';
 import { keyFromString, keyToString, openString, randomId, randomKey, sealJson } from '../crypto/crypto';
-import { cloudIdeaRequestLog, ideaCacheId, mergeIdeaBatches, moreLikeIdeas, resolveAge, suggestIdeas } from '../domain/ideas';
+import { allowsPetIdea, cloudIdeaRequestLog, ideaCacheId, mergeIdeaBatches, moreLikeIdeas, resolveAge, suggestIdeas } from '../domain/ideas';
 import { deleteOccasion, deletePrivateGift, deleteSharedGift, updateOccasionDate, updatePrivateGift, updateSharedGift } from '../domain/edits';
 import { nextReminderWhen, planReminders } from '../domain/reminders';
 import { classifyStartupError, startupCause, type StartupFailure } from '../domain/startup';
@@ -1038,7 +1038,8 @@ export function GifteezProvider({ env, children }: { env: AppEnv; children: Reac
         }
         const result = await withTimeout(callFunction<CloudResult>(env, 'generateGiftIdeas', request));
         setCloudRemaining(current => ({ ...current, [personId]: result.remaining }));
-        const merged = mergeIdeaBatches(existing?.ideas ?? [], result.ideas);
+        const kept = result.ideas.filter(idea => allowsPetIdea(person.tags, idea));
+        const merged = mergeIdeaBatches(existing?.ideas ?? [], kept);
         await commit(upsertIdeas(snapshotRef.current, {
           id: cacheId,
           personId,
