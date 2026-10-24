@@ -9,6 +9,14 @@ import { useTheme } from '../theme/useTheme';
 import { Icon } from './icons';
 import { Body, Button, Caption, CheckRow, Sheet } from './ui';
 
+function budgetField(cents: number | null | undefined): string {
+  if (typeof cents !== 'number') {
+    return '';
+  }
+  const dollars = cents / 100;
+  return Number.isInteger(dollars) ? String(dollars) : dollars.toFixed(2);
+}
+
 export function CalendarReviewLink({
   label,
   button,
@@ -62,7 +70,7 @@ export function CalendarReviewLink({
         if (!personId) {
           personId = await gifteez.addPerson({
             name: draft.name.trim(),
-            budget: '',
+            budget: budgetField(gifteez.snapshot.profile.defaultBudgetCents),
             tags: [],
             imported: true,
             relationship: '',
@@ -115,28 +123,40 @@ export function CalendarReviewLink({
             : draft.personId
               ? t('importFlow.matched', { name: draft.name })
               : t('importFlow.newPerson', { name: draft.name });
+          const toggle = () => setPicked(current => ({ ...current, [draft.key]: !current[draft.key] }));
           return (
-            <View key={draft.key} style={styles.draft}>
+            <View key={draft.key}>
               {draft.nameEditable ? (
-                <TextInput
-                  accessibilityLabel={t('importFlow.editName')}
-                  placeholder={t('importFlow.addName')}
-                  value={draft.name}
-                  onChangeText={name => setDrafts(current => current.map(item => (
-                    item.key === draft.key ? { ...item, name } : item
-                  )))}
-                  autoCorrect={false}
-                  autoCapitalize="words"
-                  maxFontSizeMultiplier={typeScale.body}
-                  placeholderTextColor={colors.muted}
-                  style={[type.body, styles.nameInput, { color: colors.text, borderColor: colors.outline, backgroundColor: colors.surface, borderRadius: radius.button }]}
+                <CheckRow
+                  label={t('importFlow.editName')}
+                  checked={picked[draft.key] === true}
+                  onPress={toggle}
+                  field={(
+                    <>
+                      <TextInput
+                        accessibilityLabel={t('importFlow.editName')}
+                        placeholder={t('importFlow.addName')}
+                        value={draft.name}
+                        onChangeText={name => setDrafts(current => current.map(item => (
+                          item.key === draft.key ? { ...item, name } : item
+                        )))}
+                        autoCorrect={false}
+                        autoCapitalize="words"
+                        maxFontSizeMultiplier={typeScale.body}
+                        placeholderTextColor={colors.muted}
+                        style={[type.body, styles.nameInput, { color: colors.text, borderColor: colors.outline, backgroundColor: colors.surface, borderRadius: radius.button }]}
+                      />
+                      <Caption>{`${when}. ${who}`}</Caption>
+                    </>
+                  )}
                 />
-              ) : null}
-              <CheckRow
-                label={draft.nameEditable ? `${when}. ${who}` : `${draft.name} · ${when}. ${who}`}
-                checked={picked[draft.key] === true}
-                onPress={() => setPicked(current => ({ ...current, [draft.key]: !current[draft.key] }))}
-              />
+              ) : (
+                <CheckRow
+                  label={`${draft.name} · ${when}. ${who}`}
+                  checked={picked[draft.key] === true}
+                  onPress={toggle}
+                />
+              )}
             </View>
           );
         })}
@@ -153,7 +173,6 @@ export function CalendarReviewLink({
 }
 
 const styles = StyleSheet.create({
-  draft: { gap: space.xxs },
   nameInput: { borderWidth: 1, minHeight: 44, paddingHorizontal: space.sm },
   link: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', minHeight: 44 },
 });
